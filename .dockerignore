@@ -1,0 +1,5 @@
+.git
+upstream-libfranka-docker
+workspace/build
+workspace/install
+workspace/log

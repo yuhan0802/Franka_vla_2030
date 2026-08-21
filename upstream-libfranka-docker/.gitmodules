@@ -1,0 +1,21 @@
+[submodule "docker_volume/libfranka"]
+	path = docker_volume/libfranka
+	url = https://github.com/frankaemika/libfranka.git
+	branch = 0.10.0 
+	# branch = 0.10.0 for FR3 robot, change branch if the robot server version is different
+	# see https://frankaemika.github.io/docs/compatibility.html
+[submodule "docker_volume/libfranka_v0.13.2"]
+	path = docker_volume/libfranka_v0.13.2
+	url = https://github.com/frankaemika/libfranka.git
+	branch = 0.13.2
+	# branch = 0.13.2 for franka_ros2
+	# check https://frankaemika.github.io/docs/franka_ros2.html
+[submodule "docker_volume/catkin_ws/src/franka_ros"]
+	path = docker_volume/catkin_ws/src/franka_ros
+	url = https://github.com/frankaemika/franka_ros.git
+[submodule "docker_volume/ros2_ws/src/franka_ros2"]
+	path = docker_volume/ros2_ws/src/franka_ros2
+	url = https://github.com/frankaemika/franka_ros2.git
+[submodule "docker_volume/ros2_ws/src/franka_description"]
+	path = docker_volume/ros2_ws/src/franka_description
+	url = https://github.com/frankaemika/franka_description

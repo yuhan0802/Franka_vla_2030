@@ -1,0 +1,9 @@
+<library path="franka_mobile_example_controllers">
+    <class name="franka_mobile_example_controllers/MobileCartesianVelocityExampleController"
+        type="franka_mobile_example_controllers::MobileCartesianVelocityExampleController"
+        base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The mobile cartesian velocity example controller fowards cartesian velocity commands to the mobile robot.
+        </description>
+    </class>
+</library>

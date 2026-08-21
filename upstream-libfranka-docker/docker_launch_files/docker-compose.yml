@@ -1,0 +1,62 @@
+version: "2"
+
+services:
+
+  franka_ros:
+
+    build:
+      context: ./franka_ros
+      dockerfile: Dockerfile
+      
+    image: libfranka:franka_ros
+    
+    container_name: u20.04-franka_ros 
+
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix    
+      - /dev:/dev                        
+      - ../docker_volume:/docker_volume 
+
+    environment:
+      - DISPLAY=$DISPLAY
+      - TZ=Europe/London
+      - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu
+    
+    network_mode: host
+    
+    privileged: true
+
+    cap_add:
+      - SYS_NICE
+    
+    tty: true
+
+
+  franka_ros2:
+
+    build:
+      context: ./franka_ros2
+      dockerfile: Dockerfile
+      
+    image: libfranka:franka_ros2
+    
+    container_name: u22.04-franka_ros2 
+
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw    
+      - /dev:/dev                        
+      - ../docker_volume:/docker_volume 
+
+    environment:
+      - DISPLAY=$DISPLAY
+      - TZ=Europe/London
+      - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu
+    
+    network_mode: host
+    
+    privileged: true
+
+    cap_add:
+      - SYS_NICE
+    
+    tty: true

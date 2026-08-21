@@ -1,0 +1,33 @@
+/**:
+  teleop_twist_joy_node:
+    ros__parameters:
+
+      # Joystick axis assignments (Xbox controller)
+      axis_linear: # Left joystick
+        x: 1        
+        y: 0        
+
+      axis_angular: # Right joystick sideways
+        yaw: 3   
+
+      # Speed scaling
+      scale_linear:
+        x: 2.0
+        y: 2.0
+
+      scale_angular:
+        yaw: 3.0
+
+      scale_linear_turbo:
+        x: 10.0
+        y: 10.0
+
+      scale_angular_turbo:
+        yaw: 4.0
+
+
+      # Buttons (Xbox)
+      enable_button: 5        # Hold RB
+      enable_turbo_button: 4   # Hold LB
+
+      publish_stamped_twist: true

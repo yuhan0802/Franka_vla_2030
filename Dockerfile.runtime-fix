@@ -1,0 +1,9 @@
+FROM franka-vr:humble
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+COPY workspace/src/joint_state_broadcaster /ws_franka_vr/src/joint_state_broadcaster
+RUN source /opt/ros/humble/setup.bash \
+    && source /ws_franka_vr/install/setup.bash \
+    && cd /ws_franka_vr \
+    && colcon build --symlink-install --packages-select joint_state_broadcaster \
+       --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
