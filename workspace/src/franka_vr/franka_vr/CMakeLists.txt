@@ -19,7 +19,8 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
     std_msgs
     std_srvs
     tf2_eigen
-    trajectory_msgs)
+    trajectory_msgs
+    visualization_msgs)
 # 查找依赖
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -57,10 +58,17 @@ ament_target_dependencies(moveit_cartesian_offset
   rclcpp
 )
 
+add_executable(rviz_pose_goal_executor src/rviz_pose_goal_executor.cpp)
+ament_target_dependencies(rviz_pose_goal_executor
+  moveit_ros_planning_interface
+  rclcpp
+  visualization_msgs
+)
 
 install(TARGETS
 demo_franka_vr_vel
 moveit_cartesian_offset
+rviz_pose_goal_executor
     DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY 

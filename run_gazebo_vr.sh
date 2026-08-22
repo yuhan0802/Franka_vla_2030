@@ -8,7 +8,10 @@ docker compose run --rm franka_vr \
     set -e
     cd /ws_franka_vr
     source /opt/ros/humble/setup.bash
-    colcon build --symlink-install --packages-select \
+    # Keep the bind-mounted package RViz/launch assets in sync with the
+    # image-resident build tree; otherwise CMake can retain a stale install
+    # manifest and omit the MoveIt interaction configuration.
+    colcon build --symlink-install --cmake-force-configure --packages-select \
       franka_vr franka_gazebo_bringup franka_fr3_moveit_config
     source /ws_franka_vr/install/setup.bash
     ros2 launch franka_vr gazebo_vr.launch.py \

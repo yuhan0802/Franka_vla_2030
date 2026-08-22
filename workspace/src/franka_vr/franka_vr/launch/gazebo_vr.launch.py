@@ -219,6 +219,13 @@ def launch_setup(context: LaunchContext):
         output="log",
     )
 
+    rviz_pose_goal_executor = Node(
+        package="franka_vr",
+        executable="rviz_pose_goal_executor",
+        parameters=[moveit_params, {"use_sim_time": True}],
+        output="screen",
+    )
+
     return [
         gazebo,
         Node(
@@ -246,7 +253,7 @@ def launch_setup(context: LaunchContext):
         RegisterEventHandler(
             OnProcessStart(
                 target_action=move_group,
-                on_start=[TimerAction(period=3.0, actions=[rviz])],
+                on_start=[TimerAction(period=3.0, actions=[rviz, rviz_pose_goal_executor])],
             )
         ),
         Node(
