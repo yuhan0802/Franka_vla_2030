@@ -1,6 +1,7 @@
 """Run the Franka VR Servo stack against the Gazebo Sim FR3 model."""
 
 import os
+import re
 
 import xacro
 import yaml
@@ -17,7 +18,7 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def build_moveit_config(load_gripper: str):
-    """Keep MoveIt's robot model identical to the model spawned in Gazebo."""
+    """Build the MoveIt parameters for the exact URDF spawned in Gazebo."""
     description_share = get_package_share_directory("franka_description")
     return (
         MoveItConfigsBuilder("franka_fr3", package_name="franka_fr3_moveit_config")
@@ -27,12 +28,9 @@ def build_moveit_config(load_gripper: str):
                 "robot_ip": "",
                 "use_fake_hardware": "false",
                 "fake_sensor_commands": "false",
-                # The Gazebo model has an extra `world` root link.  MoveIt
-                # must instead use the standard FR3 model so its SRDF virtual
-                # joint attaches to `base` and RViz can create an end-effector
-                # interactive marker for fr3_arm.
-                "ros2_control": "false",
-                "gazebo": "false",
+                "ros2_control": "true",
+                "gazebo": "true",
+                "gazebo_effort": "false",
                 "hand": load_gripper,
             },
         )
@@ -55,6 +53,7 @@ def build_moveit_config(load_gripper: str):
 def launch_setup(context: LaunchContext):
     load_gripper = LaunchConfiguration("load_gripper").perform(context)
     use_rviz = LaunchConfiguration("use_rviz")
+    enable_vr = LaunchConfiguration("enable_vr")
     description_share = get_package_share_directory("franka_description")
     xacro_path = os.path.join(description_share, "robots", "fr3", "fr3.urdf.xacro")
     robot_description_xml = xacro.process_file(
@@ -70,6 +69,17 @@ def launch_setup(context: LaunchContext):
         },
     ).toprettyxml(indent="  ")
     moveit_config = build_moveit_config(load_gripper)
+    semantic_xacro_path = os.path.join(description_share, "robots", "fr3", "fr3.srdf.xacro")
+    semantic_xml = xacro.process_file(
+        semantic_xacro_path, mappings={"hand": load_gripper, "arm_prefix": ""}
+    ).toprettyxml(indent="  ")
+    # In Gazebo the URDF root link is `world`, whereas the FR3 SRDF's virtual
+    # joint is for the normal hardware URDF root (`base`).  Remove that
+    # hardware-only virtual joint so MoveIt uses the Gazebo world root.
+    semantic_xml = re.sub(r"\s*<virtual_joint\b[^>]*/>\s*", "\n", semantic_xml)
+    moveit_params = moveit_config.to_dict()
+    moveit_params["robot_description"] = robot_description_xml
+    moveit_params["robot_description_semantic"] = semantic_xml
     with open(
         os.path.join(
             get_package_share_directory("franka_fr3_moveit_config"), "config", "ompl_planning.yaml"
@@ -160,7 +170,7 @@ def launch_setup(context: LaunchContext):
         package="moveit_ros_move_group",
         executable="move_group",
         parameters=[
-            moveit_config.to_dict(),
+            moveit_params,
             ompl_planning_config,
             moveit_controllers,
             {
@@ -178,7 +188,7 @@ def launch_setup(context: LaunchContext):
         output="screen",
     )
     rviz_config = os.path.join(
-        get_package_share_directory("franka_fr3_moveit_config"), "rviz", "moveit.rviz"
+        get_package_share_directory("franka_vr"), "config", "gazebo_moveit.rviz"
     )
 
     return [
@@ -187,17 +197,6 @@ def launch_setup(context: LaunchContext):
             package="robot_state_publisher",
             executable="robot_state_publisher",
             parameters=[{"robot_description": robot_description_xml, "use_sim_time": True}],
-            output="screen",
-        ),
-        # MoveIt builds the standard FR3 model whose root link is `base`,
-        # while the Gazebo model is fixed directly to `world`.  Bridge these
-        # roots so RViz can render the MoveIt end-effector marker (in `base`)
-        # in the Gazebo TF tree.
-        Node(
-            package="tf2_ros",
-            executable="static_transform_publisher",
-            arguments=["0", "0", "0", "0", "0", "0", "world", "base"],
-            parameters=[{"use_sim_time": True}],
             output="screen",
         ),
         spawn,
@@ -217,7 +216,8 @@ def launch_setup(context: LaunchContext):
             executable="demo_franka_vr_vel",
             # joint_state_broadcaster stamps states with Gazebo's /clock.  Servo
             # must use the same clock or it treats every simulated state as stale.
-            parameters=[servo_params, moveit_config.to_dict(), {"use_sim_time": True}],
+            parameters=[servo_params, moveit_params, {"use_sim_time": True}],
+            condition=IfCondition(enable_vr),
             output="screen",
         ),
         Node(
@@ -225,7 +225,7 @@ def launch_setup(context: LaunchContext):
             executable="rviz2",
             arguments=["-d", rviz_config],
             parameters=[
-                moveit_config.to_dict(),
+                moveit_params,
                 ompl_planning_config,
                 moveit_controllers,
                 {"use_sim_time": True},
@@ -241,6 +241,7 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("load_gripper", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="true"),
+            DeclareLaunchArgument("enable_vr", default_value="false"),
             OpaqueFunction(function=launch_setup),
         ]
     )

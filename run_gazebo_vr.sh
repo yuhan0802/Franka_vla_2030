@@ -12,5 +12,5 @@ docker compose run --rm franka_vr \
       franka_vr franka_gazebo_bringup franka_fr3_moveit_config
     source /ws_franka_vr/install/setup.bash
     ros2 launch franka_vr gazebo_vr.launch.py \
-      load_gripper:=true use_rviz:="'"${USE_RVIZ:-true}"'"
+      load_gripper:=true use_rviz:="'"${USE_RVIZ:-true}"'" enable_vr:=true
   '
