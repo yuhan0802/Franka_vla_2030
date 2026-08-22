@@ -29,6 +29,16 @@ Visualization Manager:
       Scene Robot:
         Robot Alpha: 0.5
       Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Name: End Effector Drag Control
+      Topic:
+        Value: /rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic
+      Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Name: Gripper Open Close
+      Topic:
+        Value: /franka_gripper_control
+      Value: true
   Global Options:
     Fixed Frame: world
   Tools:

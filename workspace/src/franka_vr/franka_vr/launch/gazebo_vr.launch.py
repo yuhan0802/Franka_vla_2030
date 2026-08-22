@@ -155,15 +155,29 @@ def launch_setup(context: LaunchContext):
         output="screen",
     )
     joint_state_broadcaster = ExecuteProcess(
-        cmd=["ros2", "control", "load_controller", "--set-state", "active", "joint_state_broadcaster"],
+        # `spawner` waits for Gazebo's controller-manager service instead of
+        # racing it just after the robot entity has appeared in the world.
+        cmd=[
+            "ros2", "run", "controller_manager", "spawner", "joint_state_broadcaster",
+            "--controller-manager", "/controller_manager",
+            "--controller-manager-timeout", "60",
+        ],
         output="screen",
     )
     arm_controller = ExecuteProcess(
-        cmd=["ros2", "control", "load_controller", "--set-state", "active", "fr3_arm_controller"],
+        cmd=[
+            "ros2", "run", "controller_manager", "spawner", "fr3_arm_controller",
+            "--controller-manager", "/controller_manager",
+            "--controller-manager-timeout", "60",
+        ],
         output="screen",
     )
     gripper_controller = ExecuteProcess(
-        cmd=["ros2", "control", "load_controller", "--set-state", "active", "fr3_gripper"],
+        cmd=[
+            "ros2", "run", "controller_manager", "spawner", "fr3_gripper",
+            "--controller-manager", "/controller_manager",
+            "--controller-manager-timeout", "60",
+        ],
         output="screen",
     )
     move_group = Node(
@@ -210,6 +224,12 @@ def launch_setup(context: LaunchContext):
         ),
         RegisterEventHandler(
             OnProcessExit(target_action=gripper_controller, on_exit=[move_group])
+        ),
+        Node(
+            package="franka_vr",
+            executable="gazebo_gripper_marker.py",
+            parameters=[{"use_sim_time": True}],
+            output="screen",
         ),
         Node(
             package="franka_vr",

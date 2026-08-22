@@ -77,5 +77,10 @@ install(DIRECTORY
     launch/
     DESTINATION share/${PROJECT_NAME}/launch
 )
+
+install(PROGRAMS
+    scripts/gazebo_gripper_marker.py
+    DESTINATION lib/${PROJECT_NAME}
+)
 # 声明这是一个ROS 2包
 ament_package()

@@ -98,21 +98,21 @@ docker compose build franka_vr
 ./run_gazebo.sh
 ```
 
-终端中出现 `Successfully loaded controller fr3_arm_controller into state active` 和 `You can start planning now!` 后，即表示 Gazebo 与 MoveIt 都已就绪。使用 `Ctrl+C` 退出仿真。若 GUI 无法创建窗口，可先确认 `echo $DISPLAY` 有值，再重新执行 `xhost +local:docker`；无图形桌面环境暂不支持本项目的 GUI 启动方式。
+终端中出现 `Configured and activated fr3_arm_controller`、`Configured and activated fr3_gripper` 和 `You can start planning now!` 后，即表示 Gazebo 与 MoveIt 都已就绪。使用 `Ctrl+C` 退出仿真。若 GUI 无法创建窗口，可先确认 `echo $DISPLAY` 有值，再重新执行 `xhost +local:docker`；无图形桌面环境暂不支持本项目的 GUI 启动方式。
 
 #### 在 RViz 拖动末端并执行
 
-1. 在左侧 `Displays` 中选择 `MotionPlanning`，在底部面板将 `Planning Group` 设为 `fr3_arm`。
-2. 选择 `Planning` 标签页的末端位姿目标（Pose Goal）；RViz 会在末端显示交互标记。
-3. 拖动标记的箭头或圆环调整位置、姿态，随后点击 `Plan & Execute`。
+1. 保持顶部工具栏的 `Interact` 被选中。在底部 `MotionPlanning` 面板中，将 `Planning Group` 设为 `fr3_arm`，并选择 `Planning` 标签页的 `Pose Goal`。
+2. 末端会出现青色的六自由度交互标记（平移箭头、平面方块和旋转圆环）。它也在左侧 `Displays > End Effector Drag Control` 中被显式启用；若误关了，可重新勾选该项。
+3. 拖动标记调整位置、姿态，随后点击 `Plan & Execute`。若只看到机器人而没有面板，依次点击菜单 `Panels > Add New Panel > Motion Planning` 后选择 `fr3_arm`。
 
 拖动只是在设置目标，Gazebo 不会在拖动过程中实时跟随；`Plan & Execute` 会先做碰撞检查与轨迹规划，再把轨迹发送给 Gazebo。需要连续实时遥操作时，请使用 Quest 的 `./run_gazebo_vr.sh`。
 
 #### 在 RViz 中抓取方块
 
 1. 在 Gazebo 窗口确认橙色长方体已生成。先在 RViz 的 `MotionPlanning` 面板选择 `fr3_arm`，拖动末端标记到方块上方，点击 `Plan & Execute`；再将末端下降到两根手指包住方块的位置并执行。
-2. 将 `Planning Group` 切换为 `fr3_hand`，在 `Goal State` 中选择命名状态 `close`，点击 `Plan & Execute` 以闭合夹爪。
-3. 切回 `fr3_arm`，将末端向上拖动并执行，即可尝试抬起方块。需要释放时，将 `Planning Group` 切为 `fr3_hand`，选择 `open`，再执行。
+2. RViz 画面左前方会有一个蓝色方块 `Gripper: right-click for open / close`。右键它，选择 `Close gripper`，即可闭合夹爪；选择 `Open gripper` 即可张开。该交互控件位于 `Displays > Gripper Open Close`，可在这里重新勾选显示。
+3. 切回 `fr3_arm`，将末端向上拖动并执行，即可尝试抬起方块。需要释放时，再右键蓝色夹爪控件选择 `Open gripper`。
 
 `fr3_gripper` 使用 Gazebo 的 `GripperActionController`；可控关节为 `fr3_finger_joint1`，另一根手指通过 URDF mimic 关节同步运动。方块具有重力、碰撞和摩擦，抓取成功取决于手指与方块的对准和接触。
 
@@ -148,7 +148,7 @@ Gazebo 版本使用 Franka ROS 2 工作空间附带的 Gazebo Sim / Ignition For
 ./run_vr.sh
 ```
 
-等待终端 1 出现 `Successfully loaded controller fr3_arm_controller into state active` 后，再在 Quest 中按住右食指扳机（`rightTrig`）移动机械臂。该模式不连接真机，也不需要 `ROBOT_IP`。它使用 Gazebo 的位置轨迹控制器；夹爪会显示，但尚未接入仿真夹爪动作控制。
+等待终端 1 出现 `Configured and activated fr3_arm_controller` 后，再在 Quest 中按住右食指扳机（`rightTrig`）移动机械臂。该模式不连接真机，也不需要 `ROBOT_IP`。它使用 Gazebo 的位置轨迹控制器；夹爪可通过 RViz 中的蓝色交互控件开合。
 
 ### 真机模式
 
