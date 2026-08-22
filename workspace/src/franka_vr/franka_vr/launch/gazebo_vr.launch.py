@@ -27,9 +27,12 @@ def build_moveit_config(load_gripper: str):
                 "robot_ip": "",
                 "use_fake_hardware": "false",
                 "fake_sensor_commands": "false",
-                "ros2_control": "true",
-                "gazebo": "true",
-                "gazebo_effort": "false",
+                # The Gazebo model has an extra `world` root link.  MoveIt
+                # must instead use the standard FR3 model so its SRDF virtual
+                # joint attaches to `base` and RViz can create an end-effector
+                # interactive marker for fr3_arm.
+                "ros2_control": "false",
+                "gazebo": "false",
                 "hand": load_gripper,
             },
         )
