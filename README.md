@@ -1,17 +1,19 @@
 # Franka VR Docker
 
-一个基于 ROS 2 Humble、MoveIt Servo 和 Meta Quest 的 Franka FR3 VR 遥操作环境。项目将 Franka ROS 2 工作空间、`libfranka` 运行时和 Quest 控制器读取程序封装在 Docker 中，支持先用假硬件验证，再连接真机运行。
+一个基于 ROS 2 Humble、MoveIt 2、Gazebo Sim 和 Meta Quest 的 Franka FR3 控制与仿真环境。项目将 Franka ROS 2 工作空间、`libfranka` 运行时和 Quest 控制器读取程序封装在 Docker 中，支持从假硬件、物理仿真到真机的渐进式验证。
 
 > [!WARNING]
 > 这不是安全认证的机器人控制系统。真机运行前，请完成 Franka 官方要求的安装、网络和实时性检查；保持急停可用，并确保机械臂工作区域内无人。首次运行请低速、无负载测试。
 
 ## 功能
 
-- Franka FR3 的真机与假硬件启动方式
+- Franka FR3 假硬件、Gazebo 物理仿真和真机三种运行模式
+- Gazebo Sim 中的重力、碰撞、摩擦和可抓取方块
+- MoveIt 2 轨迹规划：在 RViz 拖动末端位姿目标并执行至 Gazebo
+- RViz 右键交互式夹爪开合控制
 - MoveIt Servo 在线笛卡尔速度控制与奇异位形降速
-- Meta Quest 控制器位姿和按键读取
-- 可选 RViz 可视化与 Franka Gripper
-- Docker Compose 一键构建和启动
+- Meta Quest 控制器位姿与按键读取；支持 Quest 控制 Gazebo 或真机
+- Docker Compose 一键构建、X11 图形显示和 ROS 2 工作空间挂载
 
 ## 环境要求
 
@@ -22,16 +24,30 @@
 
 ## 快速开始
 
-克隆仓库后，按需配置运行参数：
+克隆仓库并进入目录：
+
+```bash
+git clone https://github.com/221zhong/franka_vr_control_2026.git
+cd franka_vr_control_2026
+```
+
+创建本地运行配置：
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 中的 `ROBOT_IP`、`ROS_DOMAIN_ID` 和 `DISPLAY`。首次构建镜像：
+编辑 `.env` 中的 `ROBOT_IP`、`ROS_DOMAIN_ID` 和 `DISPLAY`。`ROBOT_IP=172.16.0.2` 是项目默认的 Franka FCI 地址；Gazebo 和假硬件模式不连接机械臂。允许 Docker 访问 X11 后，首次构建镜像：
 
 ```bash
+xhost +local:docker
 docker compose build
+```
+
+首次建议先启动 Gazebo 仿真：
+
+```bash
+./run_gazebo.sh
 ```
 
 ## 常用操作命令
@@ -321,4 +337,4 @@ docker build -f Dockerfile.runtime-fix -t franka-vr:runtime-fix .
 
 ## 许可证
 
-仓库根目录目前尚未声明项目许可证，因此尚不授予本项目自有代码的再分发许可。公开发布前，请添加适合的 `LICENSE` 文件，并同步更新 `workspace/src/franka_vr/franka_vr/package.xml` 中的许可证字段。
+本项目自有代码采用 [MIT License](LICENSE)。仓库中包含或依赖的 Franka ROS 2、MoveIt 2、Gazebo 与其他上游组件仍分别遵循其原有许可证。
