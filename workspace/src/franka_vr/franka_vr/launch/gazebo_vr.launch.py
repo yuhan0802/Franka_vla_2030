@@ -189,6 +189,17 @@ def launch_setup(context: LaunchContext):
             parameters=[{"robot_description": robot_description_xml, "use_sim_time": True}],
             output="screen",
         ),
+        # MoveIt builds the standard FR3 model whose root link is `base`,
+        # while the Gazebo model is fixed directly to `world`.  Bridge these
+        # roots so RViz can render the MoveIt end-effector marker (in `base`)
+        # in the Gazebo TF tree.
+        Node(
+            package="tf2_ros",
+            executable="static_transform_publisher",
+            arguments=["0", "0", "0", "0", "0", "0", "world", "base"],
+            parameters=[{"use_sim_time": True}],
+            output="screen",
+        ),
         spawn,
         block,
         RegisterEventHandler(OnProcessExit(target_action=spawn, on_exit=[joint_state_broadcaster])),
