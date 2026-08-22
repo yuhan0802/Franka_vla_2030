@@ -15,24 +15,22 @@ Visualization Manager:
       Value: true
     - Class: moveit_rviz_plugin/MotionPlanning
       Name: MotionPlanning
+      Move Group Namespace: ""
       Planned Path:
         Loop Animation: true
         State Display Time: 0.05 s
         Trajectory Topic: /display_planned_path
       Planning Request:
+        Interactive Marker Size: 0
         Planning Group: fr3_arm
         Query Goal State: true
+        Query Start State: false
       Planning Scene Topic: /monitored_planning_scene
       Robot Description: robot_description
       Scene Geometry:
         Scene Alpha: 1
       Scene Robot:
         Robot Alpha: 0.5
-      Value: true
-    - Class: rviz_default_plugins/InteractiveMarkers
-      Name: End Effector Drag Control
-      Topic:
-        Value: /rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic
       Value: true
     - Class: rviz_default_plugins/InteractiveMarkers
       Name: Gripper Open Close

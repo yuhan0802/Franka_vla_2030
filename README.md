@@ -103,7 +103,7 @@ docker compose build franka_vr
 #### 在 RViz 拖动末端并执行
 
 1. 保持顶部工具栏的 `Interact` 被选中。在底部 `MotionPlanning` 面板中，将 `Planning Group` 设为 `fr3_arm`，并选择 `Planning` 标签页的 `Pose Goal`。
-2. 末端会出现青色的六自由度交互标记（平移箭头、平面方块和旋转圆环）。它也在左侧 `Displays > End Effector Drag Control` 中被显式启用；若误关了，可重新勾选该项。
+2. 末端会出现青色的六自由度交互标记（平移箭头、平面方块和旋转圆环）。它由 `MotionPlanning` 自身管理；不要额外添加同一话题的 `InteractiveMarkers` 显示，否则会叠加两套标记并影响鼠标拖动。
 3. 拖动标记调整位置、姿态，随后点击 `Plan & Execute`。若只看到机器人而没有面板，依次点击菜单 `Panels > Add New Panel > Motion Planning` 后选择 `fr3_arm`。
 
 拖动只是在设置目标，Gazebo 不会在拖动过程中实时跟随；`Plan & Execute` 会先做碰撞检查与轨迹规划，再把轨迹发送给 Gazebo。需要连续实时遥操作时，请使用 Quest 的 `./run_gazebo_vr.sh`。
