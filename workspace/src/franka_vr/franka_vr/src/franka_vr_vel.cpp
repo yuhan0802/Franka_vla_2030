@@ -24,10 +24,12 @@ constexpr double POSITION_TOLERANCE = 0.002;     // 位置容差（米）
 constexpr double ORIENTATION_TOLERANCE = 0.05;  // 角度容差（弧度）
 }  // namespace
 
-static Eigen::Vector3d linear_step_size{ 3.0, 3.0, 3.0 };
-static Eigen::AngleAxisd x_step_size(3.14, Eigen::Vector3d::UnitX());
-static Eigen::AngleAxisd y_step_size(3.14, Eigen::Vector3d::UnitY());
-static Eigen::AngleAxisd z_step_size(3.14, Eigen::Vector3d::UnitZ());
+// These values are interpreted as Cartesian velocity limits by the target
+// tracker.  Keep the defaults conservative for the first real-robot test.
+static Eigen::Vector3d linear_step_size{ 0.10, 0.10, 0.10 };
+static Eigen::AngleAxisd x_step_size(0.35, Eigen::Vector3d::UnitX());
+static Eigen::AngleAxisd y_step_size(0.35, Eigen::Vector3d::UnitY());
+static Eigen::AngleAxisd z_step_size(0.35, Eigen::Vector3d::UnitZ());
 static geometry_msgs::msg::Pose target_pose;
 static bool target_set = false;
 

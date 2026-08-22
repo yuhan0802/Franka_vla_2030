@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Docker Compose reads .env itself, but this shell also needs ROBOT_IP for the
+# explicit preflight check below.
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
 : "${ROBOT_IP:?Set ROBOT_IP to the FR3 control IP before launching}"
 
 # Apply the host-side real-time settings that proved stable with the FR3.
@@ -21,6 +30,13 @@ docker run --rm --privileged --pid host \
     fi
   '
 
-docker compose run --rm franka_vr ros2 launch franka_vr franka_twist.launch.py \
-  robot_ip:="${ROBOT_IP}" use_fake_hardware:=false \
-  load_gripper:="${LOAD_GRIPPER:-true}" use_rviz:="${USE_RVIZ:-true}"
+docker compose run --rm franka_vr bash -lc '
+  set -e
+  source /opt/ros/humble/setup.bash
+  cd /ws_franka_vr
+  colcon build --symlink-install --cmake-force-configure --packages-select franka_vr
+  source install/setup.bash
+  ros2 launch franka_vr franka_twist.launch.py \
+    robot_ip:="'"${ROBOT_IP}"'" use_fake_hardware:=false \
+    load_gripper:="'"${LOAD_GRIPPER:-true}"'" use_rviz:="'"${USE_RVIZ:-true}"'"
+'

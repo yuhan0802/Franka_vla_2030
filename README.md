@@ -77,6 +77,8 @@ docker compose build
 
 默认 FR3 FCI 控制 IP 为 `172.16.0.2`。如设备地址不同，可将该地址写入 `.env`，或在执行命令时以 `ROBOT_IP=<机器人IP>` 覆盖。
 
+所有 `run_*.sh` 脚本都会在启动容器后自动重新构建当前挂载的 `franka_vr` 源码，因此修改本项目代码后无需重新构建 Docker 镜像；首次启动或 CMake 配置变更时会多花一点时间。只有 Dockerfile、系统依赖或上游源码发生变化时，才需要执行 `docker compose build`。
+
 ### 假硬件模式
 
 这是推荐的首次验证方式。它使用假硬件，不会连接或控制真实机械臂，因此无需设置或连接 `ROBOT_IP`：
@@ -206,6 +208,8 @@ FCI_INTERFACE=enp110s0 FCI_IRQ_CPU=2 ./run_robot.sh
 首次使用时，将 Quest 用 USB 连接到主机，在头显中接受 USB 调试授权。容器会保留 ADB 密钥，以避免每次 `docker compose run --rm` 后重复授权。
 
 控制方式：按住右手扳机（`rightTrig`）控制机械臂运动；按住右手握把（`rightGrip`）闭合夹爪，松开则打开夹爪。
+
+VR 控制节点默认采用保守的目标跟踪上限（约 `0.17 m/s` 线速度、`0.35 rad/s` 角速度）。真机首次使用时仍应保持低速、无负载，并验证急停、FCI 网络和 Quest 跟踪均正常。
 
 若 RViz 无法连接显示服务器，可在主机执行：
 
