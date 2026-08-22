@@ -305,13 +305,47 @@ cat /sys/kernel/realtime
 
 ```text
 .
-├── Dockerfile                 # ROS 2、依赖与工作空间镜像
-├── docker-compose.yml         # 运行时权限、显示和设备挂载
-├── run_fake.sh                # 假硬件启动脚本
-├── run_robot.sh               # 真机启动与实时性辅助设置
-├── vendor/                    # libfranka Debian 运行时包
+├── .env.example                         # 本地机器人 IP、ROS 域和 X11 显示配置模板
+├── Dockerfile                           # ROS 2 Humble、Gazebo、MoveIt 与项目依赖镜像
+├── docker-compose.yml                   # 容器网络、设备、X11 和工作空间挂载
+├── docker/
+│   └── entrypoint.sh                     # 容器启动环境初始化
+├── vendor/
+│   └── libfranka/                        # Franka C++ 库源码与运行时构建资源
+├── run_fake.sh                           # 启动假硬件与可选 RViz
+├── run_gazebo.sh                         # 启动 Gazebo、MoveIt、RViz、方块与夹爪控制
+├── run_gazebo_vr.sh                      # 启动支持 Quest Servo 控制的 Gazebo 栈
+├── run_robot.sh                          # 启动真机控制与 RViz
+├── run_vr.sh                             # 启动 Quest 输入到 ROS 的桥接
 └── workspace/src/
-    └── franka_vr/franka_vr/   # 遥操作 ROS 2 包、launch、配置和 Quest reader
+    ├── franka_vr/franka_vr/              # 本项目的 ROS 2 功能包
+    │   ├── CMakeLists.txt                 # 构建目标、安装规则与依赖
+    │   ├── package.xml                    # ROS 包元数据与 MIT 许可证声明
+    │   ├── config/
+    │   │   ├── gazebo_moveit.rviz         # Gazebo 模式的 RViz / MoveIt 布局
+    │   │   ├── fr3_controllers.yaml       # MoveIt 到 Gazebo 控制器的映射
+    │   │   ├── fr3_real_config.yaml       # 真机 / Servo 参数
+    │   │   ├── fr3_ros_controllers.yaml   # 假硬件 / 真机 ros2_control 配置
+    │   │   ├── joint_limits.yaml          # 规划关节速度与加速度限制
+    │   │   └── kinematics.yaml            # FR3 逆运动学配置
+    │   ├── launch/
+    │   │   ├── gazebo_vr.launch.py        # Gazebo、MoveIt、RViz 与控制器编排
+    │   │   ├── franka_twist.launch.py     # 假硬件 / 真机 Servo 启动
+    │   │   └── moveit_offset_client.launch.py # 末端偏移规划客户端
+    │   ├── models/target_block.sdf        # Gazebo 中可抓取的橙色方块
+    │   ├── scripts/gazebo_gripper_marker.py # RViz 夹爪开合右键控件
+    │   ├── src/
+    │   │   ├── franka_vr.cpp              # Quest 位姿转 Servo 指令
+    │   │   ├── franka_vr_vel.cpp          # 速度式 VR 机械臂控制节点
+    │   │   └── moveit_cartesian_offset.cpp # MoveIt 笛卡尔偏移示例
+    │   ├── srv/                           # 目标位姿与步长服务定义
+    │   └── oculus_reader/                 # Quest 控制器读取程序
+    ├── franka_description/                # FR3 URDF、网格与末端执行器描述
+    ├── franka_ros2/                       # Franka 官方 ROS 2 驱动、夹爪与 Gazebo 插件
+    ├── moveit2/                           # MoveIt 2 源码依赖
+    ├── moveit_msgs/                       # MoveIt 消息、服务与动作定义
+    ├── joint_state_broadcaster/           # 关节状态发布器源码依赖
+    └── joint_trajectory_controller/       # 轨迹执行控制器源码依赖
 ```
 
 ## 开发
