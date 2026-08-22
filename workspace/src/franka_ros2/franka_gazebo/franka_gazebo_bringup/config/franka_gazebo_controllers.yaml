@@ -20,6 +20,9 @@ controller_manager:
     fr3_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    fr3_gripper:
+      type: position_controllers/GripperActionController
+
 joint_position_example_controller:
   ros__parameters:
     gazebo: true
@@ -43,6 +46,14 @@ fr3_arm_controller:
     state_interfaces:
       - position
       - velocity
+
+fr3_gripper:
+  ros__parameters:
+    joint: fr3_finger_joint1
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
   
 joint_impedance_example_controller:
   ros__parameters:

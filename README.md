@@ -81,7 +81,7 @@ USE_RVIZ=false LOAD_GRIPPER=false ./run_fake.sh
 ./run_gazebo.sh
 ```
 
-该脚本启动带 Franka Hand 夹爪的 FR3、Gazebo Sim、带 MoveIt Motion Planning 面板的 RViz、`joint_state_broadcaster`、MoveIt 和 `fr3_arm_controller` 位置轨迹控制器。它完全在容器中运行，**不会连接真机，也不需要 `ROBOT_IP`**。首次运行前需要按下面的流程重新构建镜像。
+该脚本启动带 Franka Hand 夹爪的 FR3、Gazebo Sim、带 MoveIt Motion Planning 面板的 RViz、`joint_state_broadcaster`、MoveIt、机械臂轨迹控制器、夹爪动作控制器，以及位于 `(x=0.45, y=0, z=0.04)` 的橙色抓取长方体。它完全在容器中运行，**不会连接真机，也不需要 `ROBOT_IP`**。首次运行前需要按下面的流程重新构建镜像。
 
 夹爪模型会显示在 Gazebo 和 RViz 中；当前官方关节速度示例控制器不提供夹爪运动控制，因此 Quest 的 `rightGrip` 不会驱动 Gazebo 中的夹爪。
 
@@ -107,6 +107,14 @@ docker compose build franka_vr
 3. 拖动标记的箭头或圆环调整位置、姿态，随后点击 `Plan & Execute`。
 
 拖动只是在设置目标，Gazebo 不会在拖动过程中实时跟随；`Plan & Execute` 会先做碰撞检查与轨迹规划，再把轨迹发送给 Gazebo。需要连续实时遥操作时，请使用 Quest 的 `./run_gazebo_vr.sh`。
+
+#### 在 RViz 中抓取方块
+
+1. 在 Gazebo 窗口确认橙色长方体已生成。先在 RViz 的 `MotionPlanning` 面板选择 `fr3_arm`，拖动末端标记到方块上方，点击 `Plan & Execute`；再将末端下降到两根手指包住方块的位置并执行。
+2. 将 `Planning Group` 切换为 `fr3_hand`，在 `Goal State` 中选择命名状态 `close`，点击 `Plan & Execute` 以闭合夹爪。
+3. 切回 `fr3_arm`，将末端向上拖动并执行，即可尝试抬起方块。需要释放时，将 `Planning Group` 切为 `fr3_hand`，选择 `open`，再执行。
+
+`fr3_gripper` 使用 Gazebo 的 `GripperActionController`；可控关节为 `fr3_finger_joint1`，另一根手指通过 URDF mimic 关节同步运动。方块具有重力、碰撞和摩擦，抓取成功取决于手指与方块的对准和接触。
 
 如需在另一个终端检查控制器，可将仿真放到后台：
 

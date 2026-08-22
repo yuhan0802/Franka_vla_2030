@@ -127,12 +127,33 @@ def launch_setup(context: LaunchContext):
         arguments=["-topic", "/robot_description"],
         output="screen",
     )
+    block = Node(
+        package="ros_gz_sim",
+        executable="create",
+        arguments=[
+            "-file",
+            os.path.join(get_package_share_directory("franka_vr"), "models", "target_block.sdf"),
+            "-name",
+            "target_block",
+            "-x",
+            "0.45",
+            "-y",
+            "0.0",
+            "-z",
+            "0.04",
+        ],
+        output="screen",
+    )
     joint_state_broadcaster = ExecuteProcess(
         cmd=["ros2", "control", "load_controller", "--set-state", "active", "joint_state_broadcaster"],
         output="screen",
     )
     arm_controller = ExecuteProcess(
         cmd=["ros2", "control", "load_controller", "--set-state", "active", "fr3_arm_controller"],
+        output="screen",
+    )
+    gripper_controller = ExecuteProcess(
+        cmd=["ros2", "control", "load_controller", "--set-state", "active", "fr3_gripper"],
         output="screen",
     )
     move_group = Node(
@@ -169,11 +190,17 @@ def launch_setup(context: LaunchContext):
             output="screen",
         ),
         spawn,
+        block,
         RegisterEventHandler(OnProcessExit(target_action=spawn, on_exit=[joint_state_broadcaster])),
         RegisterEventHandler(
             OnProcessExit(target_action=joint_state_broadcaster, on_exit=[arm_controller])
         ),
-        RegisterEventHandler(OnProcessExit(target_action=arm_controller, on_exit=[move_group])),
+        RegisterEventHandler(
+            OnProcessExit(target_action=arm_controller, on_exit=[gripper_controller])
+        ),
+        RegisterEventHandler(
+            OnProcessExit(target_action=gripper_controller, on_exit=[move_group])
+        ),
         Node(
             package="franka_vr",
             executable="demo_franka_vr_vel",

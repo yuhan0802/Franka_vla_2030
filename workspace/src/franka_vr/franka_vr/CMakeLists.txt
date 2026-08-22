@@ -69,6 +69,11 @@ install(DIRECTORY
 )
 
 install(DIRECTORY
+    models/
+    DESTINATION share/${PROJECT_NAME}/models
+)
+
+install(DIRECTORY
     launch/
     DESTINATION share/${PROJECT_NAME}/launch
 )
