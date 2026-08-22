@@ -60,6 +60,8 @@ docker compose build
 | 启动 FR3 假硬件与 RViz | `./run_fake.sh` |
 | 启动 Gazebo 物理仿真 | `./run_gazebo.sh` |
 | 启动可由 Quest 控制的 Gazebo 仿真 | `./run_gazebo_vr.sh` |
+| 查看正在运行的 Gazebo 仿真实例 | `docker ps --filter "name=franka_vr_docker-franka_vr-run"` |
+| 停止指定 Gazebo 仿真实例 | `docker stop <容器ID或容器名>` |
 | 启动 Quest VR 控制桥接 | `./run_vr.sh` |
 | 启动假硬件（不启动 RViz） | `USE_RVIZ=false ./run_fake.sh` |
 | 启动假硬件（不加载夹爪） | `LOAD_GRIPPER=false ./run_fake.sh` |
@@ -98,6 +100,16 @@ USE_RVIZ=false LOAD_GRIPPER=false ./run_fake.sh
 ```
 
 该脚本启动带 Franka Hand 夹爪的 FR3、Gazebo Sim、带 MoveIt Motion Planning 面板的 RViz、`joint_state_broadcaster`、MoveIt、机械臂轨迹控制器、夹爪动作控制器，以及位于 `(x=0.45, y=0, z=0.04)` 的橙色抓取长方体。它完全在容器中运行，**不会连接真机，也不需要 `ROBOT_IP`**。首次运行前需要按下面的流程重新构建镜像。
+
+> [!IMPORTANT]
+> 每次执行 `run_gazebo.sh` 或 `run_gazebo_vr.sh` 都会创建一个新的临时 Docker 容器。同一时间只能运行一个 Gazebo 栈；否则多个实例会争用 ROS 话题、服务、控制器和图形资源，导致 RViz 或规划异常。请先在新终端检查并停止旧实例：
+>
+> ```bash
+> docker ps --filter "name=franka_vr_docker-franka_vr-run"
+> docker stop <容器ID或容器名>
+> ```
+>
+> `docker stop` 后，`docker compose run --rm` 创建的容器会自动清理；仅在无法正常停止时才使用 `docker kill <容器ID或容器名>`。
 
 夹爪模型会显示在 Gazebo 和 RViz 中；当前官方关节速度示例控制器不提供夹爪运动控制，因此 Quest 的 `rightGrip` 不会驱动 Gazebo 中的夹爪。
 
