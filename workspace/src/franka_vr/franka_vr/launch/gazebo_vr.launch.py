@@ -7,9 +7,9 @@ import xacro
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler, TimerAction
 from launch.conditions import IfCondition
-from launch.event_handlers import OnProcessExit
+from launch.event_handlers import OnProcessExit, OnProcessStart
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -205,6 +205,20 @@ def launch_setup(context: LaunchContext):
         get_package_share_directory("franka_vr"), "config", "gazebo_moveit.rviz"
     )
 
+    rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        arguments=["-d", rviz_config],
+        parameters=[
+            moveit_params,
+            ompl_planning_config,
+            moveit_controllers,
+            {"use_sim_time": True},
+        ],
+        condition=IfCondition(use_rviz),
+        output="log",
+    )
+
     return [
         gazebo,
         Node(
@@ -225,6 +239,16 @@ def launch_setup(context: LaunchContext):
         RegisterEventHandler(
             OnProcessExit(target_action=gripper_controller, on_exit=[move_group])
         ),
+        # RViz requests /get_planning_scene as it starts.  Starting it with
+        # Gazebo used to make that first request race move_group, leaving the
+        # MotionPlanning display permanently in "Requesting initial scene
+        # failed" state and preventing reliable end-effector interaction.
+        RegisterEventHandler(
+            OnProcessStart(
+                target_action=move_group,
+                on_start=[TimerAction(period=3.0, actions=[rviz])],
+            )
+        ),
         Node(
             package="franka_vr",
             executable="gazebo_gripper_marker.py",
@@ -239,19 +263,6 @@ def launch_setup(context: LaunchContext):
             parameters=[servo_params, moveit_params, {"use_sim_time": True}],
             condition=IfCondition(enable_vr),
             output="screen",
-        ),
-        Node(
-            package="rviz2",
-            executable="rviz2",
-            arguments=["-d", rviz_config],
-            parameters=[
-                moveit_params,
-                ompl_planning_config,
-                moveit_controllers,
-                {"use_sim_time": True},
-            ],
-            condition=IfCondition(use_rviz),
-            output="log",
         ),
     ]
 
