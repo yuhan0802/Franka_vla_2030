@@ -40,8 +40,28 @@ docker exec <Gazebo容器> bash -lc '
 - 配置并启动 `fr3_gripper` 的 `GripperActionController`。
 - 增加 RViz 交互式蓝色方块 `Gripper: right-click for open / close`。
 - 右键该方块，选择 `Open gripper` 或 `Close gripper`，节点会向 `/fr3_gripper/gripper_cmd` 发送动作目标。
+- 将夹爪全开目标设为每根手指 `0.04 m`，并收紧控制器目标容差，避免控制器在半开位置过早报告完成。
+- 将 `fr3_finger_joint2` 显式注册为 Gazebo `ros2_control` 的 mimic 硬件关节。仅在 URDF 中声明 mimic 不足以让 Gazebo 插件驱动物理上的另一根手指；注册后两根手指会随 `fr3_finger_joint1` 同步运动。
 
-另一根手指通过 URDF mimic 关节同步运动。
+**验证方式**：向 `/fr3_gripper/gripper_cmd` 发送 `position: 0.04` 后，动作应成功完成；`/joint_states` 中主手指和 mimic 手指的位置都应接近 `0.04`，Gazebo 中左右手指同步展开。
+
+## 键盘手动操作在长按时积压旧指令
+
+**现象**：终端按键自动重复时，手动控制可能持续创建异步目标请求。若服务短暂变慢，松开按键后旧目标仍可能排队执行，表现为后续指令不及时响应。
+
+**原因**：每次按键都直接调用异步 `/set_target_pose` 服务，缺少在途请求数量限制和最新目标合并。
+
+**解决办法**：键盘节点最多保留一个在途目标请求；长按产生的新目标只更新本地最新目标，待当前请求完成后再发送。夹爪也限制为上一个动作完成前不重复提交，并使用非阻塞的 action-server 就绪检查。
+
+**验证方式**：长按一个方向后松开，机械臂只会追踪最后一个已合并目标，不会继续消耗历史按键队列；连续按夹爪键不会产生多个并发动作。
+
+## 真机缺少键盘手动模式入口
+
+**现象**：`run_robot.sh` 已启动真机 MoveIt Servo 栈，但原有 `run_manual_control.sh` 只识别 Gazebo 容器，并以仿真时间运行，无法安全地复用到真机。
+
+**解决办法**：新增 `run_robot_manual_control.sh`。它只连接已经由 `run_robot.sh` 启动的容器，以真实时间启动 `keyboard_manual_control.py`；脚本会自动检查恰好一个真机 Servo 栈，发现零个或多个实例时拒绝执行。可用 `ROBOT_CONTAINER=<容器名或ID>` 显式指定目标。
+
+**验证方式**：未启动真机栈时，脚本应输出明确错误且不创建新控制器；启动 `run_robot.sh` 后，在第二终端执行该脚本即可连接已有的 `/set_target_pose` 与夹爪 action 接口。
 
 ## 多次启动 Gazebo 导致控制异常
 
@@ -63,3 +83,19 @@ docker stop <容器ID或容器名>
 **现象**：启动仿真前尝试配置或连接 `ROBOT_IP`。
 
 **解决办法**：`./run_gazebo.sh` 和 `./run_gazebo_vr.sh` 使用容器内的 Gazebo 模型，不连接 Franka FCI，也不需要真实机械臂或 `ROBOT_IP`。仅 `./run_robot.sh` 使用默认地址 `172.16.0.2` 连接真机。
+
+## RViz 末端交互标记显示但无法正常鼠标拖动
+
+**现象**：末端的平移箭头和旋转圆环在 RViz 中可见，但鼠标拖动无响应、响应不稳定，或出现多套重叠的末端控制标记。
+
+**原因**：`MotionPlanning` 插件本身已经管理并显示末端交互标记；配置中又额外添加了一个 `rviz_default_plugins/InteractiveMarkers` 显示，并订阅同一话题：
+
+```text
+/rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic
+```
+
+两套交互显示同时渲染和拾取同一个末端标记，造成鼠标事件与反馈冲突。
+
+**解决办法**：在 `gazebo_moveit.rviz` 中删除额外的 `End Effector Drag Control` 显示，只保留 `MotionPlanning` 管理的末端交互标记。夹爪控制保留为独立的 `Gripper Open Close` 交互标记，因为它使用不同的话题 `/franka_gripper_control`。
+
+同时保持 `Query Start State: false`，避免额外显示并操作 Start State 标记；RViz 在 `move_group` 启动并等待规划场景就绪后再启动，确保交互标记服务已可用。

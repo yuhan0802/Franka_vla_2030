@@ -131,6 +131,13 @@ def launch_setup(context: LaunchContext):
         PythonLaunchDescriptionSource(os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")),
         launch_arguments={"gz_args": "empty.sdf -r"}.items(),
     )
+    clock_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        # Gazebo Fortress still uses ignition.msgs on its transport layer.
+        arguments=["/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock"],
+        output="screen",
+    )
     spawn = Node(
         package="ros_gz_sim",
         executable="create",
@@ -228,6 +235,7 @@ def launch_setup(context: LaunchContext):
 
     return [
         gazebo,
+        clock_bridge,
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
@@ -265,9 +273,19 @@ def launch_setup(context: LaunchContext):
         Node(
             package="franka_vr",
             executable="demo_franka_vr_vel",
-            # joint_state_broadcaster stamps states with Gazebo's /clock.  Servo
-            # must use the same clock or it treats every simulated state as stale.
-            parameters=[servo_params, moveit_params, {"use_sim_time": True}],
+            # Servo builds trajectories using node->now(); the /clock bridge
+            # above keeps it synchronized with Gazebo joint-state timestamps.
+            parameters=[
+                servo_params,
+                moveit_params,
+                # demo_franka_vr_vel reads this application-level parameter in
+                # addition to the standard moveit_servo parameters.
+                {
+                    "update_period": 0.01,
+                    "planning_group_name": "fr3_arm",
+                    "use_sim_time": True,
+                },
+            ],
             condition=IfCondition(enable_vr),
             output="screen",
         ),

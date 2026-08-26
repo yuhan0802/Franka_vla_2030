@@ -88,6 +88,7 @@ install(DIRECTORY
 
 install(PROGRAMS
     scripts/gazebo_gripper_marker.py
+    scripts/keyboard_manual_control.py
     DESTINATION lib/${PROJECT_NAME}
 )
 # 声明这是一个ROS 2包

@@ -10,6 +10,10 @@ from rclpy.node import Node
 from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, Marker
 
 
+GRIPPER_OPEN_POSITION = 0.04  # Per-finger stroke; 8 cm jaw opening in total.
+GRIPPER_MAX_EFFORT = 100.0
+
+
 class GazeboGripperMarker(Node):
     def __init__(self):
         super().__init__("gazebo_gripper_marker")
@@ -54,7 +58,7 @@ class GazeboGripperMarker(Node):
         self._menu.processFeedback(feedback)
 
     def _open_gripper(self, _feedback):
-        self._send_goal(0.035, "open")
+        self._send_goal(GRIPPER_OPEN_POSITION, "open")
 
     def _close_gripper(self, _feedback):
         self._send_goal(0.0, "close")
@@ -65,7 +69,7 @@ class GazeboGripperMarker(Node):
             return
         goal = GripperCommand.Goal()
         goal.command.position = position
-        goal.command.max_effort = 20.0
+        goal.command.max_effort = GRIPPER_MAX_EFFORT
         self._client.send_goal_async(goal)
         self.get_logger().info(f"Requested gripper {label}")
 

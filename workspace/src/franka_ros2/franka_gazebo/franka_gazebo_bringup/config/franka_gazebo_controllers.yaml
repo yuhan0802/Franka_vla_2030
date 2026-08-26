@@ -54,6 +54,10 @@ fr3_gripper:
       - position
     state_interfaces:
       - position
+    # The default 1 cm tolerance is a quarter of one finger's complete
+    # 4 cm stroke, so an open command was reported complete around halfway.
+    goal_tolerance: 0.0001
+    max_effort: 100.0
   
 joint_impedance_example_controller:
   ros__parameters:

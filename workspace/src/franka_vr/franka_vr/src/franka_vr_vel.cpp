@@ -15,13 +15,17 @@ using namespace moveit_servo;
 
 namespace
 {
-constexpr auto K_BASE_FRAME = "fr3_link0";
+// MoveIt Servo only accepts Cartesian twists expressed in its planning frame.
+// Gazebo's generated robot model is rooted at `world`, not `fr3_link0`.
+constexpr auto K_BASE_FRAME = "world";
 // fr3_hand only exists when the optional gripper is loaded.  fr3_link8 is
 // always present and is therefore the safe Cartesian control tip for both
 // gripper and no-gripper launches.
 constexpr auto K_TIP_FRAME = "fr3_link8";
 constexpr double POSITION_TOLERANCE = 0.002;     // 位置容差（米）
 constexpr double ORIENTATION_TOLERANCE = 0.05;  // 角度容差（弧度）
+constexpr double POSITION_TRACKING_GAIN = 4.0;
+constexpr double ORIENTATION_TRACKING_GAIN = 4.0;
 }  // namespace
 
 // These values are interpreted as Cartesian velocity limits by the target
@@ -31,7 +35,11 @@ static Eigen::AngleAxisd x_step_size(0.35, Eigen::Vector3d::UnitX());
 static Eigen::AngleAxisd y_step_size(0.35, Eigen::Vector3d::UnitY());
 static Eigen::AngleAxisd z_step_size(0.35, Eigen::Vector3d::UnitZ());
 static geometry_msgs::msg::Pose target_pose;
-static bool target_set = false;
+// The service callback and the Servo tracking thread run concurrently.  The
+// old plain bool could be cached by the tracking thread, so newly received
+// manual targets were never observed in optimized builds.
+static std::atomic_bool target_set{ false };
+static std::mutex target_pose_mutex;
 
 void set_step_size_callback(const rclcpp::Node::SharedPtr& node,
                             const std::shared_ptr<franka_vr::srv::SetStepSize::Request> request,
@@ -61,8 +69,11 @@ void set_target_pose_callback(const rclcpp::Node::SharedPtr& node,
                               const std::shared_ptr<franka_vr::srv::SetTargetPose::Request> request,
                               std::shared_ptr<franka_vr::srv::SetTargetPose::Response> response)
 {
-  target_pose = request->target_pose;
-  target_set = true;
+  {
+    std::lock_guard<std::mutex> lock(target_pose_mutex);
+    target_pose = request->target_pose;
+    target_set.store(true, std::memory_order_release);
+  }
   response->success = true;
   response->message = "Target pose set successfully";
   RCLCPP_INFO(node->get_logger(), "Target pose set: [x: %.3f, y: %.3f, z: %.3f]", target_pose.position.x,
@@ -123,19 +134,22 @@ int main(int argc, char* argv[])
   KinematicState current_state = servo.getCurrentRobotState(true);
   updateSlidingWindow(current_state, joint_cmd_rolling_window, servo_params.max_expected_latency, demo_node->now());
 
-  std::mutex pose_guard;
   auto pose_tracker = [&]() {
     KinematicState joint_state;
     rclcpp::WallRate tracking_rate(1 / servo_params.publish_period);
     std::deque<KinematicState> joint_cmd_rolling_window;
     KinematicState current_state = servo.getCurrentRobotState(true);
     updateSlidingWindow(current_state, joint_cmd_rolling_window, servo_params.max_expected_latency, demo_node->now());
+    StatusCode previous_status = StatusCode::INVALID;
 
     while (rclcpp::ok())
     {
-      if (target_set)
+      if (target_set.load(std::memory_order_acquire))
       {
-        std::lock_guard<std::mutex> pguard(pose_guard);
+        // Keep a target update and the reached-target transition atomic with
+        // respect to the service callback.  Otherwise an incoming key press
+        // could be overwritten by target_set = false below.
+        std::lock_guard<std::mutex> target_guard(target_pose_mutex);
         geometry_msgs::msg::Pose current_pose = tf2::toMsg(get_current_pose(K_TIP_FRAME, robot_state));
         Eigen::Vector3d pos_error = compute_position_error(current_pose, target_pose);
         double ori_error = compute_orientation_error(current_pose, target_pose);
@@ -143,7 +157,7 @@ int main(int argc, char* argv[])
         if (pos_error.norm() < POSITION_TOLERANCE && ori_error < ORIENTATION_TOLERANCE)
         {
           RCLCPP_INFO(demo_node->get_logger(), "Reached target pose within tolerance");
-          target_set = false;
+          target_set.store(false, std::memory_order_release);
           continue;
         }
 
@@ -152,7 +166,11 @@ int main(int argc, char* argv[])
                                        std::max({ x_step_size.angle(), y_step_size.angle(), z_step_size.angle() }) :
                                        0.4;
                               
-        Eigen::Vector3d linear_vel = pos_error.normalized() * max_linear_speed * pos_error.norm();
+        // A proportional target tracker is responsive for the small keyboard
+        // increments while the Servo acceleration filter removes abrupt
+        // starts and stops.  The configured values remain strict speed caps.
+        const double linear_speed = std::min(max_linear_speed, POSITION_TRACKING_GAIN * pos_error.norm());
+        Eigen::Vector3d linear_vel = pos_error.normalized() * linear_speed;
 
         // 计算角速度
         tf2::Quaternion q_current, q_target;
@@ -161,9 +179,10 @@ int main(int argc, char* argv[])
         tf2::Quaternion q_diff = q_target * q_current.inverse();
         tf2::Vector3 angular_vel_axis = q_diff.getAxis();  // 使用tf2::Vector3
         double angular_vel_magnitude = q_diff.getAngle();
-        Eigen::Vector3d angular_vel =
-            Eigen::Vector3d(angular_vel_axis.x(), angular_vel_axis.y(), angular_vel_axis.z()) * max_angular_speed *
-            angular_vel_magnitude;  // 使用angular_vel_magnitude
+        const double angular_speed =
+            std::min(max_angular_speed, ORIENTATION_TRACKING_GAIN * angular_vel_magnitude);
+        Eigen::Vector3d angular_vel = Eigen::Vector3d(angular_vel_axis.x(), angular_vel_axis.y(), angular_vel_axis.z()) *
+                                      angular_speed;
 
         TwistCommand target_twist{ K_BASE_FRAME,
                                    { linear_vel.x(), linear_vel.y(), linear_vel.z(), angular_vel.x(), angular_vel.y(),
@@ -171,6 +190,12 @@ int main(int argc, char* argv[])
 
         joint_state = servo.getNextJointState(robot_state, target_twist);
         StatusCode status = servo.getStatus();
+
+        if (status != previous_status)
+        {
+          RCLCPP_INFO_STREAM(demo_node->get_logger(), "Servo status: " << servo.getStatusMessage());
+          previous_status = status;
+        }
 
         if (status != StatusCode::INVALID)
         {

@@ -67,6 +67,7 @@ docker compose build
 | 启动假硬件（不加载夹爪） | `LOAD_GRIPPER=false ./run_fake.sh` |
 | 启动真机与 RViz | `ROBOT_IP=172.16.0.2 ./run_robot.sh` |
 | 启动真机（不启动 RViz） | `ROBOT_IP=172.16.0.2 USE_RVIZ=false ./run_robot.sh` |
+| 启动真机键盘手动模式（第二终端） | `./run_robot_manual_control.sh` |
 | 检查 Quest 的 ADB 连接 | `docker compose run --rm franka_vr adb devices` |
 | 进入开发容器 | `docker compose run --rm franka_vr bash` |
 | 重新构建 `franka_vr` 包 | `docker compose run --rm franka_vr bash -lc 'cd /ws_franka_vr && colcon build --symlink-install --packages-select franka_vr'` |
@@ -332,6 +333,7 @@ cat /sys/kernel/realtime
 ├── run_gazebo.sh                         # 启动 Gazebo、MoveIt、RViz、方块与夹爪控制
 ├── run_gazebo_vr.sh                      # 启动支持 Quest Servo 控制的 Gazebo 栈
 ├── run_robot.sh                          # 启动真机控制与 RViz
+├── run_robot_manual_control.sh           # 连接真机 Servo 栈的键盘手动控制
 ├── run_vr.sh                             # 启动 Quest 输入到 ROS 的桥接
 └── workspace/src/
     ├── franka_vr/franka_vr/              # 本项目的 ROS 2 功能包
@@ -388,3 +390,48 @@ docker build -f Dockerfile.runtime-fix -t franka-vr:runtime-fix .
 ## 许可证
 
 本项目自有代码采用 [MIT License](LICENSE)。仓库中包含或依赖的 Franka ROS 2、MoveIt 2、Gazebo 与其他上游组件仍分别遵循其原有许可证。
+
+## 键盘手动控制（Gazebo / 真机）
+
+先在一个终端启动仿真：
+
+```bash
+./run_gazebo.sh
+```
+
+再打开第二个终端启动手动模式：
+
+```bash
+./run_manual_control.sh
+```
+
+真机使用同一套 MoveIt Servo 目标跟踪与安全限制，但必须先启动真机控制栈，再在第二个终端连接键盘模式：
+
+```bash
+# 终端 1：确认急停可用、工作区无人后启动真机 Servo 栈
+ROBOT_IP=172.16.0.2 ./run_robot.sh
+
+# 终端 2：只连接上面的 Servo 栈；不会启动第二个硬件控制器
+./run_robot_manual_control.sh
+```
+
+若自动识别到多个真机栈，先停止多余实例；也可明确指定目标容器：
+
+```bash
+ROBOT_CONTAINER=<容器名或ID> ./run_robot_manual_control.sh
+```
+
+真机首次测试应保持低速、无负载，并仅短按单个方向确认运动与世界坐标系一致；始终保持急停可用。键盘模式通过既有的 MoveIt Servo、关节边界、奇异位形和碰撞检查输出轨迹，不会直接向 FCI 写入底层关节命令。
+
+键盘控制使用 MoveIt Servo 连续跟踪目标，并保留奇异位形与碰撞限速。每次按键以世界坐标系为基准产生 8 mm 平移或 3° 旋转目标；按住按键可借助系统按键重复实现连续平滑运动：
+
+| 按键 | 操作 |
+| --- | --- |
+| `W` / `S` | 前 / 后（+X / -X） |
+| `A` / `D` | 左 / 右（+Y / -Y） |
+| `R` / `F` | 上 / 下（+Z / -Z） |
+| `↑` / `↓` | 绕 X 轴正 / 负旋转 |
+| `→` / `←` | 绕 Y 轴正 / 负旋转 |
+| `Z` / `X` | 绕 Z 轴正 / 负旋转 |
+| `Space` | 切换夹爪开 / 合 |
+| `Q` 或 `Ctrl-C` | 退出手动模式 |
