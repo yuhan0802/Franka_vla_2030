@@ -40,8 +40,10 @@ class OculusPublisher(Node):
         self.declare_parameter('trigger_threshold', 0.8)
         self.declare_parameter('max_hand_delta_per_cycle', 0.05)
         self.declare_parameter('max_relative_translation', 0.30)
+        self.declare_parameter('tracking_timeout_seconds', 0.20)
         self.declare_parameter('enable_orientation_control', False)
-        self.declare_parameter('robot_base_frame', 'fr3_link0')
+        # Keep the VR mapping and Servo service in one explicit shared frame.
+        self.declare_parameter('robot_base_frame', 'world')
         self.declare_parameter('robot_tip_frame', 'fr3_link8')
         self.declare_parameter('gripper_action_prefix', '/fr3_gripper/franka_gripper')
 
@@ -49,6 +51,7 @@ class OculusPublisher(Node):
         self.trigger_threshold = self.get_parameter('trigger_threshold').value
         self.max_hand_delta_per_cycle = self.get_parameter('max_hand_delta_per_cycle').value
         self.max_relative_translation = self.get_parameter('max_relative_translation').value
+        self.tracking_timeout_seconds = self.get_parameter('tracking_timeout_seconds').value
         self.enable_orientation_control = self.get_parameter('enable_orientation_control').value
         self.robot_base_frame = self.get_parameter('robot_base_frame').value
         self.robot_tip_frame = self.get_parameter('robot_tip_frame').value
@@ -87,6 +90,7 @@ class OculusPublisher(Node):
         self.hand_start_transform = None
         self.last_hand_control_transform = None
         self.robot_start_transform = None
+        self.tracking_timeout_reported = False
 
     def publish_static_transform(self):
         """发布从 world 到 oculus_base 的静态变换"""
@@ -159,9 +163,20 @@ class OculusPublisher(Node):
         pose.orientation = transform_stamped.transform.rotation
 
         req = SetTargetPose.Request()
-        req.target_pose = pose
+        req.target_pose.header = transform_stamped.header
+        req.target_pose.pose = pose
+        req.stop = False
 
         self.cli.call_async(req)
+
+    def stop_robot_tracking(self):
+        """Tell Servo to discard the last VR target after tracking is lost."""
+        request = SetTargetPose.Request()
+        request.target_pose.header.stamp = self.get_clock().now().to_msg()
+        request.target_pose.header.frame_id = 'world'
+        request.target_pose.pose.orientation.w = 1.0
+        request.stop = True
+        self.cli.call_async(request)
 
     @staticmethod
     def transform_to_matrix(transform):
@@ -286,6 +301,18 @@ class OculusPublisher(Node):
 
     def timer_callback(self):
         transformations, buttons = self.oculus_reader.get_transformations_and_buttons()
+
+        if not self.oculus_reader.has_fresh_data(self.tracking_timeout_seconds):
+            if not self.tracking_timeout_reported:
+                self.get_logger().warning('Quest tracking data timed out; stopping Servo target tracking')
+                self.stop_robot_tracking()
+                self.tracking_timeout_reported = True
+            self.trigger_active = False
+            self.hand_start_transform = None
+            self.last_hand_control_transform = None
+            self.robot_start_transform = None
+            return
+        self.tracking_timeout_reported = False
 
         # Publish the tracking pose directly.  Its axes are calibrated once
         # by the static world -> oculus_base transform above.

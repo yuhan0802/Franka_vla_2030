@@ -157,7 +157,10 @@ class KeyboardManualControl(Node):
                 or not self._target_client.service_is_ready()):
             return
         request = SetTargetPose.Request()
-        request.target_pose = self._target_pose
+        request.target_pose.header.stamp = self.get_clock().now().to_msg()
+        request.target_pose.header.frame_id = CONTROL_FRAME
+        request.target_pose.pose = self._target_pose
+        request.stop = False
         self._target_dirty = False
         self._target_request_in_flight = True
         future = self._target_client.call_async(request)

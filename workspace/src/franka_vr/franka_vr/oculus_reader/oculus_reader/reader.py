@@ -25,6 +25,7 @@ class OculusReader:
         self.running = False
         self.last_transforms = {}
         self.last_buttons = {}
+        self.last_update_monotonic = None
         self._lock = threading.Lock()
         self.tag = 'wE9ryARX'
 
@@ -181,6 +182,13 @@ class OculusReader:
         with self._lock:
             return self.last_transforms, self.last_buttons
 
+    def has_fresh_data(self, timeout_seconds):
+        """Return whether a complete Quest sample arrived within the deadline."""
+        with self._lock:
+            if self.last_update_monotonic is None:
+                return False
+            return time.monotonic() - self.last_update_monotonic <= timeout_seconds
+
     def read_logcat_by_line(self, connection):
         file_obj = connection.socket.makefile()
         while self.running:
@@ -189,8 +197,11 @@ class OculusReader:
                 data = self.extract_data(line)
                 if data:
                     transforms, buttons = OculusReader.process_data(data)
+                    if transforms is None or buttons is None:
+                        continue
                     with self._lock:
                         self.last_transforms, self.last_buttons = transforms, buttons
+                        self.last_update_monotonic = time.monotonic()
                     if self.print_FPS:
                         self.fps_counter.getAndPrintFPS()
             except UnicodeDecodeError:

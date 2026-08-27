@@ -1,429 +1,70 @@
 # Franka VR Docker
 
-一个基于 ROS 2 Humble、MoveIt 2、Gazebo Sim 和 Meta Quest 的 Franka FR3 控制与仿真环境。项目将 Franka ROS 2 工作空间、`libfranka` 运行时和 Quest 控制器读取程序封装在 Docker 中，支持从假硬件、物理仿真到真机的渐进式验证。
+面向 Franka FR3 的 Docker 化 ROS 2 控制与仿真环境。项目集成 ROS 2 Humble、MoveIt 2、Gazebo Sim 和 Meta Quest 3，可用于 Gazebo 轨迹规划、键盘/VR 遥操作以及受控真机连接。
 
 > [!WARNING]
-> 这不是安全认证的机器人控制系统。真机运行前，请完成 Franka 官方要求的安装、网络和实时性检查；保持急停可用，并确保机械臂工作区域内无人。首次运行请低速、无负载测试。
+> 本项目不是安全认证的机器人控制系统。真机运行前，必须完成 Franka 官方要求的安装、网络和实时性检查；保持急停可用，并确保工作区无人。首次测试应低速、无负载进行。
 
 ## 功能
 
-- Franka FR3 假硬件、Gazebo 物理仿真和真机三种运行模式
-- Gazebo Sim 中的重力、碰撞、摩擦和可抓取方块
-- MoveIt 2 轨迹规划：在 RViz 拖动末端位姿目标并执行至 Gazebo
-- RViz 右键交互式夹爪开合控制
-- MoveIt Servo 在线笛卡尔速度控制与奇异位形降速
-- Meta Quest 控制器位姿与按键读取；支持 Quest 控制 Gazebo 或真机
-- Docker Compose 一键构建、X11 图形显示和 ROS 2 工作空间挂载
+- Gazebo Sim：FR3、Franka Hand、重力、碰撞、摩擦与可抓取方块
+- MoveIt 2：在 RViz 设置末端目标、规划并执行轨迹
+- MoveIt Servo：键盘与 Quest 的连续笛卡尔目标跟踪
+- RViz 夹爪开合交互控件
+- Meta Quest 3：通过 Oculus Reader 读取右手控制器位姿与按键
+- 真机模式：连接 Franka FCI，并保留容器化的 ROS 2 工作空间
 
 ## 环境要求
 
-- Linux 主机、Docker Engine 与 Docker Compose v2
-- X11 显示环境（仅在启用 RViz 时需要）
-- 真机模式：已按 [Franka Linux 安装指南](https://frankaemika.github.io/docs/installation_linux.html) 配置并验证实时内核、FCI 网络与机器人
-- VR 模式：Meta Quest、USB 数据线、已启用开发者模式并允许 USB 调试
+- Linux 主机、Docker Engine、Docker Compose v2
+- X11 图形桌面（使用 Gazebo 或 RViz 时需要）
+- VR 模式：Meta Quest 3、USB 数据线、开发者模式与 USB 调试授权
+- 真机模式：已按 [Franka Linux 安装指南](https://frankaemika.github.io/docs/installation_linux.html) 验证实时内核、FCI 网络和机器人状态
 
-## 快速开始
-
-克隆仓库并进入目录：
+## 快速开始（Gazebo）
 
 ```bash
 git clone https://github.com/221zhong/franka_vr_control_2026.git
 cd franka_vr_control_2026
-```
-
-创建本地运行配置：
-
-```bash
 cp .env.example .env
-```
 
-编辑 `.env` 中的 `ROBOT_IP`、`ROS_DOMAIN_ID` 和 `DISPLAY`。`ROBOT_IP=172.16.0.2` 是项目默认的 Franka FCI 地址；Gazebo 和假硬件模式不连接机械臂。允许 Docker 访问 X11 后，首次构建镜像：
-
-```bash
+# 仅首次或 X11 授权失效后执行
 xhost +local:docker
+
 docker compose build
-```
-
-首次建议先启动 Gazebo 仿真：
-
-```bash
 ./run_gazebo.sh
 ```
 
-## 常用操作命令
+Gazebo 和 RViz 打开、终端出现 `You can start planning now!` 后即可操作。结束时在启动终端按 `Ctrl+C`；若启动终端已关闭，可执行 `docker stop <容器ID或容器名>`。
 
-以下命令均应在仓库根目录执行。真机操作具有风险；只在完成安全检查、确认急停可用且工作区无人时启动。
+## 运行模式
 
-| 目的 | 命令 |
-| --- | --- |
-| 构建或更新镜像 | `docker compose build` |
-| 启动 FR3 假硬件与 RViz | `./run_fake.sh` |
-| 启动 Gazebo 物理仿真 | `./run_gazebo.sh` |
-| 启动可由 Quest 控制的 Gazebo 仿真 | `./run_gazebo_vr.sh` |
-| 查看正在运行的 Gazebo 仿真实例 | `docker ps --filter "name=franka_vr_docker-franka_vr-run"` |
-| 停止指定 Gazebo 仿真实例 | `docker stop <容器ID或容器名>` |
-| 启动 Quest VR 控制桥接 | `./run_vr.sh` |
-| 启动假硬件（不启动 RViz） | `USE_RVIZ=false ./run_fake.sh` |
-| 启动假硬件（不加载夹爪） | `LOAD_GRIPPER=false ./run_fake.sh` |
-| 启动真机与 RViz | `ROBOT_IP=172.16.0.2 ./run_robot.sh` |
-| 启动真机（不启动 RViz） | `ROBOT_IP=172.16.0.2 USE_RVIZ=false ./run_robot.sh` |
-| 启动真机键盘手动模式（第二终端） | `./run_robot_manual_control.sh` |
-| 检查 Quest 的 ADB 连接 | `docker compose run --rm franka_vr adb devices` |
-| 进入开发容器 | `docker compose run --rm franka_vr bash` |
-| 重新构建 `franka_vr` 包 | `docker compose run --rm franka_vr bash -lc 'cd /ws_franka_vr && colcon build --symlink-install --packages-select franka_vr'` |
-| 无缓存完整重建镜像 | `docker compose build --no-cache` |
-| 查看 Compose 服务状态 | `docker compose ps` |
-| 查看正在运行的全部容器 | `docker ps` |
-| 停止 Compose 创建的服务 | `docker compose down` |
+| 场景 | 启动命令 | 用途 |
+| --- | --- | --- |
+| Gazebo 规划仿真 | `./run_gazebo.sh` | RViz 设置目标，经过 `Plan & Execute` 后在 Gazebo 执行 |
+| Gazebo VR 遥操作 | `./run_gazebo_vr.sh` | 启动 Gazebo、MoveIt Servo 和 VR 所需服务 |
+| Quest 输入桥接 | `./run_vr.sh` | 连接已运行的 Gazebo VR 栈或真机 Servo 栈 |
+| Gazebo 键盘控制 | `./run_manual_control.sh` | 连接已运行的 Gazebo 栈；不新建仿真容器 |
+| 真机控制 | `ROBOT_IP=<机器人IP> ./run_robot.sh` | 连接 FCI 并启动真机控制栈 |
+| 真机键盘控制 | `./run_robot_manual_control.sh` | 在第二终端连接已启动的真机 Servo 栈 |
 
-默认 FR3 FCI 控制 IP 为 `172.16.0.2`。如设备地址不同，可将该地址写入 `.env`，或在执行命令时以 `ROBOT_IP=<机器人IP>` 覆盖。
+`run_gazebo.sh` 与 `run_gazebo_vr.sh` 不连接真机，也不需要 `ROBOT_IP`。每次运行都会创建一个临时容器；同一时刻只应保留一个 Gazebo 栈。详细排障见 [question.md](question.md)。
 
-所有 `run_*.sh` 脚本都会在启动容器后自动重新构建当前挂载的 `franka_vr` 源码，因此修改本项目代码后无需重新构建 Docker 镜像；首次启动或 CMake 配置变更时会多花一点时间。只有 Dockerfile、系统依赖或上游源码发生变化时，才需要执行 `docker compose build`。
+所有启动脚本都会重新构建当前挂载的 `franka_vr` 源码；修改 ROS 包通常无需重建镜像。仅 Dockerfile、系统依赖或上游源码变更后需要重新执行 `docker compose build`。
 
-### 假硬件模式
+## 操作方式
 
-这是推荐的首次验证方式。它使用假硬件，不会连接或控制真实机械臂，因此无需设置或连接 `ROBOT_IP`：
+### RViz 轨迹规划
 
-```bash
-./run_fake.sh
-```
+1. 在 `MotionPlanning` 面板中将 `Planning Group` 设为 `fr3_arm`，选择 `Planning` 标签页的 `Pose Goal`。
+2. 保持 RViz 顶部的 `Interact` 工具，拖动末端六自由度交互标记设置目标。
+3. 点击 `Plan & Execute`。目标设置不会立即改变 Gazebo 中的机械臂；只有规划并执行后才会运动。
 
-默认会启动 RViz 和夹爪。可通过环境变量关闭其中任一项：
+如未显示面板，选择 `Panels > Add New Panel > Motion Planning`。Gazebo 中的蓝色 `Gripper: right-click for open / close` 控件可右键开合夹爪。
 
-```bash
-USE_RVIZ=false LOAD_GRIPPER=false ./run_fake.sh
-```
+### 键盘手动控制
 
-### Gazebo 物理仿真
-
-`run_fake.sh` 仅使用 `ros2_control` 假硬件；若需要接触、重力与关节动力学仿真，请使用 Gazebo Sim：
-
-```bash
-./run_gazebo.sh
-```
-
-该脚本启动带 Franka Hand 夹爪的 FR3、Gazebo Sim、带 MoveIt Motion Planning 面板的 RViz、`joint_state_broadcaster`、MoveIt、机械臂轨迹控制器、夹爪动作控制器，以及位于 `(x=0.45, y=0, z=0.04)` 的橙色抓取长方体。它完全在容器中运行，**不会连接真机，也不需要 `ROBOT_IP`**。首次运行前需要按下面的流程重新构建镜像。
-
-> [!IMPORTANT]
-> 每次执行 `run_gazebo.sh` 或 `run_gazebo_vr.sh` 都会创建一个新的临时 Docker 容器。同一时间只能运行一个 Gazebo 栈；否则多个实例会争用 ROS 话题、服务、控制器和图形资源，导致 RViz 或规划异常。请先在新终端检查并停止旧实例：
->
-> ```bash
-> docker ps --filter "name=franka_vr_docker-franka_vr-run"
-> docker stop <容器ID或容器名>
-> ```
->
-> `docker stop` 后，`docker compose run --rm` 创建的容器会自动清理；仅在无法正常停止时才使用 `docker kill <容器ID或容器名>`。
-
-夹爪模型会显示在 Gazebo 和 RViz 中；当前官方关节速度示例控制器不提供夹爪运动控制，因此 Quest 的 `rightGrip` 不会驱动 Gazebo 中的夹爪。
-
-首次配置和启动流程：
-
-```bash
-# 1. 允许容器访问本机 X11（仅首次或 X11 权限被撤销后需要）
-xhost +local:docker
-
-# 2. 构建带 Gazebo Sim、ROS-GZ 桥接和 Franka Gazebo 插件的镜像
-docker compose build franka_vr
-
-# 3. 启动物理仿真；Gazebo 和 RViz 窗口会出现
-./run_gazebo.sh
-```
-
-终端中出现 `Configured and activated fr3_arm_controller`、`Configured and activated fr3_gripper` 和 `You can start planning now!` 后，即表示 Gazebo 与 MoveIt 都已就绪。使用 `Ctrl+C` 退出仿真。若 GUI 无法创建窗口，可先确认 `echo $DISPLAY` 有值，再重新执行 `xhost +local:docker`；无图形桌面环境暂不支持本项目的 GUI 启动方式。
-
-#### 在 RViz 拖动末端并执行
-
-1. 保持顶部工具栏的 `Interact` 被选中。在底部 `MotionPlanning` 面板中，将 `Planning Group` 设为 `fr3_arm`，并选择 `Planning` 标签页的 `Pose Goal`。
-2. 末端会出现青色的六自由度交互标记（平移箭头、平面方块和旋转圆环）。它由 `MotionPlanning` 自身管理；不要额外添加同一话题的 `InteractiveMarkers` 显示，否则会叠加两套标记并影响鼠标拖动。
-3. 拖动标记调整位置、姿态，随后点击 `Plan & Execute`。若只看到机器人而没有面板，依次点击菜单 `Panels > Add New Panel > Motion Planning` 后选择 `fr3_arm`。
-
-拖动只是在设置目标，Gazebo 不会在拖动过程中实时跟随；`Plan & Execute` 会先做碰撞检查与轨迹规划，再把轨迹发送给 Gazebo。需要连续实时遥操作时，请使用 Quest 的 `./run_gazebo_vr.sh`。
-
-#### 在 RViz 中抓取方块
-
-1. 在 Gazebo 窗口确认橙色长方体已生成。先在 RViz 的 `MotionPlanning` 面板选择 `fr3_arm`，拖动末端标记到方块上方，点击 `Plan & Execute`；再将末端下降到两根手指包住方块的位置并执行。
-2. RViz 画面左前方会有一个蓝色方块 `Gripper: right-click for open / close`。右键它，选择 `Close gripper`，即可闭合夹爪；选择 `Open gripper` 即可张开。该交互控件位于 `Displays > Gripper Open Close`，可在这里重新勾选显示。
-3. 切回 `fr3_arm`，将末端向上拖动并执行，即可尝试抬起方块。需要释放时，再右键蓝色夹爪控件选择 `Open gripper`。
-
-`fr3_gripper` 使用 Gazebo 的 `GripperActionController`；可控关节为 `fr3_finger_joint1`，另一根手指通过 URDF mimic 关节同步运动。方块具有重力、碰撞和摩擦，抓取成功取决于手指与方块的对准和接触。
-
-如需在另一个终端检查控制器，可将仿真放到后台：
-
-```bash
-docker compose run -d --name franka_gazebo franka_vr \
-  ros2 launch franka_vr gazebo_vr.launch.py \
-  load_gripper:=true use_rviz:=false
-
-docker exec franka_gazebo bash -lc '
-  source /ws_franka_vr/install/setup.bash
-  ros2 control list_controllers
-'
-
-docker stop franka_gazebo
-docker rm franka_gazebo
-```
-
-期望看到 `joint_state_broadcaster` 和 `fr3_arm_controller` 的状态均为 `active`。
-
-Gazebo 版本使用 Franka ROS 2 工作空间附带的 Gazebo Sim / Ignition Fortress 集成。`run_gazebo.sh` 用于通过 RViz 规划、拖动并执行末端目标；需要 Quest 操控时，使用下面的 `run_gazebo_vr.sh`，不要同时启动两个 Gazebo 栈。
-
-### Quest 控制 Gazebo
-
-需要在 Gazebo 中通过 Quest 操控机械臂时，使用专用的 VR 仿真启动脚本，而不是 `run_gazebo.sh`：
-
-```bash
-# 终端 1：Gazebo、FR3 轨迹控制器与 MoveIt Servo
-./run_gazebo_vr.sh
-
-# 终端 2：Quest 3 输入桥接
-./run_vr.sh
-```
-
-等待终端 1 出现 `Configured and activated fr3_arm_controller` 后，再在 Quest 中按住右食指扳机（`rightTrig`）移动机械臂。该模式不连接真机，也不需要 `ROBOT_IP`。它使用 Gazebo 的位置轨迹控制器；夹爪可通过 RViz 中的蓝色交互控件开合。
-
-### 真机模式
-
-先确认 `.env` 中的 `ROBOT_IP` 正确，或在当前终端设置该变量：
-
-```bash
-export ROBOT_IP=172.16.0.2
-./run_robot.sh
-```
-
-`run_robot.sh` 会通过特权容器尝试将 CPU governor 设为 `performance`，并将 FCI 网卡 IRQ 绑到指定 CPU。请根据主机调整：
-
-```bash
-FCI_INTERFACE=enp110s0 FCI_IRQ_CPU=2 ./run_robot.sh
-```
-
-该脚本会使用 `--privileged`、主机网络和 PID namespace；请只在受信任的本机环境中运行。若主机的 CPU 拓扑不同，还应相应修改 [`docker-compose.yml`](/home/mac/franka_vr_docker/docker-compose.yml) 中的 `cpuset` 设置。
-
-## 启动 VR 控制器
-
-在机械臂启动后，另开一个终端运行：
-
-```bash
-./run_vr.sh
-```
-
-首次使用时，将 Quest 用 USB 连接到主机，在头显中接受 USB 调试授权。容器会保留 ADB 密钥，以避免每次 `docker compose run --rm` 后重复授权。
-
-控制方式：按住右手扳机（`rightTrig`）控制机械臂运动；按住右手握把（`rightGrip`）闭合夹爪，松开则打开夹爪。
-
-VR 控制节点默认采用保守的目标跟踪上限（约 `0.17 m/s` 线速度、`0.35 rad/s` 角速度）。真机首次使用时仍应保持低速、无负载，并验证急停、FCI 网络和 Quest 跟踪均正常。
-
-若 RViz 无法连接显示服务器，可在主机执行：
-
-```bash
-xhost +local:docker
-```
-
-这会放宽本地 Docker 容器的 X11 访问权限；使用完毕后可用 `xhost -local:docker` 撤销。
-
-## Quest 3 遥操作流程
-
-1. 在 Quest 3 中启用开发者模式和 USB 调试；用 USB 连接主机，并在头显中接受“始终允许”调试授权。
-2. 启动 FR3 的 Servo 栈（真机使用 `./run_robot.sh`，假硬件使用 `./run_fake.sh`）。
-3. 在另一个终端确认 ADB 已识别 Quest：
-
-   ```bash
-   docker compose run --rm franka_vr adb devices
-   ```
-
-   输出应包含 `<Quest-serial> device`。如显示 `unauthorized`，请回到头显确认 USB 调试授权。
-
-4. 保持 Quest 上的 Oculus Teleop 应用在前台、右手控制器已唤醒，然后启动桥接程序：
-
-   ```bash
-   ./run_vr.sh
-   ```
-
-   `run_vr.sh` 仅启动 Quest 到 ROS 的输入桥接；在此之前，必须已在另一个终端启动 `./run_fake.sh`、`./run_gazebo_vr.sh` 或 `./run_robot.sh`。
-
-控制器的右食指扳机（`rightTrig`）达到 0.8 后才会进入机械臂控制；按下时会建立相对位姿参考，松开后停止跟随。右手握把（`rightGrip`）大于 0.6 时闭合夹爪，小于 0.4 时执行打开/回零。启动桥接或佩戴头显时请勿扣住扳机。
-
-如需让两个进程在后台运行，可使用以下命令。停止时必须同时停止 Servo 和 Quest 桥接：
-
-```bash
-ROBOT_IP=172.16.0.2 docker compose run -d --name franka_vr_servo franka_vr \
-  ros2 launch franka_vr franka_twist.launch.py \
-  robot_ip:=172.16.0.2 use_fake_hardware:=false load_gripper:=true use_rviz:=false
-
-docker compose run -d --name quest3_bridge franka_vr bash -lc '
-  source /ws_franka_vr/install/setup.bash
-  cd /ws_franka_vr/src/franka_vr/franka_vr/oculus_reader
-  bash ./start_vr.sh
-'
-
-docker stop --timeout 2 quest3_bridge franka_vr_servo
-```
-
-## MoveIt 轨迹规划（真机）
-
-MoveIt 完整规划栈和 Quest/Servo 栈都包含 `ros2_control` 硬件节点，**不得同时启动**。先停止 VR/Servo 栈，再启动 MoveIt：
-
-```bash
-ROBOT_IP=172.16.0.2 docker compose run -d --name franka_moveit franka_vr \
-  ros2 launch franka_fr3_moveit_config moveit.launch.py \
-  robot_ip:=172.16.0.2 use_fake_hardware:=false load_gripper:=false
-```
-
-先只规划、确认终端输出 `PLAN_OK` 且路径安全，再执行。以下示例在 base 坐标系沿 Y 负方向移动 15 cm；它是关节空间规划，不保证中间末端轨迹绝对直线：
-
-```bash
-# 仅规划，不运动
-ROBOT_IP=172.16.0.2 docker compose run --rm franka_vr \
-  ros2 launch franka_vr moveit_offset_client.launch.py \
-  robot_ip:=172.16.0.2 dx:=0 dy:=-0.15 dz:=0 execute:=false
-
-# 仅在规划结果安全时执行
-ROBOT_IP=172.16.0.2 docker compose run --rm franka_vr \
-  ros2 launch franka_vr moveit_offset_client.launch.py \
-  robot_ip:=172.16.0.2 dx:=0 dy:=-0.15 dz:=0 execute:=true
-
-docker stop --timeout 2 franka_moveit
-```
-
-## 诊断与网络检查
-
-以下 ROS 诊断命令适用于以 `franka_vr_servo` 名称在后台运行的 Servo 容器：
-
-```bash
-# 机器人末端 TF、节点、控制器和 Quest 右手 TF
-docker exec franka_vr_servo bash -lc '
-  source /ws_franka_vr/install/setup.bash
-  ros2 run tf2_ros tf2_echo world fr3_link8
-'
-docker exec franka_vr_servo bash -lc '
-  source /ws_franka_vr/install/setup.bash
-  ros2 node list
-  ros2 control list_controllers
-'
-docker exec quest3_bridge bash -lc '
-  source /ws_franka_vr/install/setup.bash
-  ros2 run tf2_ros tf2_echo world oculus_right
-'
-```
-
-检查 FCI 网络前，将 `<网卡名>` 替换为连接 FR3 控制柜的主机网卡。真机实时控制需要稳定的千兆全双工链路：
-
-```bash
-ip -brief address
-ip route get 172.16.0.2
-ping -c 2 -W 1 172.16.0.2
-sudo ethtool <网卡名> | grep -E 'Speed:|Duplex:|Auto-negotiation:|Link detected:'
-uname -a
-cat /sys/kernel/realtime
-```
-
-`/sys/kernel/realtime` 输出 `1` 表示当前内核启用了 PREEMPT_RT。链路速率不足 1000 Mb/s、存在丢包或实时内核未验证时，不应启动真机控制。
-
-## 项目结构
-
-```text
-.
-├── .env.example                         # 本地机器人 IP、ROS 域和 X11 显示配置模板
-├── Dockerfile                           # ROS 2 Humble、Gazebo、MoveIt 与项目依赖镜像
-├── docker-compose.yml                   # 容器网络、设备、X11 和工作空间挂载
-├── docker/
-│   └── entrypoint.sh                     # 容器启动环境初始化
-├── vendor/
-│   └── libfranka/                        # Franka C++ 库源码与运行时构建资源
-├── run_fake.sh                           # 启动假硬件与可选 RViz
-├── run_gazebo.sh                         # 启动 Gazebo、MoveIt、RViz、方块与夹爪控制
-├── run_gazebo_vr.sh                      # 启动支持 Quest Servo 控制的 Gazebo 栈
-├── run_robot.sh                          # 启动真机控制与 RViz
-├── run_robot_manual_control.sh           # 连接真机 Servo 栈的键盘手动控制
-├── run_vr.sh                             # 启动 Quest 输入到 ROS 的桥接
-└── workspace/src/
-    ├── franka_vr/franka_vr/              # 本项目的 ROS 2 功能包
-    │   ├── CMakeLists.txt                 # 构建目标、安装规则与依赖
-    │   ├── package.xml                    # ROS 包元数据与 MIT 许可证声明
-    │   ├── config/
-    │   │   ├── gazebo_moveit.rviz         # Gazebo 模式的 RViz / MoveIt 布局
-    │   │   ├── fr3_controllers.yaml       # MoveIt 到 Gazebo 控制器的映射
-    │   │   ├── fr3_real_config.yaml       # 真机 / Servo 参数
-    │   │   ├── fr3_ros_controllers.yaml   # 假硬件 / 真机 ros2_control 配置
-    │   │   ├── joint_limits.yaml          # 规划关节速度与加速度限制
-    │   │   └── kinematics.yaml            # FR3 逆运动学配置
-    │   ├── launch/
-    │   │   ├── gazebo_vr.launch.py        # Gazebo、MoveIt、RViz 与控制器编排
-    │   │   ├── franka_twist.launch.py     # 假硬件 / 真机 Servo 启动
-    │   │   └── moveit_offset_client.launch.py # 末端偏移规划客户端
-    │   ├── models/target_block.sdf        # Gazebo 中可抓取的橙色方块
-    │   ├── scripts/gazebo_gripper_marker.py # RViz 夹爪开合右键控件
-    │   ├── src/
-    │   │   ├── franka_vr.cpp              # Quest 位姿转 Servo 指令
-    │   │   ├── franka_vr_vel.cpp          # 速度式 VR 机械臂控制节点
-    │   │   └── moveit_cartesian_offset.cpp # MoveIt 笛卡尔偏移示例
-    │   ├── srv/                           # 目标位姿与步长服务定义
-    │   └── oculus_reader/                 # Quest 控制器读取程序
-    ├── franka_description/                # FR3 URDF、网格与末端执行器描述
-    ├── franka_ros2/                       # Franka 官方 ROS 2 驱动、夹爪与 Gazebo 插件
-    ├── moveit2/                           # MoveIt 2 源码依赖
-    ├── moveit_msgs/                       # MoveIt 消息、服务与动作定义
-    ├── joint_state_broadcaster/           # 关节状态发布器源码依赖
-    └── joint_trajectory_controller/       # 轨迹执行控制器源码依赖
-```
-
-## 开发
-
-源码目录以可写卷方式挂载到容器。修改 ROS 2 包后，在容器中重新构建：
-
-```bash
-docker compose run --rm franka_vr bash
-cd /ws_franka_vr
-colcon build --symlink-install --packages-select franka_vr
-source install/setup.bash
-```
-
-`Dockerfile.runtime-fix` 用于在已有 `franka-vr:humble` 镜像上单独重建 `joint_state_broadcaster`：
-
-```bash
-docker build -f Dockerfile.runtime-fix -t franka-vr:runtime-fix .
-```
-
-## 致谢
-
-本项目建立在 [Franka ROS 2](https://github.com/frankaemika/franka_ros2)、[libfranka](https://github.com/frankaemika/libfranka)、[MoveIt 2](https://moveit.ai/) / MoveIt Servo 与 [Oculus Reader](https://github.com/rail-berkeley/oculus_reader) 之上。请同时遵守这些上游项目各自的许可证和使用条款。
-
-## 许可证
-
-本项目自有代码采用 [MIT License](LICENSE)。仓库中包含或依赖的 Franka ROS 2、MoveIt 2、Gazebo 与其他上游组件仍分别遵循其原有许可证。
-
-## 键盘手动控制（Gazebo / 真机）
-
-先在一个终端启动仿真：
-
-```bash
-./run_gazebo.sh
-```
-
-再打开第二个终端启动手动模式：
-
-```bash
-./run_manual_control.sh
-```
-
-真机使用同一套 MoveIt Servo 目标跟踪与安全限制，但必须先启动真机控制栈，再在第二个终端连接键盘模式：
-
-```bash
-# 终端 1：确认急停可用、工作区无人后启动真机 Servo 栈
-ROBOT_IP=172.16.0.2 ./run_robot.sh
-
-# 终端 2：只连接上面的 Servo 栈；不会启动第二个硬件控制器
-./run_robot_manual_control.sh
-```
-
-若自动识别到多个真机栈，先停止多余实例；也可明确指定目标容器：
-
-```bash
-ROBOT_CONTAINER=<容器名或ID> ./run_robot_manual_control.sh
-```
-
-真机首次测试应保持低速、无负载，并仅短按单个方向确认运动与世界坐标系一致；始终保持急停可用。键盘模式通过既有的 MoveIt Servo、关节边界、奇异位形和碰撞检查输出轨迹，不会直接向 FCI 写入底层关节命令。
-
-键盘控制使用 MoveIt Servo 连续跟踪目标，并保留奇异位形与碰撞限速。每次按键以世界坐标系为基准产生 8 mm 平移或 3° 旋转目标；按住按键可借助系统按键重复实现连续平滑运动：
+先启动 Gazebo 或真机栈，再在第二终端启动对应键盘入口。键盘通过 MoveIt Servo 发送世界坐标系目标，保留碰撞、奇异位形和关节边界的安全限制；它不直接写入底层关节命令。
 
 | 按键 | 操作 |
 | --- | --- |
@@ -434,4 +75,68 @@ ROBOT_CONTAINER=<容器名或ID> ./run_robot_manual_control.sh
 | `→` / `←` | 绕 Y 轴正 / 负旋转 |
 | `Z` / `X` | 绕 Z 轴正 / 负旋转 |
 | `Space` | 切换夹爪开 / 合 |
-| `Q` 或 `Ctrl-C` | 退出手动模式 |
+| `Q` 或 `Ctrl-C` | 退出 |
+
+真机键盘模式只在急停可达、工作区无人、低速无负载的条件下使用。若自动识别到多个真机容器，可用 `ROBOT_CONTAINER=<容器名或ID> ./run_robot_manual_control.sh` 明确指定。
+
+### Quest 3 遥操作
+
+```bash
+# 终端 1：仿真 Servo 栈
+./run_gazebo_vr.sh
+
+# 终端 2：确认 Quest 已授权后启动输入桥接
+docker compose run --rm franka_vr adb devices
+./run_vr.sh
+```
+
+右食指扳机 `rightTrig` 达到阈值后进入控制，松开停止跟随；右手握把 `rightGrip` 控制夹爪。启动桥接或佩戴头显时不要扣住扳机。真机 VR 控制请先执行 `ROBOT_IP=<机器人IP> ./run_robot.sh`，再启动 `run_vr.sh`。
+
+## 真机操作
+
+```bash
+ROBOT_IP=172.16.0.2 ./run_robot.sh
+```
+
+`run_robot.sh` 会使用特权容器、主机网络和 PID namespace，并尝试配置 CPU governor 与 FCI 网卡 IRQ。请按实际主机调整：
+
+```bash
+FCI_INTERFACE=<网卡名> FCI_IRQ_CPU=<CPU编号> ./run_robot.sh
+```
+
+MoveIt 规划栈和 Quest/Servo 栈都会创建硬件节点，不能同时启动。真机的网络与实时性检查、常见问题及安全边界在 [question.md](question.md) 中维护。
+
+## 模块说明
+
+| 模块 | 位置 | 职责 |
+| --- | --- | --- |
+| 容器与运行入口 | `Dockerfile`、`docker-compose.yml`、`run_*.sh` | 构建镜像、X11、设备/网络挂载和模式启动 |
+| FR3 控制包 | `workspace/src/franka_vr/franka_vr` | 启动编排、Servo、RViz 交互、键盘和 Quest 节点 |
+| Gazebo 集成 | `workspace/src/franka_ros2/franka_gazebo` | Gazebo Sim、`ros2_control` 与控制器 |
+| 机器人描述 | `workspace/src/franka_description` | FR3 URDF、网格、夹爪与关节定义 |
+| 运动规划 | `workspace/src/moveit2`、`workspace/src/franka_vr/franka_vr/config` | MoveIt 2、规划参数、控制器映射和 RViz 配置 |
+| Quest 读取器 | `workspace/src/franka_vr/franka_vr/oculus_reader` | ADB/logcat 控制器数据读取与 ROS 桥接 |
+| 上游运行时 | `vendor/libfranka` | Franka C++ 库及运行时构建资源 |
+
+## 开发
+
+源码以可写卷挂载到容器。修改 `franka_vr` 包后可单独构建：
+
+```bash
+docker compose run --rm franka_vr bash -lc '
+  cd /ws_franka_vr &&
+  colcon build --symlink-install --packages-select franka_vr
+'
+```
+
+提交前请至少确认对应启动模式可以构建，且不提交本地 `.env`、容器日志或构建产物。欢迎通过 Issue 报告可复现的问题，并通过 Pull Request 提交独立、说明清晰的改动。
+
+## 文档
+
+- [常见问题与排障](question.md)
+- [.env 配置示例](.env.example)
+- [MIT 许可证](LICENSE)
+
+## 致谢与许可证
+
+本项目建立在 [Franka ROS 2](https://github.com/frankaemika/franka_ros2)、[libfranka](https://github.com/frankaemika/libfranka)、[MoveIt 2](https://moveit.ai/) / MoveIt Servo 和 [Oculus Reader](https://github.com/rail-berkeley/oculus_reader) 之上。自有代码采用 [MIT License](LICENSE)；仓库中的上游组件仍分别遵循其原有许可证和使用条款。

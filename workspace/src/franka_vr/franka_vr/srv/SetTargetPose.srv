@@ -1,4 +1,5 @@
-geometry_msgs/Pose target_pose  # 目标位姿
+geometry_msgs/PoseStamped target_pose  # 带坐标系的目标位姿
+bool stop  # 清除当前目标并停止继续追踪
 ---
 bool success
 string message

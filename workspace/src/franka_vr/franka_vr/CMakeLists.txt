@@ -18,7 +18,9 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
     sensor_msgs
     std_msgs
     std_srvs
+    tf2_geometry_msgs
     tf2_eigen
+    tf2_ros
     trajectory_msgs
     visualization_msgs)
 # 查找依赖
