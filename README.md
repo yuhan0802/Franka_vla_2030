@@ -48,7 +48,7 @@ Gazebo 和 RViz 打开、终端出现 `You can start planning now!` 后即可操
 | 真机控制 | `ROBOT_IP=<机器人IP> ./run_robot.sh` | 连接 FCI 并启动真机控制栈 |
 | 真机键盘控制 | `./run_robot_manual_control.sh` | 在第二终端连接已启动的真机 Servo 栈 |
 
-`run_gazebo.sh` 与 `run_gazebo_vr.sh` 不连接真机，也不需要 `ROBOT_IP`。每次运行都会创建一个临时容器；同一时刻只应保留一个 Gazebo 栈。详细排障见 [question.md](question.md)。
+`run_gazebo.sh` 与 `run_gazebo_vr.sh` 不连接真机，也不需要 `ROBOT_IP`。每次运行都会创建一个临时容器；同一时刻只应保留一个 Gazebo 栈。详细排障见 [problem.md](problem.md)。
 
 所有启动脚本都会重新构建当前挂载的 `franka_vr` 源码；修改 ROS 包通常无需重建镜像。仅 Dockerfile、系统依赖或上游源码变更后需要重新执行 `docker compose build`。
 
@@ -104,7 +104,7 @@ ROBOT_IP=172.16.0.2 ./run_robot.sh
 FCI_INTERFACE=<网卡名> FCI_IRQ_CPU=<CPU编号> ./run_robot.sh
 ```
 
-MoveIt 规划栈和 Quest/Servo 栈都会创建硬件节点，不能同时启动。真机的网络与实时性检查、常见问题及安全边界在 [question.md](question.md) 中维护。
+MoveIt 规划栈和 Quest/Servo 栈都会创建硬件节点，不能同时启动。真机的网络与实时性检查、常见问题及安全边界在 [problem.md](problem.md) 中维护。
 
 ## 模块说明
 
@@ -133,7 +133,7 @@ docker compose run --rm franka_vr bash -lc '
 
 ## 文档
 
-- [常见问题与排障](question.md)
+- [常见问题与排障](problem.md)
 - [.env 配置示例](.env.example)
 - [MIT 许可证](LICENSE)
 
