@@ -1,0 +1,11 @@
+FrankaVR VLA read-only detection
+日志文件: /home/mac/franka_vr_docker/detect_20261008_120628.log
+安全保证：本脚本不会调用 /set_target_pose，也不会启动 execute。
+
+== 检测准备 ==
+[PASS] 命令可用: timeout
+[PASS] 命令可用: docker
+[PASS] 命令可用: ssh
+[PASS] 命令可用: ip
+[PASS] 命令可用: python3
+[PASS] ROS 2 查询后端: franka-vr:humble 只读临时容器

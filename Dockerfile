@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-moveit-servo \
     ros-humble-ros2-control \
     ros-humble-ros2-controllers \
+    ros-humble-realsense2-camera \
+    ros-humble-realsense2-description \
     ros-humble-tf-transformations \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,7 +39,17 @@ RUN echo "3f8f8acc53311aab0bab05d1bb6d245005e67bfd1e11928ec760baf56c2b1a32  /tmp
     && rm -f /tmp/libfranka.deb \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir numpy pure-python-adb pyyaml
+RUN python3 -m pip install --no-cache-dir numpy pure-python-adb pyyaml msgpack websockets
+
+# Runtime dependencies for synchronized RGB capture and the LeRobot v3 writer.
+# Keep them after the workspace build inputs so camera/dataset updates do not
+# invalidate the expensive ROS compilation layer.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-v4l2-camera \
+    # pyarrow writes the official LeRobot v3 Parquet layout.  The recorder
+    # deliberately does not install the training stack (Torch, Diffusers).
+    && python3 -m pip install --no-cache-dir 'pyarrow>=15,<20' \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR ${WORKSPACE}
 COPY workspace/src ./src
@@ -48,6 +60,11 @@ RUN chmod +x /entrypoint.sh \
     && apt-get update \
     && rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO} --skip-keys "libfranka olv_module_descriptions realsense2_camera realsense2_description sick_safetyscanners2 hardware_interface_testing" \
     && colcon build --symlink-install --packages-up-to franka_vr franka_gazebo_bringup franka_example_controllers --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+
+# OpenCV records first to a temporary MP4V file; FFmpeg finalizes each stream
+# as browser-compatible H.264. Keeping this last preserves the ROS build cache.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]

@@ -179,6 +179,12 @@ controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_deactivate(
 controller_interface::return_type FrankaRobotStateBroadcaster::update(
     const rclcpp::Time& time,
     const rclcpp::Duration& /*period*/) {
+  // Telemetry is best effort: never wait for the non-real-time DDS thread
+  // from the 1 kHz hardware update loop.
+  std::unique_lock<std::mutex> snapshot_lock(publish_mutex_, std::try_to_lock);
+  if (!snapshot_lock.owns_lock()) {
+    return controller_interface::return_type::OK;
+  }
   if (!realtime_franka_state_publisher->trylock()) {
     if (lock_log_error_) {
       RCLCPP_ERROR(get_node()->get_logger(),
@@ -191,7 +197,6 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
   }
 
   {
-    std::unique_lock<std::mutex> lock(publish_mutex_);
     realtime_franka_state_publisher->msg_.header.stamp = time;
 
     if (!franka_robot_state_->get_values_as_message(realtime_franka_state_publisher->msg_)) {
@@ -200,11 +205,13 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
       realtime_franka_state_publisher->unlock();
       return controller_interface::return_type::ERROR;
     }
+    franka_robot_state_msg_ = realtime_franka_state_publisher->msg_;
     realtime_franka_state_publisher->unlockAndPublish();
   }
 
   // This block is not real-time safe due to jitter introduced by the ROS 2 publisher.
   publish_now_ = true;
+  snapshot_lock.unlock();
   condition_variable_publish_next_.notify_all();
 
   return controller_interface::return_type::OK;
@@ -217,7 +224,11 @@ auto FrankaRobotStateBroadcaster::publishRunner() -> void {
         lock, [this] { return publish_now_ || !is_publish_thread_running_; });
 
     if (publish_now_) {
-      const auto& franka_state_msg = realtime_franka_state_publisher->msg_;
+      // Own a snapshot before releasing the mutex. DDS publication must not
+      // hold the mutex required by the real-time hardware update thread.
+      const auto franka_state_msg = franka_robot_state_msg_;
+      publish_now_ = false;
+      lock.unlock();
       current_pose_stamped_publisher_->publish(franka_state_msg.o_t_ee);
       last_desired_pose_stamped_publisher_->publish(franka_state_msg.o_t_ee_d);
       desired_end_effector_twist_stamped_publisher_->publish(franka_state_msg.o_dp_ee_d);
@@ -227,8 +238,6 @@ auto FrankaRobotStateBroadcaster::publishRunner() -> void {
       external_joint_torques_publisher_->publish(franka_state_msg.tau_ext_hat_filtered);
       desired_joint_states_publisher_->publish(franka_state_msg.desired_joint_state);
     }
-
-    publish_now_ = false;
   }
 }
 

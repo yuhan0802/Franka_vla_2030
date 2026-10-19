@@ -12,6 +12,7 @@
 - MoveIt Servo：键盘与 Quest 的连续笛卡尔目标跟踪
 - RViz 夹爪开合交互控件
 - Meta Quest 3：通过 Oculus Reader 读取右手控制器位姿与按键
+- Intel RealSense D435i：RGB、深度、对齐深度与彩色点云 ROS 2 话题
 - 真机模式：连接 Franka FCI，并保留容器化的 ROS 2 工作空间
 
 ## 环境要求
@@ -47,10 +48,56 @@ Gazebo 和 RViz 打开、终端出现 `You can start planning now!` 后即可操
 | Gazebo 键盘控制 | `./run_manual_control.sh` | 连接已运行的 Gazebo 栈；不新建仿真容器 |
 | 真机控制 | `ROBOT_IP=<机器人IP> ./run_robot.sh` | 连接 FCI 并启动真机控制栈 |
 | 真机键盘控制 | `./run_robot_manual_control.sh` | 在第二终端连接已启动的真机 Servo 栈 |
+| RealSense D435i | `./run_realsense.sh` | 发布 RGB、深度、对齐深度与点云；不控制机器人 |
+| FrankaVR 三视角 VLA | `./run_vla.sh dry-run` | 一键启动新模型、真机状态栈、三路相机和只读推理桥；默认不会运动 |
+| LeRobot episode 采集 | `./run_lerobot_record.sh [数据集名称] [秒数] [任务描述]` | 三路 RGB 编码为 MP4；同一数据集自动追加 `episode_000000`、`episode_000001`… 的 LeRobot v2.1 风格 episode。只有 Quest 右手柄 `A` 键会保存本次 episode；达到时长后会停止采样并等待 `A` 键确认，`Ctrl+C` 或异常退出会丢弃本次录制（需同时运行 `./run_vr.sh`） |
 
 `run_gazebo.sh` 与 `run_gazebo_vr.sh` 不连接真机，也不需要 `ROBOT_IP`。每次运行都会创建一个临时容器；同一时刻只应保留一个 Gazebo 栈。详细排障见 [problem.md](problem.md)。
 
 所有启动脚本都会重新构建当前挂载的 `franka_vr` 源码；修改 ROS 包通常无需重建镜像。仅 Dockerfile、系统依赖或上游源码变更后需要重新执行 `docker compose build`。
+
+### RealSense D435i
+
+连接相机后执行：
+
+```bash
+./run_realsense.sh
+```
+
+该脚本启动独立的相机容器，不会启动或控制机器人。默认话题为：
+
+- `/camera/color/image_raw`：RGB 图像
+- `/camera/depth/image_rect_raw`：深度图
+- `/camera/aligned_depth_to_color/image_raw`：与 RGB 对齐的深度图
+- `/camera/depth/color/points`：彩色点云
+- `/camera/color/camera_info`：RGB 相机内参
+
+若同时连接多台 RealSense，可按序列号选择设备：
+
+```bash
+REALSENSE_SERIAL=<序列号> CAMERA_NAME=front_camera ./run_realsense.sh
+```
+
+### FrankaVR 三视角 VLA（mac20）
+
+仅使用端口 `8093` 的 FrankaVR 真机微调模型；旧 8092/LIBERO 入口已移除。推荐使用唯一总入口：
+
+```bash
+# 只启动远端模型服务：不启动机器人、相机或 ROS
+./run_vla.sh server
+
+# 一键启动模型、真机状态栈、三路相机和本机桥接，但不发送机械臂目标
+VLA_INSTRUCTION='pick up the red block' ./run_vla.sh dry-run
+
+# 仅在完成 dry-run、实测工作区边界且操作者就位后才允许执行
+VLA_INSTRUCTION='pick up the red block' ./run_vla.sh execute
+
+# 查看或清理由总入口创建的会话
+./run_vla.sh status
+./run_vla.sh stop
+```
+
+`dry-run` 和 `execute` 会启动 RealSense `front`、左右 C922 三路相机，并在 tmux 中启动真机状态栈与相机节点；桥接器保持在当前终端。`execute` 仍受 [vla_calibration.yaml](workspace/src/franka_vr/franka_vr/config/vla_calibration.yaml) 的实测工作区边界、步长限幅和本机 Servo 约束。高级排障时可单独使用 `run_franka_vr_vla_server.sh`、`run_vla_cameras.sh`、`run_franka_vr_vla_bridge.sh`；它们是总入口的底层组件。
 
 ## 操作方式
 
@@ -90,7 +137,7 @@ docker compose run --rm franka_vr adb devices
 ./run_vr.sh
 ```
 
-右食指扳机 `rightTrig` 达到阈值后进入控制，松开停止跟随；右手握把 `rightGrip` 控制夹爪。启动桥接或佩戴头显时不要扣住扳机。真机 VR 控制请先执行 `ROBOT_IP=<机器人IP> ./run_robot.sh`，再启动 `run_vr.sh`。
+右食指扳机 `rightTrig` 达到阈值后进入控制，松开停止跟随；按住扳机时右手控制器的平移和旋转会分别映射为末端的相对平移和相对旋转，旋转轴按扳机按下时的世界坐标标定。右手握把 `rightGrip` 控制夹爪。单次按住扳机的旋转上限为 90°；松开并再次按下可重新标定。Quest、目标跟踪和 Servo 输出均为 100 Hz，末端最大角速度为 0.8 rad/s。启动桥接或佩戴头显时不要扣住扳机。真机 VR 控制请先执行 `ROBOT_IP=<机器人IP> ./run_robot.sh`，再启动 `run_vr.sh`。
 
 ## 真机操作
 
@@ -104,7 +151,13 @@ ROBOT_IP=172.16.0.2 ./run_robot.sh
 FCI_INTERFACE=<网卡名> FCI_IRQ_CPU=<CPU编号> ./run_robot.sh
 ```
 
+启动前脚本会报告 FCI 网卡协商速率、机器人可达性和 `/sys/kernel/realtime` 状态。1000 Mb/s 全双工与 PREEMPT_RT 是推荐配置；为兼容已有已验证部署，较低链路速率仅告警，实际连接仍由 libfranka 判断。
+
 MoveIt 规划栈和 Quest/Servo 栈都会创建硬件节点，不能同时启动。真机的网络与实时性检查、常见问题及安全边界在 [problem.md](problem.md) 中维护。
+
+启动真机前必须停止 Gazebo、fake-hardware 或旧真机栈；它们共享 host 网络和 `/controller_manager`，不能并存。
+
+真机控制容器独占 CPU `4,5`；RealSense、Quest 和构建容器不会再使用这对核心，以避免干扰 FCI 的实时循环。
 
 ## 模块说明
 

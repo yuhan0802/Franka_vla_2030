@@ -1,0 +1,23 @@
+# Provisional one-step deployment alignment, measured on 2026-09-29 from the
+# current FR3 end-effector pose.  It maps that pose to the LIBERO training-set
+# median state.  This is NOT a surveyed camera/workspace calibration: replace
+# it with a multi-point rigid transform before any continuous execution.
+calibrated: true
+
+# Homogeneous transform T_libero_world.  It maps a ROS world-frame position
+# p_world to the model's LIBERO training frame: p_libero = R * p_world + t.
+# The first guarded model action maps to roughly (-0.64, -0.06, -0.58) mm in
+# the physical world.  These are still provisional deployment bounds: they
+# permit a short, upward/lateral rollout while retaining a conservative lower
+# Z limit above the work surface.
+libero_from_world:
+  - [0.793145486459, -0.606500924276, 0.055469506594, -0.609502986579]
+  - [0.597490978948, 0.792528114544, 0.122080783637, -0.418169607369]
+  - [-0.118003251588, -0.063685292728, 0.990968927921, 0.499038692689]
+  - [0.0, 0.0, 0.0, 1.0]
+
+# Required for --execute.  Set conservative measured limits in ROS world
+# coordinates; they are checked independently of MoveIt before every action.
+workspace_bounds_world:
+  min: [0.383737, -0.200, 0.182611]
+  max: [0.750000, 0.200, 0.786648]

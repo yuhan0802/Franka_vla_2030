@@ -1,0 +1,5 @@
+services:
+  franka_robot:
+    # The launch process pins companion nodes away from the FCI core; only
+    # ros2_control_node explicitly expands its affinity to isolated CPU 4.
+    cpuset: "0-31"

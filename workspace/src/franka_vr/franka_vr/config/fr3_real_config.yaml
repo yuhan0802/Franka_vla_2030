@@ -6,16 +6,19 @@
 # override_velocity_scaling_factor = 0.0 # valid range [0.0:1.0]
 
 ## Properties of outgoing commands
-publish_period: 0.005  # 1/Nominal publish rate [seconds]
+# MoveIt Servo requires this to be less than one third of
+# max_expected_latency. The custom VR tracker emits the final bounded robot
+# command at 15 Hz; this remains Servo's internal trajectory horizon.
+publish_period: 0.01
 max_expected_latency: 0.1  # delay between sending a command and the robot executing it [seconds]
 
 command_in_type: "speed_units"  # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
 scale:
   # Scale parameters are only used if command_in_type=="unitless"
-  linear:  0.2  # Max linear velocity. Unit is [m/s]. Only used for Cartesian commands.
-  rotational:  0.8  # Max angular velocity. Unit is [rad/s]. Only used for Cartesian commands.
+  linear:  0.30  # 0.020 m per 15 Hz command. Unit is [m/s].
+  rotational:  0.975  # 0.065 rad per 15 Hz command. Unit is [rad/s].
   # Max joint angular/linear velocity. Only used for joint commands on joint_command_in_topic.
-  joint: 0.5
+  joint: 2.0
 
 # What type of topic does your robot driver expect?
 # Currently supported are std_msgs/Float64MultiArray or trajectory_msgs/JointTrajectory
@@ -52,7 +55,10 @@ joint_limit_margins: [0.12]
 ## Topic names
 cartesian_command_in_topic: ~/delta_twist_cmds  # Topic for incoming Cartesian twist commands
 joint_command_in_topic: ~/delta_joint_cmds  # Topic for incoming joint angle commands
-joint_topic: /franka/joint_states  # Get joint states from this tpoic
+# joint_state_publisher merges the arm driver and the separate Franka gripper
+# driver into /joint_states.  Listening to the arm-only topic omits
+# fr3_finger_joint1 and leaves MoveIt's planning scene incomplete.
+joint_topic: /joint_states
 status_topic: ~/status  # Publish status to this topic
 command_out_topic: /fr3_arm_controller/joint_trajectory  # Publish outgoing commands here
 

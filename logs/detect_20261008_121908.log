@@ -1,0 +1,69 @@
+FrankaVR VLA read-only detection
+日志文件: /home/mac/franka_vr_docker/logs/detect_20261008_121908.log
+安全保证：本脚本不会调用 /set_target_pose，也不会启动 execute。
+
+== 检测准备 ==
+[PASS] 命令可用: timeout
+[PASS] 命令可用: docker
+[PASS] 命令可用: ssh
+[PASS] 命令可用: ip
+[PASS] 命令可用: python3
+[PASS] ROS 2 查询后端: franka-vr:humble 只读临时容器
+
+== 1/9 Intel RealSense D435i 正视角图像 ==
+SENSOR_IMAGE key=front topic=/camera/camera_front/color/image_raw stamp=1791433151.048954487 age=0.087s encoding=rgb8 size=640x480 rgb8=ok
+[PASS] D435i 正视角图像新鲜、可解码为 RGB8
+
+>>>>>>>> 第1项检测状态：正常 <<<<<<<<
+
+== 2/9 两台 Logitech C922 左、右视角图像 ==
+SENSOR_IMAGE key=left topic=/camera_left/image_raw stamp=1791433151.108129740 age=0.028s encoding=rgb8 size=640x480 rgb8=ok
+SENSOR_IMAGE key=right topic=/camera_right/image_raw stamp=1791433151.066567421 age=0.070s encoding=rgb8 size=640x480 rgb8=ok
+[PASS] C922 左、右视角图像均新鲜且可解码为 RGB8
+配置映射: left=43DDCA6F (/camera_left/image_raw), right=CD7DCA6F (/camera_right/image_raw)
+[BLOCKED] C922 左右物理视角及训练输入顺序 未获得现场操作者确认
+
+>>>>>>>> 第2项检测状态：自动检查正常，现场确认待完成 <<<<<<<<
+
+== 3/9 实体机器人当前关节状态与 world -> fr3_link8 TF ==
+SENSOR_JOINTS names=fr3_joint1,fr3_joint2,fr3_joint3,fr3_joint4,fr3_joint5,fr3_joint6,fr3_joint7 state_dtype=float32 state_shape=(8,)
+SENSOR_TF parent=world child=fr3_link8 stamp1=1791433150.172275305 stamp2=1791433150.239011288 updating=ok
+[PASS] fr3_joint1..7、8 维状态及持续更新的 world -> fr3_link8 TF 均正常
+
+>>>>>>>> 第3项检测状态：正常 <<<<<<<<
+
+== 4/9 AI 服务器与 Ubuntu 控制计算机的模型通信状态 ==
+[PASS] 模型 TCP 端口可达: 10.24.116.20:8093（仅网络证据）
+[PASS] 远端正确 FrankaVR 服务进程监听 8093: mac_20
+
+>>>>>>>> 第4项检测状态：正常 <<<<<<<<
+
+== 5/9 Ubuntu 控制机与实体机器人控制通信 ==
+[PASS] controller_manager/list_controllers 服务可用
+[PASS] /set_target_pose 是有效 SetTargetPose service（只检查，未调用）
+[PASS] 控制器 active: joint_state_broadcaster
+[PASS] 控制器 active: fr3_arm_controller
+
+>>>>>>>> 第5项检测状态：正常 <<<<<<<<
+
+== 6/9 仅运行一个真实控制栈 ==
+[PASS] 未检测到 Gazebo/fake/mock 容器
+[PASS] 仅检测到一个真机控制栈容器: ca4cbdd028d7 franka_vr_docker-franka_robot-run-ae42723176f3 franka-vr:humble
+[PASS] 未检测到 Gazebo/fake/mock ROS 节点
+[PASS] 仅存在一个 controller_manager
+
+>>>>>>>> 第6项检测状态：正常 <<<<<<<<
+
+== 7/9 使用专用 FCI 网口 ==
+[PASS] FCI 网口存在: enp110s0
+[PASS] 机器人路由经专用 FCI 网口: 172.16.0.2 dev enp110s0 src 172.16.0.1 uid 1000 
+    cache 
+[PASS] FCI 链路已连接: speed=1000Mb/s, duplex=Full
+[PASS] 机器人 IP 从 FCI 网口可达: 172.16.0.2
+[PASS] PREEMPT_RT 已启用
+[WARN] 内核托管 IRQ mask 含控制核，但 managed_irq 已启用且采样期无中断: irq=170 effective=4 delta=0 source=nvme0q5
+irq=171 effective=5 delta=0 source=nvme0q6
+[PASS] FCI IRQ 165 固定到专用 CPU 2
+
+>>>>>>>> 第7项检测状态：正常（存在警告） <<<<<<<<
+./detect.sh: 行 507: _fci: 未找到命令

@@ -28,9 +28,13 @@ docker exec <Gazebo容器> bash -lc '
 
 预期 `joint_state_broadcaster`、`fr3_arm_controller` 和 `fr3_gripper` 均为 `active`。
 
-## 重复启动 Gazebo 后 RViz 或控制异常
+## 重复启动控制栈后 RViz 或控制异常
 
-**现象**：多个 Gazebo、RViz 或 MoveIt 实例同时存在，出现话题、服务、控制器或图形资源冲突。
+**现象**：多个 Gazebo、fake hardware 或真机 ROS 栈同时存在，出现话题、服务、控制器或图形资源冲突；真机启动时可能看到 `Controller already loaded`，之后 `Failed to configure controller` 或 `Failed to activate controller`。
+
+**原因**：容器使用 host 网络和相同 ROS domain，多个栈会暴露同名 `/controller_manager`。新的 spawner 可能连到旧的 fake 或 Gazebo 控制器管理器，而不是本次真机栈。
+
+**处理补充**：启动真机前先停止所有同工作区的运行中**控制栈**。`run_robot.sh` 现在会检测当前工作区中启动 `franka_twist.launch.py` 或 Gazebo 的容器并拒绝继续，避免把真机 spawner 接到错误的 `/controller_manager`；RealSense、Quest 等不创建控制器管理器的伴随节点不受影响。2026-09-04 已清理一个遗留的 fake-hardware 测试容器；它正是本次控制器“已加载但无法激活”的直接原因。
 
 **原因**：`docker compose run --rm` 每次执行均创建新的临时容器，不会自动停止已有实例。
 
@@ -130,3 +134,15 @@ cat /sys/kernel/realtime
 ```
 
 `/sys/kernel/realtime` 应输出 `1`。链路不是 1000 Mb/s 全双工、存在丢包，或实时内核未验证时，不应启动真机控制。
+
+本机在 2026-09-04 检测到 `enp110s0` 为 **100 Mb/s、Full Duplex**，可 ping 通 `172.16.0.2`。这低于建议的千兆链路，通常与网线、网卡协商或中间交换设备有关，但本项目此前可在该链路上启动，因此所有新增网络与 PREEMPT_RT 检查均只作为启动前告警，不会改变原有 `run_robot.sh` 的启动条件。实际是否可稳定运行仍以 libfranka 的连接和通信约束结果为准。
+
+**2026-09-04 实测**：真机栈已成功连接机械臂和夹爪，控制器加载完成后 `FrankaHardwareInterface` 在首次实时读取时抛出 `libfranka: Move command aborted: motion aborted by reflex! ["communication_constraints_violation"]`，`ros2_control_node` 随即退出。此时尚未发送任何键盘、VR 或 Z 轴目标，因此不是手动控制命令造成。已尝试清理抢占 `/controller_manager` 的 fake-hardware 栈；仍需在 Desk 清除本次反射后，用 Franka 官方通信诊断确认丢包、时延和抖动，并优先恢复千兆链路与已验证的实时内核后再进行无负载低速运动测试。
+
+**进一步定位 / 已修复的回归**：RealSense 容器当时占用约 15% CPU，而 Compose 的通用 `franka_vr` 服务把相机和真机都限制在 CPU `4,5`。相机与 1 kHz 控制循环竞争同一 CPU 对是本次反射的直接软件侧风险。现已新增专用 `franka_robot` Compose 服务，只有 `run_robot.sh` 使用 CPU `4,5`；相机、Quest 和构建容器不再继承该限制。相机已按新配置重启并确认不再绑定该 CPU 对；真机重试仍在首次实时读取触发相同反射，因此 CPU 竞争不是唯一根因。
+
+**已排除 / 待继续**：启动脚本的 FCI IRQ 绑定已实测成功写入 CPU `2`，两秒后仍保持，且主机没有运行 `irqbalance`。当前主机为 `7.0.0-30-generic` 的 `PREEMPT_DYNAMIC` 内核，未检测到 PREEMPT_RT；结合 100 Mb/s 链路，这仍是通信约束反射的首要待验证环境因素。下一次尝试前需在 Desk 清除刚刚产生的反射，随后先运行 Franka 官方通信诊断（丢包、时延、抖动），而不是直接发送运动目标。
+
+**最终验证（2026-09-04）**：主机实际上已安装 `6.8.1-1015-realtime`，但此前重启后默认进入了 `7.0.0-30-generic`。将 GRUB 默认启动项切换为 `6.8.1-1015-realtime`、重启并确认 `cat /sys/kernel/realtime` 输出 `1` 后，真机栈可稳定完成机械臂、夹爪、控制器和 MoveIt Servo 初始化；无 GUI 测试期间不再出现 `communication_constraints_violation`，且随后已成功执行世界坐标 Z 轴下移约 `10 cm`。
+
+**为什么切换内核有效**：FCI 控制回路以 `1 kHz` 运行。通用内核不能保证控制线程在每个周期及时获得 CPU；一旦连续约 `20 ms` 未向 FCI 发送有效控制包，机器人就会以 `communication_constraints_violation` 触发保护并停止。PREEMPT_RT 提供可预测的调度延迟和实时优先级，使容器内的 `controller_manager` 能持续完成该循环。当前 FCI 仍协商为 `100 Mb/s`，虽在实时内核下通过本次验证，仍应后续排查并恢复千兆链路以保留通信余量。

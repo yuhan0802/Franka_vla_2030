@@ -15,14 +15,16 @@ import time
 import tty
 
 from control_msgs.action import GripperCommand
-from geometry_msgs.msg import Pose, Quaternion
+from franka_msgs.action import Move
+from geometry_msgs.msg import Pose, Quaternion, TransformStamped
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import JointState
-from tf2_ros import Buffer, TransformListener
+from std_msgs.msg import Float64
+from tf2_ros import Buffer, TransformBroadcaster, TransformListener
 from franka_vr.srv import SetTargetPose
 
 
@@ -33,7 +35,9 @@ TIP_FRAME = "fr3_link8"
 LINEAR_STEP_METERS = 0.008
 ANGULAR_STEP_RADIANS = math.radians(3.0)
 GRIPPER_OPEN_POSITION = 0.04
+ROBOT_GRIPPER_OPEN_WIDTH = 0.08
 GRIPPER_MAX_EFFORT = 100.0
+ROBOT_GRIPPER_SPEED = 0.10
 STARTUP_TIMEOUT_SECONDS = 30.0
 
 
@@ -66,9 +70,21 @@ class KeyboardManualControl(Node):
     def __init__(self):
         super().__init__("keyboard_manual_control")
         self._target_client = self.create_client(SetTargetPose, "/set_target_pose")
-        self._gripper_client = ActionClient(self, GripperCommand, "/fr3_gripper/gripper_cmd")
+        # Gazebo exposes a GripperActionController, whereas the real Franka
+        # gripper exposes franka_msgs/Move.  Keep both clients and select the
+        # server that is actually available when Space is pressed.
+        self._gazebo_gripper_client = ActionClient(
+            self, GripperCommand, "/fr3_gripper/gripper_cmd"
+        )
+        self._robot_gripper_client = ActionClient(
+            self, Move, "/fr3_gripper/franka_gripper/move"
+        )
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
+        self._target_broadcaster = TransformBroadcaster(self)
+        self._gripper_target_width_publisher = self.create_publisher(
+            Float64, "/franka_vr/gripper_target_width_requested", 10
+        )
         self._gripper_open = False
         self._gripper_goal_in_flight = False
         self._target_pose = None
@@ -77,7 +93,24 @@ class KeyboardManualControl(Node):
         # into the latest target and sent as soon as that request completes.
         self._target_request_in_flight = False
         self._target_dirty = False
+        # Keep the commanded Cartesian target observable to the recorder.  A
+        # timer (instead of publishing only on a key press) lets a recorder
+        # started after manual control still receive the current action label.
+        self.create_timer(0.1, self._publish_target)
         self.create_subscription(JointState, "/joint_states", self._joint_state_callback, 10)
+
+    def _publish_target(self):
+        if self._target_pose is None:
+            return
+        target = TransformStamped()
+        target.header.stamp = self.get_clock().now().to_msg()
+        target.header.frame_id = CONTROL_FRAME
+        target.child_frame_id = "fr3_manual_target"
+        target.transform.translation.x = self._target_pose.position.x
+        target.transform.translation.y = self._target_pose.position.y
+        target.transform.translation.z = self._target_pose.position.z
+        target.transform.rotation = self._target_pose.orientation
+        self._target_broadcaster.sendTransform(target)
 
     def _joint_state_callback(self, message: JointState):
         try:
@@ -179,19 +212,43 @@ class KeyboardManualControl(Node):
     def _toggle_gripper(self):
         if self._gripper_goal_in_flight:
             return
-        if not self._gripper_client.server_is_ready():
-            self.get_logger().error("Gripper action server is not ready")
-            return
-        goal = GripperCommand.Goal()
-        goal.command.position = 0.0 if self._gripper_open else GRIPPER_OPEN_POSITION
-        goal.command.max_effort = GRIPPER_MAX_EFFORT
-        self._gripper_goal_in_flight = True
-        goal_future = self._gripper_client.send_goal_async(goal)
-        goal_future.add_done_callback(self._gripper_goal_response)
-        action = "close" if self._gripper_open else "open"
-        self.get_logger().info(f"Requested gripper {action}")
+        requested_open = not self._gripper_open
 
-    def _gripper_goal_response(self, future):
+        if self._gazebo_gripper_client.server_is_ready():
+            backend = "gazebo"
+            goal = GripperCommand.Goal()
+            goal.command.position = GRIPPER_OPEN_POSITION if requested_open else 0.0
+            goal.command.max_effort = GRIPPER_MAX_EFFORT
+            # Gazebo accepts each-finger displacement; record total opening.
+            self._gripper_target_width_publisher.publish(
+                Float64(data=2.0 * float(goal.command.position))
+            )
+            goal_future = self._gazebo_gripper_client.send_goal_async(goal)
+        elif self._robot_gripper_client.server_is_ready():
+            backend = "robot"
+            goal = Move.Goal()
+            # Franka's Move width is the total opening between both fingers;
+            # Gazebo's controller instead accepts each finger position.
+            goal.width = ROBOT_GRIPPER_OPEN_WIDTH if requested_open else 0.0
+            goal.speed = ROBOT_GRIPPER_SPEED
+            self._gripper_target_width_publisher.publish(Float64(data=float(goal.width)))
+            goal_future = self._robot_gripper_client.send_goal_async(goal)
+        else:
+            self.get_logger().error(
+                "No gripper action server is ready. Expected Gazebo "
+                "/fr3_gripper/gripper_cmd or real robot "
+                "/fr3_gripper/franka_gripper/move"
+            )
+            return
+
+        self._gripper_goal_in_flight = True
+        goal_future.add_done_callback(
+            lambda future: self._gripper_goal_response(future, backend, requested_open)
+        )
+        action = "open" if requested_open else "close"
+        self.get_logger().info(f"Requested {backend} gripper {action}")
+
+    def _gripper_goal_response(self, future, backend: str, requested_open: bool):
         try:
             goal_handle = future.result()
         except Exception as error:
@@ -202,13 +259,30 @@ class KeyboardManualControl(Node):
             self._gripper_goal_in_flight = False
             self.get_logger().warning("Gripper goal was rejected")
             return
-        goal_handle.get_result_async().add_done_callback(self._gripper_goal_result)
+        goal_handle.get_result_async().add_done_callback(
+            lambda result_future: self._gripper_goal_result(
+                result_future, backend, requested_open
+            )
+        )
 
-    def _gripper_goal_result(self, future):
+    def _gripper_goal_result(self, future, backend: str, requested_open: bool):
         self._gripper_goal_in_flight = False
         try:
-            result = future.result().result
-            self._gripper_open = result.position > GRIPPER_OPEN_POSITION / 2.0
+            action_result = future.result().result
+            if backend == "gazebo":
+                self._gripper_open = (
+                    action_result.position > GRIPPER_OPEN_POSITION / 2.0
+                )
+            else:
+                # franka_msgs/Move reports current_width as feedback.  Its
+                # final result contains only success/error, so use the goal
+                # that just completed to keep the keyboard toggle state.
+                if not action_result.success:
+                    self.get_logger().warning(
+                        f"Robot gripper action failed: {action_result.error}"
+                    )
+                    return
+                self._gripper_open = requested_open
         except Exception as error:
             self.get_logger().warning(f"Gripper result unavailable: {error}")
 

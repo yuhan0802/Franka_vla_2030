@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster, Buffer, TransformListener
 from geometry_msgs.msg import TransformStamped, Pose
+from std_msgs.msg import Bool, Float64
 from tf_transformations import (
     quaternion_from_matrix,
     quaternion_from_euler,
@@ -19,7 +20,21 @@ class OculusPublisher(Node):
         self.oculus_reader = OculusReader()
         self.tf_broadcaster = TransformBroadcaster(self)
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
-        self.timer = self.create_timer(1.0 / 70.0, self.timer_callback)
+        # Expose the right-controller face button for non-motion consumers
+        # such as the dataset recorder. Quest names this physical button A
+        # (X is the corresponding left-controller button). Publishing it here reuses the single
+        # Quest/ADB reader used by teleoperation instead of opening another
+        # logcat stream.
+        self.x_button_publisher = self.create_publisher(Bool, '/vr/x_button', 10)
+        # The recorder stores this raw physical-width goal alongside measured
+        # finger feedback. It is not normalized and is the exact value passed
+        # to the Franka gripper action.
+        self.gripper_target_width_publisher = self.create_publisher(
+            Float64, '/franka_vr/gripper_target_width_requested', 10)
+        # Quest 3 is configured for 100 Hz during VR teleoperation.  Keep the
+        # bridge callback aligned with its input frame rate rather than
+        # repeatedly forwarding the same controller sample at 70 Hz.
+        self.timer = self.create_timer(1.0 / 100.0, self.timer_callback)
 
         # 声明 oculus_base 的参数
         self.declare_parameter('oculus_base.x', 0.05)
@@ -36,12 +51,24 @@ class OculusPublisher(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        self.declare_parameter('translation_scale', 0.75)
+        # A 1:1 mapping makes robot and controller displacements match.
+        # physical controller motion.  The robot-side Cartesian velocity cap,
+        # collision protection, and joint limits remain authoritative.
+        self.declare_parameter('translation_scale', 1.0)
         self.declare_parameter('trigger_threshold', 0.8)
-        self.declare_parameter('max_hand_delta_per_cycle', 0.05)
-        self.declare_parameter('max_relative_translation', 0.30)
-        self.declare_parameter('tracking_timeout_seconds', 0.20)
-        self.declare_parameter('enable_orientation_control', False)
+        self.declare_parameter('trigger_release_threshold', 0.65)
+        # Allow ordinary controller occlusion and wider pick-and-place reaches
+        # without disabling the stop-on-stale-data safety behavior.
+        self.declare_parameter('max_hand_delta_per_cycle', 0.08)
+        self.declare_parameter('max_relative_translation', 0.40)
+        self.declare_parameter('tracking_timeout_seconds', 0.35)
+        # Map the right controller's relative orientation to the end effector
+        # while the trigger clutch is held.
+        self.declare_parameter('enable_orientation_control', True)
+        # Reject implausible tracking jumps and bound one clutch movement. Both
+        # values are radians; release and press the trigger to re-centre.
+        self.declare_parameter('max_hand_rotation_per_cycle', 0.35)
+        self.declare_parameter('max_relative_rotation', 1.57)
         # Keep the VR mapping and Servo service in one explicit shared frame.
         self.declare_parameter('robot_base_frame', 'world')
         self.declare_parameter('robot_tip_frame', 'fr3_link8')
@@ -49,10 +76,15 @@ class OculusPublisher(Node):
 
         self.translation_scale = self.get_parameter('translation_scale').value
         self.trigger_threshold = self.get_parameter('trigger_threshold').value
+        self.trigger_release_threshold = self.get_parameter(
+            'trigger_release_threshold').value
         self.max_hand_delta_per_cycle = self.get_parameter('max_hand_delta_per_cycle').value
         self.max_relative_translation = self.get_parameter('max_relative_translation').value
         self.tracking_timeout_seconds = self.get_parameter('tracking_timeout_seconds').value
         self.enable_orientation_control = self.get_parameter('enable_orientation_control').value
+        self.max_hand_rotation_per_cycle = self.get_parameter(
+            'max_hand_rotation_per_cycle').value
+        self.max_relative_rotation = self.get_parameter('max_relative_rotation').value
         self.robot_base_frame = self.get_parameter('robot_base_frame').value
         self.robot_tip_frame = self.get_parameter('robot_tip_frame').value
         gripper_action_prefix = self.get_parameter('gripper_action_prefix').value.rstrip('/')
@@ -212,6 +244,12 @@ class OculusPublisher(Node):
         target.transform.rotation.w = float(quaternion[3])
         return target
 
+    @staticmethod
+    def rotation_angle(rotation_matrix):
+        """Return the principal angle of a 3x3 relative rotation matrix."""
+        cos_angle = np.clip((np.trace(rotation_matrix) - 1.0) / 2.0, -1.0, 1.0)
+        return float(np.arccos(cos_angle))
+
     def begin_trigger_clutch(self):
         """Capture the current hand and robot poses when the trigger is pressed."""
         hand = self.tf_buffer.lookup_transform('world', 'oculus_right', rclpy.time.Time())
@@ -229,9 +267,17 @@ class OculusPublisher(Node):
         hand_now_transform = self.transform_to_matrix(hand)
         frame_translation = np.linalg.norm(
             hand_now_transform[:3, 3] - self.last_hand_control_transform[:3, 3])
-        if frame_translation > self.max_hand_delta_per_cycle:
+        frame_rotation = np.dot(
+            np.linalg.inv(self.last_hand_control_transform[:3, :3]),
+            hand_now_transform[:3, :3],
+        )
+        frame_rotation_angle = self.rotation_angle(frame_rotation)
+        if (frame_translation > self.max_hand_delta_per_cycle or
+                frame_rotation_angle > self.max_hand_rotation_per_cycle):
             self.get_logger().warning(
-                f'Hand tracking jump ({frame_translation:.3f} m); recalibrating VR clutch')
+                'Hand tracking jump '
+                f'({frame_translation:.3f} m, {np.degrees(frame_rotation_angle):.1f} deg); '
+                'recalibrating VR clutch')
             self.hand_start_transform = hand_now_transform
             self.last_hand_control_transform = hand_now_transform.copy()
             self.robot_start_transform = self.transform_to_matrix(
@@ -258,8 +304,24 @@ class OculusPublisher(Node):
                 np.linalg.inv(self.hand_start_transform[:3, :3]),
                 hand_now_transform[:3, :3],
             )
+            relative_rotation_angle = self.rotation_angle(hand_rotation_delta)
+            if relative_rotation_angle > self.max_relative_rotation:
+                self.get_logger().warning(
+                    'Relative hand rotation exceeded the VR safety limit; '
+                    'release and press the trigger to re-centre')
+                return
+            # Both hand poses are expressed in world.  Apply their calibrated
+            # relative rotation in world to the end effector's initial world
+            # orientation.  Right-multiplying the local hand delta here makes
+            # controller axes depend on the arbitrary initial hand/robot pose.
+            hand_rotation_in_world = np.dot(
+                hand_now_transform[:3, :3],
+                self.hand_start_transform[:3, :3].T,
+            )
             target[:3, :3] = np.dot(
-                self.robot_start_transform[:3, :3], hand_rotation_delta)
+                hand_rotation_in_world,
+                self.robot_start_transform[:3, :3],
+            )
         target_transform = self.matrix_to_transform(target)
         self.tf_broadcaster.sendTransform(target_transform)
         self.send_target_pose(target_transform)
@@ -267,6 +329,7 @@ class OculusPublisher(Node):
     def send_homing_goal(self):
         """发送夹爪打开命令 (Homing)"""
         goal_msg = Homing.Goal()
+        self.gripper_target_width_publisher.publish(Float64(data=0.08))
         self.homing_client.send_goal_async(goal_msg)
         self.get_logger().info("Sending gripper homing (open) command")
         self.gripper_state = False
@@ -279,6 +342,7 @@ class OculusPublisher(Node):
         goal_msg.force = 20.0   # 抓取力 50 N
         goal_msg.epsilon.inner = 0.1
         goal_msg.epsilon.outer = 0.2
+        self.gripper_target_width_publisher.publish(Float64(data=float(goal_msg.width)))
         self.grasp_client.send_goal_async(goal_msg)
         self.get_logger().info("Sending gripper grasp (close) command")
         self.gripper_state = True
@@ -295,6 +359,7 @@ class OculusPublisher(Node):
         goal_msg.width = width
         goal_msg.speed = 0.05 # 设置一个合理的速度（m/s）
 
+        self.gripper_target_width_publisher.publish(Float64(data=float(goal_msg.width)))
         self.get_logger().info(f"Sending gripper goal: width={width}, speed={goal_msg.speed}")
         self.action_client.send_goal_async(goal_msg)  # 只发送，不处理反馈或结果
         
@@ -314,6 +379,8 @@ class OculusPublisher(Node):
             return
         self.tracking_timeout_reported = False
 
+        self.x_button_publisher.publish(Bool(data=bool(buttons.get('A', False))))
+
         # Publish the tracking pose directly.  Its axes are calibrated once
         # by the static world -> oculus_base transform above.
         if 'r' in transformations:
@@ -325,14 +392,25 @@ class OculusPublisher(Node):
         # Use the trigger as a clutch: capture references on press, then only
         # command the robot with relative hand motion while it remains held.
         trigger_value = buttons.get('rightTrig', (0.0,))[0]
-        if trigger_value >= self.trigger_threshold:
+        trigger_held = (
+            trigger_value >= self.trigger_release_threshold
+            if self.trigger_active
+            else trigger_value >= self.trigger_threshold
+        )
+        if trigger_held:
             try:
                 if not self.trigger_active:
                     self.begin_trigger_clutch()
                 self.update_target_from_hand()
             except Exception as e:
                 self.get_logger().warning(f"Failed to update VR target: {str(e)}")
+                self.stop_robot_tracking()
+                self.trigger_active = False
         elif self.trigger_active:
+            # Ask Servo to discard its queued prediction and hold the pose
+            # measured inside the control loop. This stops unfinished hand
+            # rotation without switching to the separate joint-hold path.
+            self.stop_robot_tracking()
             self.trigger_active = False
             self.hand_start_transform = None
             self.last_hand_control_transform = None

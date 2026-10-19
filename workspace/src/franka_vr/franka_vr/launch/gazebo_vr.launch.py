@@ -52,6 +52,7 @@ def build_moveit_config(load_gripper: str):
 
 def launch_setup(context: LaunchContext):
     load_gripper = LaunchConfiguration("load_gripper").perform(context)
+    headless = LaunchConfiguration("headless").perform(context).lower() == "true"
     use_rviz = LaunchConfiguration("use_rviz")
     enable_vr = LaunchConfiguration("enable_vr")
     description_share = get_package_share_directory("franka_description")
@@ -129,7 +130,8 @@ def launch_setup(context: LaunchContext):
     ros_gz_sim_share = get_package_share_directory("ros_gz_sim")
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")),
-        launch_arguments={"gz_args": "empty.sdf -r"}.items(),
+        # Server-only mode lets CI and safety checks run without an X11 GUI.
+        launch_arguments={"gz_args": "empty.sdf -r -s" if headless else "empty.sdf -r"}.items(),
     )
     clock_bridge = Node(
         package="ros_gz_bridge",
@@ -298,6 +300,7 @@ def generate_launch_description():
             DeclareLaunchArgument("load_gripper", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="true"),
             DeclareLaunchArgument("enable_vr", default_value="false"),
+            DeclareLaunchArgument("headless", default_value="false"),
             OpaqueFunction(function=launch_setup),
         ]
     )

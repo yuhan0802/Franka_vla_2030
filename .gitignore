@@ -1,2 +1,23 @@
 __pycache__/
 *.py[cod]
+
+# Local credentials and environment overrides
+id_rsa*
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# Runtime output and local recovery archives
+logs/
+backups/
+droid_handoff/
+droid_handoff.zip
+workspace/src/franka_vr/vla_observation_captures/
+
+# Local ROS/colcon build state
+.colcon-build.lock
+workspace/build/
+workspace/install/
+workspace/log/

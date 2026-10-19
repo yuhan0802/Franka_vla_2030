@@ -1,0 +1,9 @@
+# A busy telemetry publisher must not sleep inside the 1 kHz control loop.
+# Skip this telemetry sample and try again on the next update. Hardware read
+# errors remain errors; adapter feedback freshness checks remain enabled.
+franka_robot_state_broadcaster:
+  ros__parameters:
+    lock_try_count: 1
+    lock_sleep_interval: 0
+    lock_update_success: true
+    lock_log_error: false

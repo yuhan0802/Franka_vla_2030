@@ -330,15 +330,18 @@ class Robot {
   bool cartesian_pose_interface_active_{false};
 
   bool torque_command_rate_limiter_active_{true};
-  bool velocity_command_rate_limit_active_{false};
+  // Keep libfranka's position-aware velocity/acceleration/jerk limiter on
+  // for all teleoperation command interfaces. The VR layer adds stricter
+  // collection limits; this remains the final hardware-side safeguard.
+  bool velocity_command_rate_limit_active_{true};
 
-  bool cartesian_velocity_command_rate_limit_active_{false};
+  bool cartesian_velocity_command_rate_limit_active_{true};
   bool cartesian_velocity_low_pass_filter_active_{false};
 
   bool cartesian_pose_low_pass_filter_active_{false};
-  bool cartesian_pose_command_rate_limit_active_{false};
+  bool cartesian_pose_command_rate_limit_active_{true};
 
-  bool joint_position_command_rate_limit_active_{false};
+  bool joint_position_command_rate_limit_active_{true};
   bool joint_position_command_low_pass_filter_active_{false};
 
   double low_pass_filter_cut_off_freq{100.0};

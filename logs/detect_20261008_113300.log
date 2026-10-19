@@ -1,0 +1,62 @@
+FrankaVR VLA read-only detection
+安全保证：本脚本不会调用 /set_target_pose，也不会启动 execute。
+
+== 1/9 基础环境与单一真实控制栈 ==
+[PASS] 命令可用: timeout
+[PASS] 命令可用: docker
+[PASS] 命令可用: ssh
+[PASS] 命令可用: ip
+[PASS] 命令可用: python3
+[PASS] ROS 2 查询后端: franka-vr:humble 只读临时容器
+[PASS] 未检测到 Gazebo/fake/mock 容器
+[WARN] 未检测到正在运行的真机控制栈容器
+[PASS] 未检测到 Gazebo/fake/mock ROS 节点
+[FAIL] 未发现 controller_manager（真机状态栈未运行）
+
+== 2/9 FCI 专用网口与机器人路由 ==
+[PASS] FCI 网口存在: enp110s0
+[PASS] 机器人路由经专用 FCI 网口: 172.16.0.2 dev enp110s0 src 172.16.0.1 uid 1000 
+    cache 
+[PASS] FCI 链路已连接: speed=1000Mb/s, duplex=Full
+[PASS] 机器人 IP 从 FCI 网口可达: 172.16.0.2
+[PASS] PREEMPT_RT 已启用
+[FAIL] 非 FCI 中断仍占用实时控制核 4,5；需应用 irqaffinity 后重启: irq=154 effective=4 source=nvme0q5
+irq=155 effective=5 source=nvme0q6
+[PASS] FCI IRQ 141 固定到专用 CPU 2
+
+== 3/9 三路 RGB、关节状态与持续 TF ==
+DETECT_ERROR RuntimeError: sensor timeout; missing_images=['right'], missing_joints=['fr3_joint1', 'fr3_joint2', 'fr3_joint3', 'fr3_joint4', 'fr3_joint5', 'fr3_joint6', 'fr3_joint7']
+SENSOR_IMAGE key=front topic=/camera/camera_front/color/image_raw stamp=1791430399.064063787 age=0.019s encoding=rgb8 size=640x480 rgb8=ok
+SENSOR_IMAGE key=left topic=/camera_left/image_raw stamp=1791430398.925769806 age=0.157s encoding=rgb8 size=640x480 rgb8=ok
+
+[FAIL] 传感器/机器人状态探针失败；按安全门禁跳过模型推理
+
+== 4/9 AI 服务进程与应用层身份 ==
+[PASS] 模型 TCP 端口可达: 10.24.116.20:8093（仅网络证据）
+[PASS] 远端正确 FrankaVR 服务进程监听 8093: mac_20
+
+== 5/9 Ubuntu 控制机与实体机器人控制通信 ==
+[FAIL] controller_manager/list_controllers 服务不可用
+[PASS] /set_target_pose 是有效 SetTargetPose service（只检查，未调用）
+[FAIL] 控制器未处于 active: joint_state_broadcaster
+[FAIL] 控制器未处于 active: fr3_arm_controller
+
+== 6/9 真实三视角模型输入输出（不执行 action） ==
+[BLOCKED] 传感器、关节或 TF 未通过，未向模型发送请求
+
+== 7/9 工作区、单步限幅与 Servo 保护 ==
+[PASS] 工作区、单步限幅及 Servo 安全配置有效: workspace_min=[0.383737, -0.12, 0.182611] workspace_max=[0.75, 0.12, 0.786648] approved_x_max=0.75; bridge_limits=workspace+translation+rotation+dry-run; servo_collision=true singularity=10.0/30.0
+
+== 8/9 左右相机物理映射 ==
+配置映射: left=43DDCA6F (/camera_left/image_raw), right=CD7DCA6F (/camera_right/image_raw)
+[BLOCKED] C922 左右视角及训练输入顺序 未获得现场操作者确认
+
+== 9/9 运动方向、实测工作区与现场安全 ==
+[BLOCKED] xyz/rpy 运动方向 未获得现场操作者确认
+[BLOCKED] 实测工作空间边界 未获得现场操作者确认
+[BLOCKED] 急停、清场、低速空载及碰撞/奇异性保护 未获得现场操作者确认
+
+== 结果 ==
+通过: 18  失败: 6  警告: 1  阻塞: 5
+只读声明: 未调用 /set_target_pose，未发布运动目标，未执行任何返回的 action。
+检测失败：禁止进入 execute；请按以上证据修复后重跑。

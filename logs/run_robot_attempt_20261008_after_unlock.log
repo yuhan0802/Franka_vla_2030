@@ -1,0 +1,260 @@
+Using Franka FCI address: 172.16.0.2
+Pinned FCI interface enp110s0 IRQ 165 to CPU 2
+Pinned non-FCI IRQ 148 to CPUs 7
+Pinned non-FCI IRQ 149 to CPUs 8
+Pinned non-FCI IRQ 164 to CPUs 9
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 166 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 167 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 168 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 169 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 170 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 171 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 172 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 173 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 174 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 175 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 176 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 177 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 178 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 179 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 180 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 181 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 182 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 183 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 184 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 185 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 186 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 187 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 188 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 189 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 190 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 191 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 192 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 193 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 194 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 195 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 196 is kernel-managed; requires boot-time irqaffinity
+/bin/bash: line 28: echo: write error: Input/output error
+Non-FCI IRQ 197 is kernel-managed; requires boot-time irqaffinity
+Pinned non-FCI IRQ 200 to CPUs 16
+Pinned non-FCI IRQ 201 to CPUs 0
+Pinned non-FCI IRQ 202 to CPUs 1
+Pinned non-FCI IRQ 203 to CPUs 2
+Pinned non-FCI IRQ 204 to CPUs 3
+Pinned non-FCI IRQ 205 to CPUs 20
+Pinned non-FCI IRQ 206 to CPUs 21
+Pinned non-FCI IRQ 207 to CPUs 6
+Pinned non-FCI IRQ 208 to CPUs 7
+Pinned non-FCI IRQ 209 to CPUs 8
+Pinned non-FCI IRQ 210 to CPUs 9
+Pinned non-FCI IRQ 211 to CPUs 10
+Pinned non-FCI IRQ 212 to CPUs 11
+Pinned non-FCI IRQ 213 to CPUs 12
+Pinned non-FCI IRQ 214 to CPUs 13
+Pinned non-FCI IRQ 215 to CPUs 31
+Starting >>> franka_vr
+Finished <<< franka_vr [16.5s]
+
+Summary: 1 package finished [16.7s]
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-08-03-50-52-377749-XMU-1
+[INFO] [launch]: Default logging verbosity is set to INFO
+WARNING:root:[33;21mCannot infer URDF from `/ws_franka_vr/install/franka_fr3_moveit_config/share/franka_fr3_moveit_config`. -- using config/franka_fr3.urdf[0m
+WARNING:root:[33;21mCannot infer SRDF from `/ws_franka_vr/install/franka_fr3_moveit_config/share/franka_fr3_moveit_config`. -- using config/franka_fr3.srdf[0m
+[INFO] [static_transform_publisher-1]: process started with pid [298]
+[INFO] [robot_state_publisher-2]: process started with pid [300]
+[INFO] [joint_state_publisher-3]: process started with pid [302]
+[INFO] [ros2_control_node-4]: process started with pid [304]
+[INFO] [demo_franka_vr_vel-5]: process started with pid [306]
+[INFO] [rviz2-6]: process started with pid [311]
+[INFO] [spawner-7]: process started with pid [317]
+[INFO] [spawner-8]: process started with pid [330]
+[INFO] [franka_gripper_node-9]: process started with pid [335]
+[static_transform_publisher-1] [INFO] [1791431452.874538320] [world_to_robot_base_broadcaster]: Spinning until stopped - publishing transform
+[static_transform_publisher-1] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-1] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-1] from 'world' to 'base'
+[rviz2-6] qt.qpa.xcb: could not connect to display :0
+[ros2_control_node-4] [WARN] [1791431453.006804958] [controller_manager]: [Deprecated] Passing the robot description parameter directly to the control_manager node is deprecated. Use '~/robot_description' topic from 'robot_state_publisher' instead.
+[rviz2-6] qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+[rviz2-6] This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+[rviz2-6] 
+[rviz2-6] Available platform plugins are: eglfs, linuxfb, minimal, minimalegl, offscreen, vnc, xcb.
+[rviz2-6] 
+[ros2_control_node-4] text not specified in the prefix tag
+[ros2_control_node-4] text not specified in the arm_prefix tag
+[ros2_control_node-4] [INFO] [1791431453.022980310] [resource_manager]: Loading hardware 'FrankaHardwareInterface' 
+[ros2_control_node-4] [INFO] [1791431453.041514396] [resource_manager]: Initialize hardware 'FrankaHardwareInterface' 
+[ros2_control_node-4] [INFO] [1791431453.041580425] [FrankaHardwareInterface]: Parsed Franka ros2_control interface version: 0.1.0
+[ros2_control_node-4] [WARN] [1791431453.041609401] [FrankaHardwareInterface]: Parameter 'robot_type' is not set.
+[ros2_control_node-4] [WARN] [1791431453.041611810] [FrankaHardwareInterface]: Deprecation Warning: In the next release, 'robot_type' should be set in the URDF. Using 'panda' as default 'robot_type' will not be supported.Please use the latest franka_description package from: https://github.com/frankarobotics/franka_description
+[ros2_control_node-4] [INFO] [1791431453.041615966] [FrankaHardwareInterface]: Connecting to robot at "172.16.0.2" ...
+[ros2_control_node-4] [INFO] [1791431453.062630796] [FrankaHardwareInterface]: libfranka: Setting thread priority to the highest possible value.
+[franka_gripper_node-9] [INFO] [1791431453.068172451] [fr3_gripper.franka_gripper]: Trying to establish a connection with the gripper
+[ros2_control_node-4] [INFO] [1791431453.071983701] [FrankaHardwareInterface]: Successfully connected to robot
+[ros2_control_node-4] [INFO] [1791431453.076203026] [service_server]: Service started
+[robot_state_publisher-2] [INFO] [1791431453.081702178] [robot_state_publisher]: got segment base
+[robot_state_publisher-2] [INFO] [1791431453.084872744] [robot_state_publisher]: got segment fr3_hand
+[robot_state_publisher-2] [INFO] [1791431453.084896372] [robot_state_publisher]: got segment fr3_hand_tcp
+[robot_state_publisher-2] [INFO] [1791431453.084900134] [robot_state_publisher]: got segment fr3_leftfinger
+[robot_state_publisher-2] [INFO] [1791431453.084903020] [robot_state_publisher]: got segment fr3_link0
+[robot_state_publisher-2] [INFO] [1791431453.084906130] [robot_state_publisher]: got segment fr3_link0_accelerometer_bottom
+[robot_state_publisher-2] [INFO] [1791431453.084909382] [robot_state_publisher]: got segment fr3_link0_accelerometer_top
+[robot_state_publisher-2] [INFO] [1791431453.084912289] [robot_state_publisher]: got segment fr3_link1
+[robot_state_publisher-2] [INFO] [1791431453.084915048] [robot_state_publisher]: got segment fr3_link1_accelerometer_bottom
+[robot_state_publisher-2] [INFO] [1791431453.084917998] [robot_state_publisher]: got segment fr3_link1_accelerometer_top
+[robot_state_publisher-2] [INFO] [1791431453.084920877] [robot_state_publisher]: got segment fr3_link2
+[robot_state_publisher-2] [INFO] [1791431453.084924195] [robot_state_publisher]: got segment fr3_link2_accelerometer_bottom
+[robot_state_publisher-2] [INFO] [1791431453.084926820] [robot_state_publisher]: got segment fr3_link2_accelerometer_top
+[robot_state_publisher-2] [INFO] [1791431453.084929482] [robot_state_publisher]: got segment fr3_link3
+[robot_state_publisher-2] [INFO] [1791431453.084932042] [robot_state_publisher]: got segment fr3_link3_accelerometer_bottom
+[robot_state_publisher-2] [INFO] [1791431453.084934722] [robot_state_publisher]: got segment fr3_link3_accelerometer_top
+[robot_state_publisher-2] [INFO] [1791431453.084937403] [robot_state_publisher]: got segment fr3_link4
+[robot_state_publisher-2] [INFO] [1791431453.084940124] [robot_state_publisher]: got segment fr3_link4_accelerometer_bottom
+[robot_state_publisher-2] [INFO] [1791431453.084942840] [robot_state_publisher]: got segment fr3_link4_accelerometer_top
+[robot_state_publisher-2] [INFO] [1791431453.084945388] [robot_state_publisher]: got segment fr3_link5
+[robot_state_publisher-2] [INFO] [1791431453.084948018] [robot_state_publisher]: got segment fr3_link5_accelerometer_bottom
+[robot_state_publisher-2] [INFO] [1791431453.084950955] [robot_state_publisher]: got segment fr3_link5_accelerometer_top
+[robot_state_publisher-2] [INFO] [1791431453.084953493] [robot_state_publisher]: got segment fr3_link6
+[robot_state_publisher-2] [INFO] [1791431453.084956355] [robot_state_publisher]: got segment fr3_link7
+[robot_state_publisher-2] [INFO] [1791431453.084958820] [robot_state_publisher]: got segment fr3_link8
+[robot_state_publisher-2] [INFO] [1791431453.084961323] [robot_state_publisher]: got segment fr3_rightfinger
+[franka_gripper_node-9] [INFO] [1791431453.092824427] [fr3_gripper.franka_gripper]: Connected to gripper
+[ERROR] [rviz2-6]: process has died [pid 311, exit code -6, cmd '/opt/ros/humble/lib/rviz2/rviz2 -d /ws_franka_vr/install/franka_description/share/franka_description/rviz/visualize_franka.rviz --ros-args -r __node:=rviz2 --params-file /tmp/launch_params_1anqlv75 --params-file /tmp/launch_params_2kc3tbd2'].
+[ros2_control_node-4] [INFO] [1791431453.184062620] [action_server]: Action server started
+[ros2_control_node-4] [INFO] [1791431453.184114452] [resource_manager]: Successful initialization of hardware 'FrankaHardwareInterface'
+[ros2_control_node-4] [INFO] [1791431453.184157551] [FrankaHardwareInterface]: Register joint-based command interfaces
+[ros2_control_node-4] [INFO] [1791431453.184161948] [FrankaHardwareInterface]: Registering command interface: fr3_joint1 for command interface position with index 0
+[ros2_control_node-4] [INFO] [1791431453.184166401] [FrankaHardwareInterface]: Registering command interface: fr3_joint1 for command interface velocity with index 0
+[ros2_control_node-4] [INFO] [1791431453.184169899] [FrankaHardwareInterface]: Registering command interface: fr3_joint1 for command interface effort with index 0
+[ros2_control_node-4] [INFO] [1791431453.184173176] [FrankaHardwareInterface]: Registering command interface: fr3_joint2 for command interface position with index 1
+[ros2_control_node-4] [INFO] [1791431453.184176059] [FrankaHardwareInterface]: Registering command interface: fr3_joint2 for command interface velocity with index 1
+[ros2_control_node-4] [INFO] [1791431453.184178543] [FrankaHardwareInterface]: Registering command interface: fr3_joint2 for command interface effort with index 1
+[ros2_control_node-4] [INFO] [1791431453.184181148] [FrankaHardwareInterface]: Registering command interface: fr3_joint3 for command interface position with index 2
+[ros2_control_node-4] [INFO] [1791431453.184185789] [FrankaHardwareInterface]: Registering command interface: fr3_joint3 for command interface velocity with index 2
+[ros2_control_node-4] [INFO] [1791431453.184188286] [FrankaHardwareInterface]: Registering command interface: fr3_joint3 for command interface effort with index 2
+[ros2_control_node-4] [INFO] [1791431453.184190981] [FrankaHardwareInterface]: Registering command interface: fr3_joint4 for command interface position with index 3
+[ros2_control_node-4] [INFO] [1791431453.184194000] [FrankaHardwareInterface]: Registering command interface: fr3_joint4 for command interface velocity with index 3
+[ros2_control_node-4] [INFO] [1791431453.184197392] [FrankaHardwareInterface]: Registering command interface: fr3_joint4 for command interface effort with index 3
+[ros2_control_node-4] [INFO] [1791431453.184200720] [FrankaHardwareInterface]: Registering command interface: fr3_joint5 for command interface position with index 4
+[ros2_control_node-4] [INFO] [1791431453.184204042] [FrankaHardwareInterface]: Registering command interface: fr3_joint5 for command interface velocity with index 4
+[ros2_control_node-4] [INFO] [1791431453.184207661] [FrankaHardwareInterface]: Registering command interface: fr3_joint5 for command interface effort with index 4
+[ros2_control_node-4] [INFO] [1791431453.184211237] [FrankaHardwareInterface]: Registering command interface: fr3_joint6 for command interface position with index 5
+[ros2_control_node-4] [INFO] [1791431453.184214573] [FrankaHardwareInterface]: Registering command interface: fr3_joint6 for command interface velocity with index 5
+[ros2_control_node-4] [INFO] [1791431453.184218054] [FrankaHardwareInterface]: Registering command interface: fr3_joint6 for command interface effort with index 5
+[ros2_control_node-4] [INFO] [1791431453.184249197] [FrankaHardwareInterface]: Registering command interface: fr3_joint7 for command interface position with index 6
+[ros2_control_node-4] [INFO] [1791431453.184252410] [FrankaHardwareInterface]: Registering command interface: fr3_joint7 for command interface velocity with index 6
+[ros2_control_node-4] [INFO] [1791431453.184255366] [FrankaHardwareInterface]: Registering command interface: fr3_joint7 for command interface effort with index 6
+[ros2_control_node-4] [INFO] [1791431453.184258305] [FrankaHardwareInterface]: Register general purpose command interfaces
+[ros2_control_node-4] [INFO] [1791431453.184263677] [FrankaHardwareInterface]: Registering command interface: vx for command interface cartesian_velocity with index 0
+[ros2_control_node-4] [INFO] [1791431453.184267583] [FrankaHardwareInterface]: Registering command interface: vy for command interface cartesian_velocity with index 1
+[ros2_control_node-4] [INFO] [1791431453.184270940] [FrankaHardwareInterface]: Registering command interface: vz for command interface cartesian_velocity with index 2
+[ros2_control_node-4] [INFO] [1791431453.184273915] [FrankaHardwareInterface]: Registering command interface: wx for command interface cartesian_velocity with index 3
+[ros2_control_node-4] [INFO] [1791431453.184277366] [FrankaHardwareInterface]: Registering command interface: wy for command interface cartesian_velocity with index 4
+[ros2_control_node-4] [INFO] [1791431453.184280793] [FrankaHardwareInterface]: Registering command interface: wz for command interface cartesian_velocity with index 5
+[ros2_control_node-4] [INFO] [1791431453.184285109] [FrankaHardwareInterface]: Registering command interface: 0 for command interface cartesian_pose_command with index 0
+[ros2_control_node-4] [INFO] [1791431453.184292736] [FrankaHardwareInterface]: Registering command interface: 1 for command interface cartesian_pose_command with index 1
+[ros2_control_node-4] [INFO] [1791431453.184295798] [FrankaHardwareInterface]: Registering command interface: 2 for command interface cartesian_pose_command with index 2
+[ros2_control_node-4] [INFO] [1791431453.184298987] [FrankaHardwareInterface]: Registering command interface: 3 for command interface cartesian_pose_command with index 3
+[ros2_control_node-4] [INFO] [1791431453.184301938] [FrankaHardwareInterface]: Registering command interface: 4 for command interface cartesian_pose_command with index 4
+[ros2_control_node-4] [INFO] [1791431453.184304868] [FrankaHardwareInterface]: Registering command interface: 5 for command interface cartesian_pose_command with index 5
+[ros2_control_node-4] [INFO] [1791431453.184307798] [FrankaHardwareInterface]: Registering command interface: 6 for command interface cartesian_pose_command with index 6
+[ros2_control_node-4] [INFO] [1791431453.184310999] [FrankaHardwareInterface]: Registering command interface: 7 for command interface cartesian_pose_command with index 7
+[ros2_control_node-4] [INFO] [1791431453.184314433] [FrankaHardwareInterface]: Registering command interface: 8 for command interface cartesian_pose_command with index 8
+[ros2_control_node-4] [INFO] [1791431453.184317828] [FrankaHardwareInterface]: Registering command interface: 9 for command interface cartesian_pose_command with index 9
+[ros2_control_node-4] [INFO] [1791431453.184320952] [FrankaHardwareInterface]: Registering command interface: 10 for command interface cartesian_pose_command with index 10
+[ros2_control_node-4] [INFO] [1791431453.184324371] [FrankaHardwareInterface]: Registering command interface: 11 for command interface cartesian_pose_command with index 11
+[ros2_control_node-4] [INFO] [1791431453.184327683] [FrankaHardwareInterface]: Registering command interface: 12 for command interface cartesian_pose_command with index 12
+[ros2_control_node-4] [INFO] [1791431453.184331080] [FrankaHardwareInterface]: Registering command interface: 13 for command interface cartesian_pose_command with index 13
+[ros2_control_node-4] [INFO] [1791431453.184334438] [FrankaHardwareInterface]: Registering command interface: 14 for command interface cartesian_pose_command with index 14
+[ros2_control_node-4] [INFO] [1791431453.184337790] [FrankaHardwareInterface]: Registering command interface: 15 for command interface cartesian_pose_command with index 15
+[ros2_control_node-4] [INFO] [1791431453.184341401] [FrankaHardwareInterface]: Registering command interface: joint_3_position for command interface elbow_command with index 0
+[ros2_control_node-4] [INFO] [1791431453.184345113] [FrankaHardwareInterface]: Registering command interface: joint_4_sign for command interface elbow_command with index 1
+[ros2_control_node-4] [INFO] [1791431453.184430279] [resource_manager]: 'configure' hardware 'FrankaHardwareInterface' 
+[ros2_control_node-4] [INFO] [1791431453.184437777] [resource_manager]: Successful 'configure' of hardware 'FrankaHardwareInterface'
+[ros2_control_node-4] [INFO] [1791431453.184453293] [resource_manager]: 'activate' hardware 'FrankaHardwareInterface' 
+[ros2_control_node-4] [INFO] [1791431453.184656993] [FrankaHardwareInterface]: Started
+[ros2_control_node-4] [INFO] [1791431453.184663937] [resource_manager]: Successful 'activate' of hardware 'FrankaHardwareInterface'
+[demo_franka_vr_vel-5] [INFO] [1791431453.298501571] [moveit_servo_demo.moveit.moveit.ros.rdf_loader]: Loaded robot model in 0.149183 seconds
+[demo_franka_vr_vel-5] [INFO] [1791431453.298590442] [moveit_servo_demo.moveit.moveit.core.robot_model]: Loading robot model 'fr3'...
+[ros2_control_node-4] [INFO] [1791431453.306015987] [controller_manager]: update rate is 1000 Hz
+[ros2_control_node-4] [INFO] [1791431453.306075313] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[ros2_control_node-4] [INFO] [1791431453.308348653] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[demo_franka_vr_vel-5] [INFO] [1791431453.397156439] [moveit_servo_demo.moveit.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'fr3_arm': 1 1 1 1 1 1 1
+[demo_franka_vr_vel-5] [INFO] [1791431453.495103370] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[demo_franka_vr_vel-5] [INFO] [1791431453.501145602] [moveit_servo_demo.moveit.moveit.ros.current_state_monitor]: Listening to joint states on topic '/joint_states'
+[demo_franka_vr_vel-5] [INFO] [1791431453.504086752] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Listening to '/attached_collision_object' for attached collision objects
+[demo_franka_vr_vel-5] [INFO] [1791431453.504106918] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[demo_franka_vr_vel-5] [INFO] [1791431453.505095639] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Listening to '/planning_scene'
+[demo_franka_vr_vel-5] [INFO] [1791431453.505108663] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[demo_franka_vr_vel-5] [INFO] [1791431453.506587502] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[demo_franka_vr_vel-5] [INFO] [1791431453.508395736] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[demo_franka_vr_vel-5] [INFO] [1791431453.511032131] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Stopping existing planning scene publisher.
+[demo_franka_vr_vel-5] [INFO] [1791431453.511183263] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[demo_franka_vr_vel-5] [INFO] [1791431453.513412282] [moveit_servo_demo.moveit.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on '/moveit_servo_demo/publish_planning_scene'
+[spawner-8] [INFO] [1791431453.867004177] [spawner_franka_robot_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[spawner-7] [INFO] [1791431453.867670363] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[joint_state_publisher-3] [INFO] [1791431453.900918593] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[ros2_control_node-4] [INFO] [1791431454.124288978] [controller_manager]: Loading controller 'joint_state_broadcaster'
+[ros2_control_node-4] [INFO] [1791431454.131814038] [controller_manager]: Loading controller 'franka_robot_state_broadcaster'
+[spawner-7] [INFO] [1791431454.142219524] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[spawner-8] [INFO] [1791431454.145492193] [spawner_franka_robot_state_broadcaster]: [94mLoaded [1mfranka_robot_state_broadcaster[0m
+[ros2_control_node-4] [INFO] [1791431454.149642294] [controller_manager]: Configuring controller 'franka_robot_state_broadcaster'
+[spawner-8] [INFO] [1791431454.182290590] [spawner_franka_robot_state_broadcaster]: [92mConfigured and activated [1mfranka_robot_state_broadcaster[0m
+[ros2_control_node-4] [INFO] [1791431454.228846281] [controller_manager]: Configuring controller 'joint_state_broadcaster'
+[ros2_control_node-4] [INFO] [1791431454.228915639] [joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[spawner-7] [INFO] [1791431454.241305540] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+[ros2_control_node-4] [INFO] [1791431454.242738539] [controller_manager]: Loading controller 'fr3_arm_controller'
+[spawner-7] [INFO] [1791431454.256149422] [spawner_joint_state_broadcaster]: [94mLoaded [1mfr3_arm_controller[0m
+[ros2_control_node-4] [INFO] [1791431454.256414948] [controller_manager]: Configuring controller 'fr3_arm_controller'
+[ros2_control_node-4] [INFO] [1791431454.256534659] [fr3_arm_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-4] [WARN] [1791431454.256560571] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [WARN] [1791431454.256668998] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [WARN] [1791431454.256734103] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [WARN] [1791431454.256793127] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [WARN] [1791431454.256836552] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [WARN] [1791431454.256873959] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [WARN] [1791431454.256912358] [fr3_arm_controller]: 'ff_velocity_scale' parameters is not defined under 'gains.<joint_name>.' structure. Maybe you are using deprecated format 'ff_velocity_scale/<joint_name>'!
+[ros2_control_node-4] [INFO] [1791431454.256958593] [fr3_arm_controller]: Command interfaces are [effort] and state interfaces are [position velocity].
+[ros2_control_node-4] [INFO] [1791431454.256975998] [fr3_arm_controller]: Using 'splines' interpolation method.
+[ros2_control_node-4] [INFO] [1791431454.257714736] [fr3_arm_controller]: Controller state will be published at 50.00 Hz.
+[ros2_control_node-4] [INFO] [1791431454.260873380] [fr3_arm_controller]: Action status changes will be monitored at 20.00 Hz.
+[spawner-7] [INFO] [1791431454.268202507] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mfr3_arm_controller[0m
+[INFO] [spawner-8]: process has finished cleanly [pid 330]
+[INFO] [spawner-7]: process has finished cleanly [pid 317]
+[demo_franka_vr_vel-5] [INFO] [1791431456.678337143] [moveit_servo_demo.moveit.moveit.ros.move_group.collision_monitor]: Collision monitor started
+[demo_franka_vr_vel-5] Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap! You should delete your objects before attempting to unload the library or destroying the ClassLoader. The library will NOT be unloaded.
+[demo_franka_vr_vel-5]          at line 127 in ./src/class_loader.cpp
+[demo_franka_vr_vel-5] [INFO] [1791431456.686345344] [moveit_servo_demo.moveit.moveit.ros.servo]: Servo initialized successfully
+[demo_franka_vr_vel-5] [INFO] [1791431459.694888736] [moveit_servo_demo]: No warnings
+[demo_franka_vr_vel-5] [INFO] [1791431459.706348473] [moveit_servo_demo]: Servo entered latched joint hold state

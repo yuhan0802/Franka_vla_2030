@@ -1,0 +1,12 @@
+[Unit]
+Description=Disable Energy Efficient Ethernet on the Franka FCI network interface
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ethtool --set-eee enp110s0 eee off
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+FrankaVR VLA read-only detection
+安全保证：本脚本不会调用 /set_target_pose，也不会启动 execute。
+
+== 1/9 基础环境与单一真实控制栈 ==
+[PASS] 命令可用: timeout
+[PASS] 命令可用: docker
+[PASS] 命令可用: ssh
+[PASS] 命令可用: ip
+[PASS] 命令可用: python3
+[PASS] ROS 2 查询后端: franka-vr:humble 只读临时容器
+[PASS] 未检测到 Gazebo/fake/mock 容器
+[WARN] 未检测到正在运行的真机控制栈容器
+[PASS] 未检测到 Gazebo/fake/mock ROS 节点
+[FAIL] 未发现 controller_manager（真机状态栈未运行）
+
+== 2/9 FCI 专用网口与机器人路由 ==
+[PASS] FCI 网口存在: enp110s0
+[PASS] 机器人路由经专用 FCI 网口: 172.16.0.2 dev enp110s0 src 172.16.0.1 uid 1000 
+    cache 
+[PASS] FCI 链路已连接: speed=1000Mb/s, duplex=Full
+[PASS] 机器人 IP 从 FCI 网口可达: 172.16.0.2
+[PASS] PREEMPT_RT 已启用
+Traceback (most recent call last):
+  File "<stdin>", line 42, in <module>
+  File "<stdin>", line 31, in snapshot
+NameError: name 'control' is not defined

@@ -181,9 +181,9 @@ def robot_description_dependent_nodes_spawner(
             parameters=[{
                 'source_list': [
                     'franka/joint_states',
-                    'franka_gripper/joint_states',
+                    '/fr3_gripper/franka_gripper/joint_states',
                 ],
-                'rate': 30,
+                'rate': 100,
             }],
         ),
         Node(

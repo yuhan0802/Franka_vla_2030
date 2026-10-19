@@ -6,4 +6,4 @@ cd "$SCRIPT_DIR" || exit 1
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # 运行 Python 脚本
-python3 oculus_reader/start_franka_vr.py
+python3 oculus_reader/start_franka_vr.py --ros-args -p translation_scale:="${VR_TRANSLATION_SCALE:-1.0}"

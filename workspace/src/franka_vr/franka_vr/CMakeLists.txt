@@ -90,7 +90,12 @@ install(DIRECTORY
 
 install(PROGRAMS
     scripts/gazebo_gripper_marker.py
-    scripts/keyboard_manual_control.py
+  scripts/keyboard_manual_control.py
+  scripts/lerobot_episode_recorder.py
+  scripts/merge_lerobot_datasets.py
+  scripts/random_low_speed_trajectory.py
+  scripts/vla_policy_bridge.py
+  scripts/franka_vr_vla_bridge.py
     DESTINATION lib/${PROJECT_NAME}
 )
 # 声明这是一个ROS 2包

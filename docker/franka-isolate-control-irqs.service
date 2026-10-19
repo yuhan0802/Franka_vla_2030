@@ -1,0 +1,14 @@
+[Unit]
+Description=Keep non-FCI interrupts off Franka real-time CPUs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CONTROL_CPUS=4,5
+Environment=NON_CONTROL_CPUS=0-3,6-31
+ExecStart=/usr/local/sbin/franka-isolate-control-irqs
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

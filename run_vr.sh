@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Start the Meta Quest bridge after a robot control stack (fake hardware,
 # Gazebo, or real robot) is already running in another terminal.
-docker compose run --rm franka_vr \
+docker compose run --rm -e "VR_TRANSLATION_SCALE=${VR_TRANSLATION_SCALE:-1.0}" franka_vr \
   bash -lc '
     set -e
     source /opt/ros/humble/setup.bash
