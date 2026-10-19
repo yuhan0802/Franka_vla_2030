@@ -11,8 +11,8 @@ pi05_direct_velocity_executor:
     # 与 task2 的 run_20k runtime 设置一致。0.6 高于本轮观察到的模型峰值
     # 0.253 rad/s，因此不会再由 0.15 rad/s 的旧 direct 上限裁切该动作。
     max_joint_velocity_rad_s: 0.6
-    # 只保留与原 task2 执行路径一致的单层加速度保护；底层实时控制器不再
-    # 叠加第二层加速度/jerk 平滑，避免进一步拖慢模型动作。
+    # 100 Hz 执行器仍按 task2 的加速度值做安全整形；1 kHz 控制器使用同一
+    # 加速度包络并约束 jerk 连续性，消除 Franka 报告的 acceleration_discontinuity。
     max_joint_acceleration_rad_s2: 2.0
     joint_limit_margin_rad: 0.15
     soft_tracking_error_rad: 0.03
