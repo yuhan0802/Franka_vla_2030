@@ -1,0 +1,145 @@
+source_bag: /datasets/calibration/camera_extrinsics_20261017_163011
+checkerboard:
+  inner_corners:
+  - 9
+  - 6
+  square_size_m: 0.025
+transforms:
+  hand_to_front_link:
+    parent_frame: fr3_hand
+    child_frame: camera_front_link
+    translation_xyz_m:
+    - 0.07738994872978958
+    - 0.0074325751133297955
+    - 0.067247006478803
+    rotation_xyzw:
+    - 0.459184132699308
+    - -0.007923247194315357
+    - 0.8881497572798788
+    - 0.016648215363051114
+  hand_to_front:
+    parent_frame: fr3_hand
+    child_frame: camera_front_color_optical_frame
+    translation_xyz_m:
+    - 0.07687804539060432
+    - -0.00749951346339007
+    - 0.06729277297143854
+    rotation_xyzw:
+    - -0.22177282071215973
+    - -0.21108523221092199
+    - 0.6608587963809291
+    - 0.6852193021082981
+  ee_to_front:
+    parent_frame: fr3_EE
+    child_frame: camera_front_color_optical_frame
+    translation_xyz_m:
+    - 0.07687807449500232
+    - -0.007496147984737426
+    - -0.03610670129226946
+    rotation_xyzw:
+    - -0.22177217798722862
+    - -0.21108734195650813
+    - 0.6608616042879942
+    - 0.6852161521114601
+  world_to_left:
+    parent_frame: world
+    child_frame: camera_left_optical_frame
+    translation_xyz_m:
+    - 1.0853636188538955
+    - -0.25041574296970726
+    - 0.5717623548755358
+    rotation_xyzw:
+    - 0.7631317706320685
+    - 0.5241233046448612
+    - -0.195422473067675
+    - -0.32362743888648837
+  world_to_right:
+    parent_frame: world
+    child_frame: camera_right_optical_frame
+    translation_xyz_m:
+    - 0.33091174098496806
+    - 0.6027398582003829
+    - 0.6897262618783945
+    rotation_xyzw:
+    - -0.023686777488122864
+    - 0.9234475299075668
+    - -0.3826632017929151
+    - 0.015889306889737213
+  world_to_board:
+    parent_frame: world
+    child_frame: checkerboard
+    translation_xyz_m:
+    - 0.41138927278740806
+    - -0.09737964233256159
+    - -0.03382146739466943
+    rotation_xyzw:
+    - 0.018944445919179397
+    - 0.9998029935296097
+    - 0.00023393650377258557
+    - -0.00591839266683111
+quality:
+  hand_eye_method: daniilidis
+  hand_eye_candidates: 22
+  hand_eye_inliers: 22
+  front_reprojection_rms_px: 0.14170968248762314
+  hand_eye_consistency:
+    translation_rms_mm: 0.7851813829605404
+    translation_median_mm: 0.6575109124032726
+    translation_max_mm: 1.9112959986152238
+    rotation_rms_deg: 0.27040147031981254
+    rotation_median_deg: 0.15648063665223633
+    rotation_max_deg: 0.6161810488193241
+  hand_eye_method_metrics:
+    daniilidis:
+      translation_rms_mm: 2.856395194574156
+      translation_median_mm: 2.753198641852763
+      translation_max_mm: 5.111279870991755
+      rotation_rms_deg: 0.25640354651548625
+      rotation_median_deg: 0.15530512701367905
+      rotation_max_deg: 0.5906491979398716
+    park:
+      translation_rms_mm: 2.886301980700189
+      translation_median_mm: 2.7235331158399108
+      translation_max_mm: 5.0079295463492155
+      rotation_rms_deg: 0.25453095028848804
+      rotation_median_deg: 0.14724436775412397
+      rotation_max_deg: 0.5820471642328175
+    horaud:
+      translation_rms_mm: 2.886327241820497
+      translation_median_mm: 2.7235639340059046
+      translation_max_mm: 5.008013054745762
+      rotation_rms_deg: 0.2545309500390017
+      rotation_median_deg: 0.14724420793067972
+      rotation_max_deg: 0.5820480121156945
+    andreff:
+      translation_rms_mm: 2.948630386880362
+      translation_median_mm: 2.6947447958706716
+      translation_max_mm: 5.257012230377117
+      rotation_rms_deg: 0.25455750752577394
+      rotation_median_deg: 0.14697636199414413
+      rotation_max_deg: 0.5817377524697742
+    tsai:
+      translation_rms_mm: 2.9586964361259684
+      translation_median_mm: 2.837872318151211
+      translation_max_mm: 5.220908318460049
+      rotation_rms_deg: 0.2573150984945452
+      rotation_median_deg: 0.15732193710738868
+      rotation_max_deg: 0.5919313562274865
+  left_fixed_camera:
+    samples: 40
+    reprojection_rms_px: 0.14731364924390594
+    translation_rms_mm: 0.07962637974068526
+    translation_median_mm: 0.06120152884952661
+    translation_max_mm: 0.1667712748391426
+    rotation_rms_deg: 0.009444587762832246
+    rotation_median_deg: 0.008497060174597663
+    rotation_max_deg: 0.016659660757835766
+  right_fixed_camera:
+    samples: 40
+    reprojection_rms_px: 0.12127148313542525
+    translation_rms_mm: 0.0644134268749082
+    translation_median_mm: 0.04434071412942971
+    translation_max_mm: 0.1432617059137392
+    rotation_rms_deg: 0.008522927882099185
+    rotation_median_deg: 0.006839188370109143
+    rotation_max_deg: 0.021909351487319685

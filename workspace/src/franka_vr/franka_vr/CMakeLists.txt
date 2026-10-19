@@ -96,6 +96,8 @@ install(PROGRAMS
   scripts/random_low_speed_trajectory.py
   scripts/vla_policy_bridge.py
   scripts/franka_vr_vla_bridge.py
+  scripts/calibrate_camera_extrinsics.py
+  scripts/camera_info_frame_relay.py
     DESTINATION lib/${PROJECT_NAME}
 )
 # 声明这是一个ROS 2包

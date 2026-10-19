@@ -1,0 +1,71 @@
+{
+  "status": "exported",
+  "camera_info_topic": "/camera/camera_front/color/camera_info",
+  "frame_id": "camera_front_color_optical_frame",
+  "image_width": 640,
+  "image_height": 480,
+  "distortion_model": "plumb_bob",
+  "distortion_coefficients": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "camera_matrix": [
+    [
+      605.64404296875,
+      0.0,
+      321.1777038574219
+    ],
+    [
+      0.0,
+      604.4657592773438,
+      251.3024444580078
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "rectification_matrix": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "projection_matrix": [
+    [
+      605.64404296875,
+      0.0,
+      321.1777038574219,
+      0.0
+    ],
+    [
+      0.0,
+      604.4657592773438,
+      251.3024444580078,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  ],
+  "binning_x": 0,
+  "binning_y": 0
+}

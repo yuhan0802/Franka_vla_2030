@@ -1,0 +1,29 @@
+calibration_date: '2026-10-17'
+source_bag: /datasets/calibration/camera_extrinsics_20261017_163011
+checkerboard:
+  inner_corners: [9, 6]
+  square_size_m: 0.025
+transforms:
+  hand_to_front_link:
+    parent_frame: fr3_hand
+    child_frame: camera_front_link
+    translation_xyz_m: [0.07738994872978958, 0.0074325751133297955, 0.067247006478803]
+    rotation_xyzw: [0.459184132699308, -0.007923247194315357, 0.8881497572798788, 0.016648215363051114]
+  world_to_left:
+    parent_frame: world
+    child_frame: camera_left_optical_frame
+    translation_xyz_m: [1.0853636188538955, -0.25041574296970726, 0.5717623548755358]
+    rotation_xyzw: [0.7631317706320685, 0.5241233046448612, -0.195422473067675, -0.32362743888648837]
+  world_to_right:
+    parent_frame: world
+    child_frame: camera_right_optical_frame
+    translation_xyz_m: [0.33091174098496806, 0.6027398582003829, 0.6897262618783945]
+    rotation_xyzw: [-0.023686777488122864, 0.9234475299075668, -0.3826632017929151, 0.015889306889737213]
+quality:
+  hand_eye_method: daniilidis
+  hand_eye_samples: 22
+  front_reprojection_rms_px: 0.14170968248762314
+  hand_eye_translation_rms_mm: 0.7851813829605404
+  hand_eye_rotation_rms_deg: 0.27040147031981254
+  left_reprojection_rms_px: 0.14731364924390594
+  right_reprojection_rms_px: 0.12127148313542525

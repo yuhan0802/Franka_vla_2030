@@ -16,6 +16,8 @@
   <depend>franka_fr3_moveit_config</depend>
   <depend>franka_gripper</depend>
   <exec_depend>franka_msgs</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rclpy</exec_depend>
  <depend>rclcpp</depend>
   <depend>control_msgs</depend>
   <depend>generate_parameter_library</depend>

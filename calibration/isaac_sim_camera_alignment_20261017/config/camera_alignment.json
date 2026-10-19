@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-17T00:00:00+08:00",
+  "calibration_date": "2026-10-17",
+  "purpose": "Align Isaac Sim RGB cameras with the calibrated physical D435i and two C922 cameras.",
+  "render_contract": {
+    "width_px": 640,
+    "height_px": 480,
+    "color_format": "rgb8",
+    "c922_input_representation": "rectified",
+    "front_input_representation": "factory_rectified",
+    "near_clip_m": 0.01,
+    "far_clip_m": 100.0
+  },
+  "coordinate_conventions": {
+    "ros_world": "+X forward, +Y left, +Z up; origin at the Franka base world frame",
+    "ros_optical": "+X right, +Y down, +Z forward",
+    "usd_camera": "+X right, +Y up, -Z forward",
+    "optical_from_usd_rotation_xyzw": [1.0, 0.0, 0.0, 0.0],
+    "quaternion_order": "xyzw"
+  },
+  "stage_alignment": {
+    "meaning": "Transform from the calibrated ROS world frame into the Isaac stage world frame.",
+    "translation_xyz_m": [0.0, 0.0, 0.0],
+    "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
+    "verification_status": "MUST_VERIFY_IN_SCANNED_STAGE",
+    "identity_is_valid_only_if": "The simulated Franka base origin and +X/+Y/+Z axes exactly match the physical ROS world frame."
+  },
+  "isaac_stage": {
+    "fixed_camera_root_prim": "/World/AlignedCameras",
+    "robot_hand_prim_path": "AUTO_DISCOVER_UNIQUE_SUFFIX_fr3_hand",
+    "required_up_axis": "Z"
+  },
+  "cameras": {
+    "front": {
+      "model": "Intel RealSense D435i color camera",
+      "mount": "robot_link",
+      "parent_frame": "fr3_hand",
+      "child_frame": "camera_front_color_optical_frame",
+      "prim_name": "camera_front_color",
+      "ros_topics": {
+        "image": "/camera/camera_front/color/image_raw",
+        "camera_info": "/camera/camera_front/color/camera_info"
+      },
+      "optical_pose_in_parent": {
+        "translation_xyz_m": [0.07687804539060432, -0.00749951346339007, 0.06729277297143854],
+        "rotation_xyzw": [-0.22177282071215973, -0.21108523221092199, 0.6608587963809291, 0.6852193021082981]
+      },
+      "usd_camera_pose_in_parent": {
+        "translation_xyz_m": [0.07687804539060432, -0.00749951346339007, 0.06729277297143854],
+        "rotation_xyzw": [0.6852193021082981, 0.6608587963809291, 0.21108523221092199, 0.22177282071215973]
+      },
+      "raw_calibration": {
+        "distortion_model": "plumb_bob",
+        "distortion_coefficients_k1_k2_p1_p2_k3": [0.0, 0.0, 0.0, 0.0, 0.0],
+        "camera_matrix": [[605.64404296875, 0.0, 321.1777038574219], [0.0, 604.4657592773438, 251.3024444580078], [0.0, 0.0, 1.0]]
+      },
+      "render_intrinsics": {
+        "source": "camera_matrix",
+        "fx_px": 605.64404296875,
+        "fy_px": 604.4657592773438,
+        "cx_px": 321.1777038574219,
+        "cy_px": 251.3024444580078,
+        "horizontal_fov_deg": 55.70064563482409,
+        "vertical_fov_deg": 43.310592149784114
+      },
+      "usd_lens": {
+        "focal_length_attr": 24.0,
+        "horizontal_aperture_attr": 25.361431650030354,
+        "vertical_aperture_attr": 19.058151472090813,
+        "horizontal_aperture_offset_attr": -0.04666914981872184,
+        "vertical_aperture_offset_attr": 0.44875770517834634,
+        "f_stop": 0.0
+      }
+    },
+    "left": {
+      "model": "Logitech C922 Pro Stream Webcam",
+      "mount": "fixed_world",
+      "parent_frame": "world",
+      "child_frame": "camera_left_optical_frame",
+      "prim_name": "camera_left",
+      "focus": {"autofocus": false, "focus_absolute": 0},
+      "ros_topics": {
+        "image": "/camera_left/image_rect",
+        "camera_info": "/camera_left/camera_info"
+      },
+      "optical_pose_in_parent": {
+        "translation_xyz_m": [1.0853636188538955, -0.25041574296970726, 0.5717623548755358],
+        "rotation_xyzw": [0.7631317706320685, 0.5241233046448612, -0.195422473067675, -0.32362743888648837]
+      },
+      "usd_camera_pose_in_parent": {
+        "translation_xyz_m": [1.0853636188538955, -0.25041574296970726, 0.5717623548755358],
+        "rotation_xyzw": [-0.32362743888648837, -0.195422473067675, -0.5241233046448612, -0.7631317706320685]
+      },
+      "raw_calibration": {
+        "distortion_model": "plumb_bob",
+        "distortion_coefficients_k1_k2_p1_p2_k3": [0.01187453959471695, -0.08565861751217234, 0.0002558520105559572, -0.00391471361372506, 0.0],
+        "camera_matrix": [[643.0588932210668, 0.0, 325.5294215698028], [0.0, 645.5233167551019, 229.73039401790126], [0.0, 0.0, 1.0]],
+        "projection_matrix": [[640.6315307617188, 0.0, 323.2016821999496, 0.0], [0.0, 644.739013671875, 229.26661812032398, 0.0], [0.0, 0.0, 1.0, 0.0]]
+      },
+      "render_intrinsics": {
+        "source": "rectified_projection_matrix",
+        "fx_px": 640.6315307617188,
+        "fy_px": 644.739013671875,
+        "cx_px": 323.2016821999496,
+        "cy_px": 229.26661812032398,
+        "horizontal_fov_deg": 53.084907974453465,
+        "vertical_fov_deg": 40.8349257440426
+      },
+      "usd_lens": {
+        "focal_length_attr": 24.0,
+        "horizontal_aperture_attr": 23.976340942408456,
+        "vertical_aperture_attr": 17.867694921069003,
+        "horizontal_aperture_offset_attr": -0.11994472502379896,
+        "vertical_aperture_offset_attr": -0.39954331853621095,
+        "f_stop": 0.0
+      }
+    },
+    "right": {
+      "model": "Logitech C922 Pro Stream Webcam",
+      "mount": "fixed_world",
+      "parent_frame": "world",
+      "child_frame": "camera_right_optical_frame",
+      "prim_name": "camera_right",
+      "focus": {"autofocus": false, "focus_absolute": 0},
+      "ros_topics": {
+        "image": "/camera_right/image_rect",
+        "camera_info": "/camera_right/camera_info"
+      },
+      "optical_pose_in_parent": {
+        "translation_xyz_m": [0.33091174098496806, 0.6027398582003829, 0.6897262618783945],
+        "rotation_xyzw": [-0.023686777488122864, 0.9234475299075668, -0.3826632017929151, 0.015889306889737213]
+      },
+      "usd_camera_pose_in_parent": {
+        "translation_xyz_m": [0.33091174098496806, 0.6027398582003829, 0.6897262618783945],
+        "rotation_xyzw": [0.015889306889737213, -0.3826632017929151, -0.9234475299075668, 0.023686777488122864]
+      },
+      "raw_calibration": {
+        "distortion_model": "plumb_bob",
+        "distortion_coefficients_k1_k2_p1_p2_k3": [0.05230485076792835, -0.16204818434341964, -0.014855047258131394, -0.0012748104544764596, 0.0],
+        "camera_matrix": [[655.1516503418635, 0.0, 324.68052492424573], [0.0, 710.7923394872284, 243.85897287861334], [0.0, 0.0, 1.0]],
+        "projection_matrix": [[659.8330078125, 0.0, 323.61934279624256, 0.0], [0.0, 714.2606811523438, 239.03924322230523, 0.0], [0.0, 0.0, 1.0, 0.0]]
+      },
+      "render_intrinsics": {
+        "source": "rectified_projection_matrix",
+        "fx_px": 659.8330078125,
+        "fy_px": 714.2606811523438,
+        "cx_px": 323.61934279624256,
+        "cy_px": 239.03924322230523,
+        "horizontal_fov_deg": 51.744097865385406,
+        "vertical_fov_deg": 37.145909555719875
+      },
+      "usd_lens": {
+        "focal_length_attr": 24.0,
+        "horizontal_aperture_attr": 23.278617192737865,
+        "vertical_aperture_attr": 16.128565247934898,
+        "horizontal_aperture_offset_attr": -0.1316457741297251,
+        "vertical_aperture_offset_attr": -0.032282559117595346,
+        "f_stop": 0.0
+      }
+    }
+  },
+  "quality": {
+    "hand_eye_method": "daniilidis_plus_nonlinear_refinement",
+    "hand_eye_inliers": 22,
+    "front_reprojection_rms_px": 0.14170968248762314,
+    "hand_eye_translation_rms_mm": 0.7851813829605404,
+    "hand_eye_rotation_rms_deg": 0.27040147031981254,
+    "left_reprojection_rms_px": 0.14731364924390594,
+    "right_reprojection_rms_px": 0.12127148313542525
+  }
+}
