@@ -1,0 +1,25 @@
+pi05_direct_velocity_executor:
+  ros__parameters:
+    armed: false
+    control_rate_hz: 100.0
+    # 策略命令必须持续刷新；超过该时间就进入零速度停车。
+    command_timeout_s: 0.12
+    max_command_stamp_age_s: 0.20
+    max_command_future_skew_s: 0.05
+    max_feedback_age_s: 0.05
+    collision_monitor_timeout_s: 0.15
+    # 与 task2 的 run_20k runtime 设置一致。0.6 高于本轮观察到的模型峰值
+    # 0.253 rad/s，因此不会再由 0.15 rad/s 的旧 direct 上限裁切该动作。
+    max_joint_velocity_rad_s: 0.6
+    # 只保留与原 task2 执行路径一致的单层加速度保护；底层实时控制器不再
+    # 叠加第二层加速度/jerk 平滑，避免进一步拖慢模型动作。
+    max_joint_acceleration_rad_s2: 2.0
+    joint_limit_margin_rad: 0.15
+    soft_tracking_error_rad: 0.03
+    hard_tracking_error_rad: 0.08
+    max_consecutive_deadline_misses: 3
+    csv_log_path: ""
+
+pi05_collision_monitor:
+  ros__parameters:
+    rate_hz: 20.0

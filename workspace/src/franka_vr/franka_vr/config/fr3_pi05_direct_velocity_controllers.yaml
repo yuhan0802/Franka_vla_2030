@@ -1,0 +1,23 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 1000
+
+    fr3_direct_velocity_controller:
+      type: franka_vr/Pi05WatchdogVelocityController
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    franka_robot_state_broadcaster:
+      type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
+
+franka_robot_state_broadcaster:
+  ros__parameters:
+    arm_id: fr3
+
+fr3_direct_velocity_controller:
+  ros__parameters:
+    # 控制器接收执行器已经限幅后的速度目标，并直接写入关节速度接口。
+    # watchdog 超时仍会清零；这里不叠加加速度或 jerk 平滑。
+    command_timeout_s: 0.05
+    max_velocity_rad_s: 0.6

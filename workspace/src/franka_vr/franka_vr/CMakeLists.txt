@@ -6,7 +6,10 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 set(THIS_PACKAGE_INCLUDE_DEPENDS
     control_msgs
+    controller_interface
+    diagnostic_msgs
     geometry_msgs
+    hardware_interface
     moveit_core
     moveit_msgs
     moveit_ros_planning
@@ -67,12 +70,43 @@ ament_target_dependencies(rviz_pose_goal_executor
   visualization_msgs
 )
 
+add_executable(pi05_direct_velocity_executor src/pi05_direct_velocity_executor.cpp)
+ament_target_dependencies(pi05_direct_velocity_executor
+  control_msgs
+  diagnostic_msgs
+  rclcpp
+  sensor_msgs
+  std_msgs
+)
+
+add_library(pi05_watchdog_velocity_controller SHARED src/pi05_watchdog_velocity_controller.cpp)
+ament_target_dependencies(pi05_watchdog_velocity_controller
+  controller_interface
+  hardware_interface
+  pluginlib
+  rclcpp
+  realtime_tools
+  std_msgs
+)
+pluginlib_export_plugin_description_file(controller_interface pi05_direct_controller_plugins.xml)
+
+add_executable(pi05_collision_monitor src/pi05_collision_monitor.cpp)
+ament_target_dependencies(pi05_collision_monitor
+  moveit_core
+  moveit_ros_planning
+  rclcpp
+  std_msgs
+)
+
 install(TARGETS
 demo_franka_vr_vel
 moveit_cartesian_offset
 rviz_pose_goal_executor
+pi05_direct_velocity_executor
+pi05_collision_monitor
     DESTINATION lib/${PROJECT_NAME}
 )
+install(TARGETS pi05_watchdog_velocity_controller DESTINATION lib)
 install(DIRECTORY 
     config/
     DESTINATION share/${PROJECT_NAME}/config
@@ -98,6 +132,8 @@ install(PROGRAMS
   scripts/franka_vr_vla_bridge.py
   scripts/calibrate_camera_extrinsics.py
   scripts/camera_info_frame_relay.py
+  scripts/pi05_direct_policy_adapter.py
+  scripts/pi05_direct_velocity_safety.py
     DESTINATION lib/${PROJECT_NAME}
 )
 # 声明这是一个ROS 2包

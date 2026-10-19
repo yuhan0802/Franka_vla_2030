@@ -1,0 +1,7 @@
+<library path="pi05_watchdog_velocity_controller">
+  <class name="franka_vr/Pi05WatchdogVelocityController"
+         type="franka_vr::Pi05WatchdogVelocityController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Direct joint velocity controller with an internal 50 ms command watchdog.</description>
+  </class>
+</library>
