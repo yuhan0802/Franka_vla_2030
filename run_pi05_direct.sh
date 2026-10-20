@@ -163,7 +163,11 @@ else
   # 16-action chunks.  Replanning after only the first four actions repeatedly
   # discards the late-chunk grasp transition and leaves the policy in approach.
   adapter_flags=(--execute --confirm-real-robot DIRECT_JOINT_VELOCITY_PI05 --execute-horizon 16
-    --max-actions "$full_actions" --enable-gripper --gripper-speed 0.02 --gripper-force "$full_gripper_force")
+    --max-actions "$full_actions" --enable-gripper --gripper-speed 0.02 --gripper-force "$full_gripper_force"
+    --gripper-open-width "${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.08}"
+    --gripper-closed-width "${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}"
+    --gripper-epsilon-inner "${PI05_DIRECT_GRIPPER_EPSILON_INNER:-0.01}"
+    --gripper-epsilon-outer "${PI05_DIRECT_GRIPPER_EPSILON_OUTER:-0.01}")
 fi
 
 echo "Waiting for the direct robot stack to become ready (up to 120 seconds)..."

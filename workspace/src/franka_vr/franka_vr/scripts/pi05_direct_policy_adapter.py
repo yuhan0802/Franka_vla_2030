@@ -100,8 +100,8 @@ class PolicyClient:
         if self.websocket is not None: self.websocket.close(); self.websocket = None
 
 
-def closedness_from_width(width: float) -> float:
-    return float(np.clip(1.0 - width / 0.08, 0, 1))
+def closedness_from_width(width: float, open_width: float, closed_width: float) -> float:
+    return float(np.clip((open_width - width) / (open_width - closed_width), 0, 1))
 
 
 class DirectAdapter(Node):
@@ -156,7 +156,9 @@ class DirectAdapter(Node):
             if len(self.fingers) < 2:
                 raise RuntimeError("complete gripper joint feedback unavailable")
             width = sum(self.fingers[name] for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
-            self.last_gripper_closed = closedness_from_width(width) >= self.args.gripper_close_threshold
+            self.last_gripper_closed = closedness_from_width(
+                width, self.args.gripper_open_width, self.args.gripper_closed_width
+            ) >= self.args.gripper_close_threshold
             self.get_logger().info(
                 f"initialized gripper state from feedback: width={width:.4f}m "
                 f"closed={self.last_gripper_closed}")
@@ -202,7 +204,9 @@ class DirectAdapter(Node):
         return {"observation/exterior_image_1_left": self.images["left"].copy(),
                 "observation/wrist_image_left": self.images["wrist"].copy(),
                 "observation/joint_position": np.array([self.joints[name] for name in JOINT_NAMES], np.float32),
-                "observation/gripper_position": np.array([closedness_from_width(width)], np.float32),
+                "observation/gripper_position": np.array([closedness_from_width(
+                    width, self.args.gripper_open_width, self.args.gripper_closed_width
+                )], np.float32),
                 "prompt": self.args.instruction}
 
     def policy_tick(self) -> None:
@@ -264,16 +268,30 @@ class DirectAdapter(Node):
     def maybe_gripper(self, closedness: float) -> None:
         close = closedness >= self.args.gripper_close_threshold if self.last_gripper_closed is not True else closedness > self.args.gripper_open_threshold
         if close == self.last_gripper_closed: return
-        self.queue.clear_for_gripper(); self.stop_command()
-        self.need_fresh_after = max(self.need_fresh_after, time.monotonic()); self.gripper_busy = True
+        # 暂停手臂并等待夹爪动作完成，但保留模型已经输出的当前 16 步动作块。
+        # 之前这里清空队列并立即重新推理，实测会让 close 后的新首步马上输出
+        # open，形成约 0.5 秒一次的反复开合，夹爪无法持续夹持。
+        self.stop_command(); self.gripper_busy = True
         self.pending_gripper_closed = close
+        # DROID 的最后一维只作为带滞回的开/关状态使用，不把过渡值线性
+        # 换算成物理宽度。现场的 0.649 曾被错误换算成 94.6 mm，导致
+        # Franka 未在该宽度检测到物体并中止抓取。
+        target_width = (
+            self.args.gripper_closed_width if close else self.args.gripper_open_width)
         if close:
-            goal = Grasp.Goal(); goal.width = (1 - closedness) * .08; goal.speed = self.args.gripper_speed
-            goal.force = self.args.gripper_force; goal.epsilon.inner = .01; goal.epsilon.outer = .01
+            goal = Grasp.Goal(); goal.width = target_width; goal.speed = self.args.gripper_speed
+            goal.force = self.args.gripper_force
+            goal.epsilon.inner = self.args.gripper_epsilon_inner
+            goal.epsilon.outer = self.args.gripper_epsilon_outer
             future = self.grasp_client.send_goal_async(goal)
+            self.get_logger().warning(
+                f"gripper CLOSE requested: width={goal.width:.4f}m "
+                f"force={goal.force:.1f}N closedness={closedness:.4f}")
         else:
-            goal = Move.Goal(); goal.width = (1 - closedness) * .08; goal.speed = self.args.gripper_speed
+            goal = Move.Goal(); goal.width = target_width; goal.speed = self.args.gripper_speed
             future = self.move_client.send_goal_async(goal)
+            self.get_logger().info(
+                f"gripper OPEN requested: width={goal.width:.4f}m closedness={closedness:.4f}")
         future.add_done_callback(self.gripper_goal)
 
     def gripper_goal(self, future) -> None:
@@ -287,7 +305,10 @@ class DirectAdapter(Node):
         except Exception as error: self.latch(f"gripper action failed: {error}"); return
         if not result.success: self.latch(f"gripper action reported failure: {result.error}"); return
         self.last_gripper_closed = self.pending_gripper_closed; self.gripper_busy = False
-        self.need_fresh_after = time.monotonic()  # Forces new observation and inference; old chunk was cleared.
+        self.pending_gripper_closed = None
+        self.get_logger().warning(
+            f"gripper {'CLOSED' if self.last_gripper_closed else 'OPENED'} successfully; "
+            f"continuing {len(self.queue)} remaining actions in current chunk")
 
     def stop_command(self) -> None:
         if self.publisher is None: return
@@ -322,6 +343,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=2.0)
     parser.add_argument("--max-observation-age", type=float, default=.2); parser.add_argument("--max-camera-skew", type=float, default=.05)
     parser.add_argument("--max-state-image-skew", type=float, default=.05); parser.add_argument("--enable-gripper", action="store_true")
+    parser.add_argument("--gripper-open-width", type=float, default=.08)
+    parser.add_argument("--gripper-closed-width", type=float, default=0.0)
+    parser.add_argument("--gripper-epsilon-inner", type=float, default=.01)
+    parser.add_argument("--gripper-epsilon-outer", type=float, default=.01)
     parser.add_argument("--gripper-open-threshold", type=float, default=.4); parser.add_argument("--gripper-close-threshold", type=float, default=.6)
     parser.add_argument("--gripper-speed", type=float, default=.04); parser.add_argument("--gripper-force", type=float, default=10.)
     parser.add_argument("--jsonl-log", default=""); parser.add_argument("--execute", action="store_true")
@@ -332,6 +357,10 @@ def parse_args() -> argparse.Namespace:
     if not 1 <= args.max_actions <= 2000: parser.error("max-actions must be in [1, 2000]")
     if not 0 < args.gripper_speed <= .05: parser.error("gripper-speed must be in (0, 0.05]")
     if not 1 <= args.gripper_force <= 30: parser.error("gripper-force must be in [1, 30] N")
+    if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .2:
+        parser.error("gripper widths must satisfy 0 <= closed < open <= 0.2 m")
+    if not 0 <= args.gripper_epsilon_inner <= .2 or not 0 <= args.gripper_epsilon_outer <= .2:
+        parser.error("gripper epsilon values must be in [0, 0.2] m")
     if args.execute and args.confirm_real_robot != "DIRECT_JOINT_VELOCITY_PI05": parser.error("execute requires exact direct-flow confirmation token")
     return args
 
