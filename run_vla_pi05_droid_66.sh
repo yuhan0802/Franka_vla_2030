@@ -20,6 +20,11 @@ checkpoint_step="${PI05_CHECKPOINT_STEP:-latest}"
 checkpoint_root="${PI05_CHECKPOINT_ROOT:-}"
 policy_config="${PI05_POLICY_CONFIG:-pi05_franka_tube_pick_v5_finetune}"
 server_load_timeout="${PI05_SERVER_LOAD_TIMEOUT:-300}"
+remote_uv_bin="${PI05_REMOTE_UV_BIN:-/data/vla/bin/uv}"
+remote_uv_project_environment="${PI05_REMOTE_UV_PROJECT_ENVIRONMENT:-}"
+remote_env_file="${PI05_REMOTE_ENV_FILE:-/data/vla/openpi-main/env-66.sh}"
+remote_log_root="${PI05_REMOTE_LOG_ROOT:-/data/vla/openpi-main/logs/pi05-droid-66}"
+remote_tmux_tmpdir="${PI05_REMOTE_TMUX_TMPDIR:-/data/vla/tmp/tmux}"
 robot_session="franka_vr_pi05_droid_robot"
 camera_session="franka_vr_pi05_droid_cameras"
 
@@ -38,6 +43,11 @@ remote_deploy() {
   local action="$1" command
   printf -v command 'PORT=%q PI05_DROID_TMUX_SESSION=%q CHECKPOINT_STEP=%q CONFIG_NAME=%q' \
     "$server_port" "$remote_session" "$checkpoint_step" "$policy_config"
+  printf -v command '%s UV_BIN=%q ENV_FILE=%q PI05_DROID_LOG_ROOT=%q TMUX_TMPDIR=%q' \
+    "$command" "$remote_uv_bin" "$remote_env_file" "$remote_log_root" "$remote_tmux_tmpdir"
+  if [[ -n "$remote_uv_project_environment" ]]; then
+    printf -v command '%s UV_PROJECT_ENVIRONMENT=%q' "$command" "$remote_uv_project_environment"
+  fi
   if [[ -n "$checkpoint_root" ]]; then
     printf -v command '%s CHECKPOINT_ROOT=%q' "$command" "$checkpoint_root"
   fi
@@ -80,9 +90,10 @@ start_server() {
   check_ssh
   if [[ "$checkpoint_step" != latest ]]; then
     local checkpoint_command
-    printf -v checkpoint_command 'bash -s -- %q %q %q %q %q %q %q %q' \
+    printf -v checkpoint_command 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q' \
       "$checkpoint_step" "$server_port" "$remote_session" "$deploy_script" "$checkpoint_root" \
-      "${PI05_SERVER_GPU:-0}" "$policy_config" "$server_load_timeout"
+      "${PI05_SERVER_GPU:-0}" "$policy_config" "$server_load_timeout" "$remote_uv_bin" \
+      "$remote_env_file" "$remote_log_root" "$remote_tmux_tmpdir" "$remote_uv_project_environment"
     ssh "${ssh_args[@]}" "$checkpoint_command" < "$root_dir/scripts/pi05_checkpoint_server.sh"
   fi
   if remote_port_listening; then
@@ -109,7 +120,12 @@ start_server() {
 run_probe() {
   start_server
   echo "Running the remote synthetic probe (zero images and zero joint state; no robot interfaces)..."
-  remote_deploy probe
+  # 新服务器上的首次 JAX 编译可能超过 WebSocket 默认心跳时间，服务仍会完成
+  # 编译并保持健康。只重试一次纯模型探针；两次都失败时仍拒绝进入真机流程。
+  if ! remote_deploy probe; then
+    echo "Initial synthetic probe failed; retrying once after model warm-up..." >&2
+    remote_deploy probe
+  fi
 }
 
 show_status() {

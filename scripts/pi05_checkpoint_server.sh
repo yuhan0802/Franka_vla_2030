@@ -5,6 +5,11 @@ step="$1"; port="$2"; session="$3"; deploy="$4"; root="$5"
 gpu="${6:-0}"
 policy_config="${7:-pi05_franka_tube_pick_v5_finetune}"
 load_timeout="${8:-300}"
+uv_bin="${9:-/data/vla/bin/uv}"
+env_file="${10:-/data/vla/openpi-main/env-66.sh}"
+log_root="${11:-/data/vla/openpi-main/logs/pi05-droid-66}"
+tmux_tmpdir="${12:-/data/vla/tmp/tmux}"
+uv_project_environment="${13:-}"
 root="${root:-/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/tube_pick_v5_full_bs32_20k}"
 checkpoint="$root/$step"
 [[ "$load_timeout" =~ ^[1-9][0-9]*$ ]] || {
@@ -16,7 +21,7 @@ checkpoint="$root/$step"
   echo "Provide the actual checkpoint root using PI05_CHECKPOINT_ROOT. Existing weights were not changed." >&2
   exit 4
 }
-export TMUX_TMPDIR="${TMUX_TMPDIR:-/data/vla/tmp/tmux}"
+export TMUX_TMPDIR="$tmux_tmpdir"
 listening() { ss -ltn | awk -v port=":$port" '$4 ~ port"$" {found=1} END {exit !found}'; }
 verify() {
   python3 - "$port" "$checkpoint" "$policy_config" <<'PY'
@@ -61,12 +66,12 @@ if tmux has-session -t "$session" 2>/dev/null; then
   echo "Session already exists but port is unavailable: $session; inspect its log before retrying." >&2
   exit 5
 fi
-log_root=/data/vla/openpi-main/logs/pi05-droid-66
 mkdir -p "$TMUX_TMPDIR" "$log_root"
 # Put all settings in the pane command: tmux does not reliably inherit the
 # caller's environment when its server is already running.
-printf -v command 'exec env CUDA_VISIBLE_DEVICES=%q PORT=%q PI05_DROID_TMUX_SESSION=%q CHECKPOINT_STEP=%q CHECKPOINT_ROOT=%q CONFIG_NAME=%q bash %q foreground >>%q 2>&1' \
-  "$gpu" "$port" "$session" "$step" "$root" "$policy_config" "$deploy" "$log_root/$session.log"
+printf -v command 'exec env CUDA_VISIBLE_DEVICES=%q PORT=%q PI05_DROID_TMUX_SESSION=%q CHECKPOINT_STEP=%q CHECKPOINT_ROOT=%q CONFIG_NAME=%q UV_BIN=%q ENV_FILE=%q PI05_DROID_LOG_ROOT=%q TMUX_TMPDIR=%q UV_PROJECT_ENVIRONMENT=%q bash %q foreground >>%q 2>&1' \
+  "$gpu" "$port" "$session" "$step" "$root" "$policy_config" "$uv_bin" "$env_file" \
+  "$log_root" "$TMUX_TMPDIR" "$uv_project_environment" "$deploy" "$log_root/$session.log"
 tmux new-session -d -s "$session" "$command"
 echo "Waiting up to $load_timeout seconds for policy service on port $port..."
 for attempt in $(seq 1 "$load_timeout"); do
