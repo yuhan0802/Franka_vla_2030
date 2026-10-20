@@ -14,6 +14,7 @@ remote_user="${VLA_REMOTE_USER:-vla}"
 ssh_port="${VLA_SSH_PORT:-1172}"
 ssh_key="${VLA_SSH_KEY:-/home/mac/.ssh/id_rsa_66}"
 server_port="${VLA_SERVER_PORT:-8094}"
+instruction="${VLA_INSTRUCTION:-put the red test tube into the red basket}"
 deploy_script="${VLA_REMOTE_DEPLOY_SCRIPT:-/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA/vla-scripts/run_deploy_franka_pi05_droid_66.sh}"
 remote_session="${PI05_DROID_TMUX_SESSION:-pi05-droid-66-${server_port}}"
 checkpoint_step="${PI05_CHECKPOINT_STEP:-latest}"
@@ -25,6 +26,7 @@ remote_uv_project_environment="${PI05_REMOTE_UV_PROJECT_ENVIRONMENT:-}"
 remote_env_file="${PI05_REMOTE_ENV_FILE:-/data/vla/openpi-main/env-66.sh}"
 remote_log_root="${PI05_REMOTE_LOG_ROOT:-/data/vla/openpi-main/logs/pi05-droid-66}"
 remote_tmux_tmpdir="${PI05_REMOTE_TMUX_TMPDIR:-/data/vla/tmp/tmux}"
+remote_openpi_root="${PI05_REMOTE_OPENPI_ROOT:-/mnt/82_store/lyh/VLA/openpi-main}"
 robot_session="franka_vr_pi05_droid_robot"
 camera_session="franka_vr_pi05_droid_cameras"
 
@@ -41,8 +43,8 @@ fi
 
 remote_deploy() {
   local action="$1" command
-  printf -v command 'PORT=%q PI05_DROID_TMUX_SESSION=%q CHECKPOINT_STEP=%q CONFIG_NAME=%q' \
-    "$server_port" "$remote_session" "$checkpoint_step" "$policy_config"
+  printf -v command 'PORT=%q PI05_DROID_TMUX_SESSION=%q CHECKPOINT_STEP=%q CONFIG_NAME=%q INSTRUCTION=%q' \
+    "$server_port" "$remote_session" "$checkpoint_step" "$policy_config" "$instruction"
   printf -v command '%s UV_BIN=%q ENV_FILE=%q PI05_DROID_LOG_ROOT=%q TMUX_TMPDIR=%q' \
     "$command" "$remote_uv_bin" "$remote_env_file" "$remote_log_root" "$remote_tmux_tmpdir"
   if [[ -n "$remote_uv_project_environment" ]]; then
@@ -120,12 +122,28 @@ start_server() {
 run_probe() {
   start_server
   echo "Running the remote synthetic probe (zero images and zero joint state; no robot interfaces)..."
-  # 新服务器上的首次 JAX 编译可能超过 WebSocket 默认心跳时间，服务仍会完成
-  # 编译并保持健康。只重试一次纯模型探针；两次都失败时仍拒绝进入真机流程。
-  if ! remote_deploy probe; then
-    echo "Initial synthetic probe failed; retrying once after model warm-up..." >&2
-    remote_deploy probe
+  echo "The first JAX compilation may take several minutes; waiting without WebSocket keepalive pings."
+  local command
+  printf -v command 'cd %q && exec env' "$remote_openpi_root"
+  if [[ -n "$remote_uv_project_environment" ]]; then
+    printf -v command '%s UV_PROJECT_ENVIRONMENT=%q' "$command" "$remote_uv_project_environment"
   fi
+  printf -v command '%s %q run --no-sync python - --host 127.0.0.1 --port %q --instruction %q --timeout %q' \
+    "$command" "$remote_uv_bin" "$server_port" "$instruction" "$server_load_timeout"
+  ssh "${ssh_args[@]}" "$command" < "$root_dir/scripts/pi05_remote_probe.py"
+}
+
+stop_remote_server() {
+  check_ssh
+  if [[ -z "$checkpoint_root" || "$checkpoint_step" == latest ]]; then
+    remote_deploy stop
+    return
+  fi
+  local checkpoint command
+  checkpoint="$checkpoint_root/$checkpoint_step"
+  printf -v command 'bash -s -- %q %q %q %q %q' \
+    "$server_port" "$remote_session" "$checkpoint" "$policy_config" "$remote_tmux_tmpdir"
+  ssh "${ssh_args[@]}" "$command" < "$root_dir/scripts/pi05_remote_stop.sh"
 }
 
 show_status() {
@@ -167,8 +185,7 @@ stop_new_resources() {
   local failed=0
   stop_local_session_gracefully "$robot_session" robot || failed=1
   stop_local_session_gracefully "$camera_session" camera || failed=1
-  check_ssh || return 1
-  remote_deploy stop || failed=1
+  stop_remote_server || failed=1
   return "$failed"
 }
 
