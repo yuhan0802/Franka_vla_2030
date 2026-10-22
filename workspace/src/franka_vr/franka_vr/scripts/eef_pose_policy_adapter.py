@@ -153,6 +153,8 @@ class EefAdapter(Node):
         self.chunk: list = []; self.chunk_index = 0; self.chunks_done = 0
         self.executed = 0; self.next_action_at = 0.0; self.need_fresh_after = 0.0
         self.fault = False; self.finished = False
+        # arm() spins the node while waiting for TF/services; tick must not act until it has finished.
+        self.armed = False
         self.gripper_open: Optional[bool] = None; self.pending_gripper_open: Optional[bool] = None
         self.commanded_gripper_open = True
         self.target_client = None; self.move_client = None; self.grasp_client = None
@@ -240,7 +242,7 @@ class EefAdapter(Node):
 
     # ----------------------------------------------------------------- loop
     def tick(self) -> None:
-        if self.finished or self.fault: return
+        if not self.armed or self.finished or self.fault: return
         now = time.monotonic()
         if self.future is not None:
             if not self.future.done():
@@ -395,12 +397,15 @@ class EefAdapter(Node):
             self.commanded_gripper_open = gripper_open_from_width(
                 width, self.args.gripper_state_closed_width, self.args.gripper_state_open_width) >= 0.5
             self.get_logger().info(f"gripper feedback width={width:.4f}m -> open={self.commanded_gripper_open}")
-        if not self.args.execute: return
-        if not self.target_client.wait_for_service(timeout_sec=max(1.0, deadline - time.monotonic())):
-            raise RuntimeError("/set_target_pose unavailable; run_robot.sh (Servo stack) must be running")
-        if self.args.enable_gripper:
-            if not self.move_client.wait_for_server(timeout_sec=10) or not self.grasp_client.wait_for_server(timeout_sec=10):
-                raise RuntimeError("gripper action server unavailable")
+        if self.args.execute:
+            if not self.target_client.wait_for_service(timeout_sec=max(1.0, deadline - time.monotonic())):
+                raise RuntimeError("/set_target_pose unavailable; run_robot.sh (Servo stack) must be running")
+            if self.args.enable_gripper:
+                if not self.move_client.wait_for_server(timeout_sec=10) or not self.grasp_client.wait_for_server(timeout_sec=10):
+                    raise RuntimeError("gripper action server unavailable")
+        self.armed = True
+        self.log("armed")
+        self.get_logger().info("startup checks passed: TF, feedback and services ready")
 
     def finish(self, reason: str) -> None:
         self.request_stop(); self.finished = True
