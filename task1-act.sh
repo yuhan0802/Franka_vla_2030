@@ -29,7 +29,7 @@ case "$mode" in
 esac
 
 "$script_dir/run_eef_pose.sh" server
-run_dir="$script_dir/logs/eef_task1_act_$(date +%Y%m%d_%H%M%S)_$$"
+run_dir="${EEF_RUN_DIR:-$script_dir/logs/eef_task1_act_$(date +%Y%m%d_%H%M%S)_$$}"
 
 # 真机执行前先做一次真实观测 dry-run：只推理，不发布任何目标。
 EEF_LOG_DIR="$run_dir/dry_run" EEF_MAX_CHUNKS=1 "$script_dir/run_eef_pose.sh" dry-run

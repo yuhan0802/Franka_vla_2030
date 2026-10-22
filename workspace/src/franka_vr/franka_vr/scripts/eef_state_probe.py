@@ -60,7 +60,11 @@ class StateProbe(Node):
             self.create_subscription(Image, topic, functools.partial(self.image_cb, key), qos_profile_sensor_data)
         for source, topic in JOINT_SOURCES.items():
             self.create_subscription(JointState, topic, functools.partial(self.joint_cb, source), qos_profile_sensor_data)
-        self.started = time.monotonic(); self.saved = 0; self.next_image_at = self.started
+        # Recording (and the gripper cycle) starts only once every source publishes:
+        # a freshly launched robot stack needs ~1 min before joints/TF exist.
+        self.launched = time.monotonic(); self.started = self.launched; self.ready = False
+        self.startup_failed: List[str] = []; self.next_wait_log = self.launched
+        self.saved = 0; self.next_image_at = self.launched
         self.samples: List[Dict[str, Any]] = []; self.actions: List[Dict[str, Any]] = []
         self.steps = self.gripper_plan() if args.gripper_cycle else []
         self.step_index = 0; self.step_started = self.started; self.pending = False; self.sent = False
@@ -108,7 +112,7 @@ class StateProbe(Node):
         plan = [("baseline", None, a.baseline)]
         if a.homing: plan.append(("homing", "homing", a.settle))
         plan += [("open", "move", a.settle), ("close", "grasp", a.settle), ("open_again", "move", a.settle)]
-        self.clients = {"homing": ActionClient(self, Homing, "/fr3_gripper/franka_gripper/homing"),
+        self.gripper_clients = {"homing": ActionClient(self, Homing, "/fr3_gripper/franka_gripper/homing"),
                         "move": ActionClient(self, Move, "/fr3_gripper/franka_gripper/move"),
                         "grasp": ActionClient(self, Grasp, "/fr3_gripper/franka_gripper/grasp")}
         return plan
@@ -129,7 +133,7 @@ class StateProbe(Node):
 
     def send(self, now: float) -> None:
         name, kind, _ = self.steps[self.step_index]; a = self.args
-        client = self.clients[kind]; self.sent = True
+        client = self.gripper_clients[kind]; self.sent = True
         if not client.wait_for_server(timeout_sec=2.0):
             self.record_action(name, kind, now, accepted=False, error="action server unavailable"); return
         if kind == "homing": goal = Homing.Goal()
@@ -168,8 +172,33 @@ class StateProbe(Node):
         self.pending = False; self.step_started = now   # settle time counts from the result
 
     # ----------------------------------------------------------------- record
+    def missing_sources(self, pose: Optional[Dict[str, Any]]) -> List[str]:
+        missing = [JOINT_SOURCES[source] for source in JOINT_SOURCES if source not in self.joints]
+        if not pose or "position" not in pose: missing.append("TF world->fr3_link8")
+        missing += [f"{key} image" for key in ("exterior", "wrist") if key not in self.images]
+        return missing
+
+    def wait_until_ready(self, now: float, pose: Optional[Dict[str, Any]]) -> bool:
+        missing = self.missing_sources(pose)
+        if not missing:
+            self.ready = True; self.started = self.step_started = self.next_image_at = now
+            self.log("ready", waited_s=now - self.launched)
+            self.get_logger().warning(f"all sources publishing after {now - self.launched:.1f}s; recording starts")
+            return True
+        if now >= self.next_wait_log:
+            self.log("waiting", waited_s=now - self.launched, missing=missing)
+            self.get_logger().warning(f"waiting {now - self.launched:.0f}s for: {', '.join(missing)}")
+            self.next_wait_log = now + 2.0
+        if now - self.launched > self.args.startup_timeout:
+            self.startup_failed = missing; self.done = True
+            self.log("startup_timeout", missing=missing)
+            self.get_logger().error(f"startup timeout: never received {', '.join(missing)}")
+        return False
+
     def sample(self) -> None:
-        now = time.monotonic(); elapsed = now - self.started
+        now = time.monotonic()
+        if not self.ready and not self.wait_until_ready(now, self.pose()): return
+        elapsed = now - self.started
         if self.steps: self.advance_gripper(now)
         pose = self.pose()
         record: Dict[str, Any] = {"t": elapsed, "phase": self.phase(), "pose": pose, "sources": {}}
@@ -201,6 +230,8 @@ class StateProbe(Node):
 
     def summary(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"duration_s": time.monotonic() - self.started, "images_saved": self.saved,
+                               "startup_wait_s": self.started - self.launched if self.ready else None,
+                               "startup_missing": self.startup_failed,
                                "gripper_actions": self.actions, "sources": {}}
         for source, topic in JOINT_SOURCES.items():
             widths = [s["sources"][source]["width"] for s in self.samples
@@ -231,6 +262,7 @@ def parse_args() -> argparse.Namespace:
     add("--out-dir", required=True)
     add("--exterior-image-topic", default="/camera_left/image_rect")
     add("--wrist-image-topic", default="/camera/camera_front/color/image_raw")
+    add("--startup-timeout", type=float, default=180.0, help="wait this long for every source before recording")
     add("--duration", type=float, default=20.0); add("--rate", type=float, default=20.0)
     add("--image-period", type=float, default=0.5, help="seconds between saved image pairs")
     add("--gripper-state-closed-width", type=float, default=0.01)
@@ -262,6 +294,7 @@ def main() -> None:
         (node.out / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
         print(json.dumps(summary, indent=2, default=str)); node.log_file.close()
         node.destroy_node(); rclpy.shutdown()
+    if node.startup_failed: raise SystemExit(1)
 
 
 if __name__ == "__main__": main()

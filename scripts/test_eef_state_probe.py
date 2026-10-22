@@ -45,6 +45,9 @@ class FakeTime:
 
 
 class FakeNode:
+    # rclpy.node.Node exposes a read-only `clients` property (first robot run crashed on it).
+    clients = property(lambda self: [])
+
     def __init__(self, name): self.subs, self.timers = {}, []
     def create_subscription(self, kind, topic, callback, qos): self.subs.setdefault(topic, []).append(callback)
     def create_timer(self, period, callback): self.timers.append(callback)
@@ -119,14 +122,17 @@ class ProbeTests(unittest.TestCase):
         eef_state_probe.time.monotonic = fake_monotonic
         cls.probe = eef_state_probe
 
-    def run_probe(self, *extra, steps=2000):
+    def run_probe(self, *extra, steps=2000, silent_steps=0, expect_done=True):
         GOALS.clear(); Clock.now = 100.0
         out = tempfile.mkdtemp()
         sys.argv = ["probe", "--out-dir", out, "--duration", "2", "--image-period", "0.5", *extra]
         node = self.probe.StateProbe(self.probe.parse_args())
-        for _ in range(steps):
+        for step in range(steps):
             if node.done: break
             Clock.now += 0.05
+            if step < silent_steps:      # robot stack still starting: nothing publishes yet
+                for timer in node.timers: timer()
+                continue
             node.publish("/camera_left/image_rect", image_msg(80, (480, 640, 3)))
             node.publish("/camera/camera_front/color/image_raw", image_msg(160, (720, 1280, 3)))
             # As in the failed run: the real gripper topic says ~closed, the merge disagrees.
@@ -134,9 +140,23 @@ class ProbeTests(unittest.TestCase):
             node.publish("/joint_states", joint_msg(ARM + FINGERS, [0.1] * 7 + [0.035, 0.035]))
             node.publish("/franka/joint_states", joint_msg(ARM, [0.1] * 7))
             for timer in node.timers: timer()
-        self.assertTrue(node.done)
+        self.assertEqual(node.done, expect_done)
         summary = node.summary(); node.log_file.close()
         return pathlib.Path(out), summary
+
+    def test_recording_waits_for_late_robot_stack(self):
+        # Second robot run: the probe finished before the robot stack published anything.
+        out, summary = self.run_probe(silent_steps=600)            # 30 s of silence
+        self.assertAlmostEqual(summary["startup_wait_s"], 30.0, delta=0.1)
+        self.assertGreaterEqual(summary["duration_s"], 2.0)
+        self.assertIsNotNone(summary["sources"]["gripper"]["width_max"])
+        events = [json.loads(line)["event"] for line in open(out / "probe.jsonl")]
+        self.assertLess(events.index("ready"), events.index("sample"))
+
+    def test_startup_timeout_reports_missing_sources(self):
+        out, summary = self.run_probe("--startup-timeout", "5", silent_steps=10**6, steps=200)
+        self.assertEqual(summary["images_saved"], 0)
+        self.assertIn("/fr3_gripper/franka_gripper/joint_states", summary["startup_missing"])
 
     def test_observe_only_saves_images_and_separates_sources(self):
         out, summary = self.run_probe()
