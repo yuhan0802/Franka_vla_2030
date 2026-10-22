@@ -236,6 +236,31 @@ def axis_test_chunk(axis: str, magnitude: float, steps: int, gripper_open: float
     return chunk
 
 
+# Task0 training start (world -> fr3_link8): all 29 episodes begin within 0.3 mm / 0.13 deg of it.
+TASK0_START_POSITION = (0.5577, -0.0015, 0.3205)
+TASK0_START_QUATERNION = (0.92537, -0.37885, -0.01236, 0.00364)
+
+
+def goto_chunk(start_position: object, start_quaternion: object, goal_position: object, goal_quaternion: object,
+               rotation_frame: str, gripper_open: float = 1.0, max_step_m: float = 0.004,
+               max_step_rad: float = 0.02) -> np.ndarray:
+    """One chunk of equal small steps (command units) from the start pose to the goal pose."""
+    q0, q1 = normalize_quaternion(start_quaternion), normalize_quaternion(goal_quaternion)
+    inverse = q0 * np.array([-1.0, -1.0, -1.0, 1.0])
+    relative = quaternion_multiply(inverse, q1) if rotation_frame == "tool" else quaternion_multiply(q1, inverse)
+    rotvec = quaternion_to_rotvec(relative)
+    delta = np.asarray(goal_position, dtype=np.float64) - np.asarray(start_position, dtype=np.float64)
+    steps = int(np.ceil(max(np.linalg.norm(delta) / max_step_m, np.linalg.norm(rotvec) / max_step_rad, 1.0)))
+    if steps > ACTION_SHAPE[0]:
+        raise ValueError(f"goal is {np.linalg.norm(delta):.3f} m / {np.linalg.norm(rotvec):.3f} rad away; "
+                         f"more than one {ACTION_SHAPE[0]}-step chunk, move closer first")
+    chunk = np.zeros((steps, 7))
+    chunk[:, :3] = delta / steps / LINEAR_SCALE_M
+    chunk[:, 3:6] = rotvec / steps / ANGULAR_SCALE_RAD
+    chunk[:, 6] = gripper_open
+    return chunk
+
+
 def joints_consistent(reference: dict, observed: dict, names: tuple, tolerance: float) -> bool:
     """True when `observed` has every joint in `names` within `tolerance` of `reference`."""
     return all(name in reference and name in observed and abs(reference[name] - observed[name]) <= tolerance

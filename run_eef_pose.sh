@@ -6,6 +6,7 @@
 #
 #   dry-run    policy + cameras + robot state; no target is sent
 #   axis-test  one hand-built small motion along EEF_TEST_AXIS; no policy
+#   home       move to the Task0 training start pose (one chunk, <=4 mm/step); no policy
 #   execute    serial 15-step chunks on the real robot
 #   probe      robot stack + cameras; record images and every gripper/arm state
 #              source without commanding the arm (EEF_GRIPPER_TEST=I_UNDERSTAND_GRIPPER_MOTION
@@ -15,8 +16,10 @@
 set -euo pipefail
 
 mode="${1:-dry-run}"
-case "$mode" in dry-run|axis-test|execute|probe|status|stop|server|server-status|server-stop) ;; *)
-  echo "Usage: $0 {dry-run|axis-test|execute|probe|status|stop|server|server-status|server-stop}" >&2; exit 2;; esac
+case "$mode" in dry-run|axis-test|home|execute|probe|status|stop|server|server-status|server-stop) ;; *)
+  echo "Usage: $0 {dry-run|axis-test|home|execute|probe|status|stop|server|server-status|server-stop}" >&2; exit 2;; esac
+# home is an axis-test whose single chunk goes to the training start pose.
+[[ "$mode" == home ]] && { mode=axis-test; export EEF_TEST_AXIS=home EEF_ROTATION_FRAME=tool; }
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root_dir"
 robot_session=franka_vr_eef_robot

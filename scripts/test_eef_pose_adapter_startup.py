@@ -354,6 +354,29 @@ class AdapterStartupTests(unittest.TestCase):
         self.assertIn("task complete", complete["reason"])
         self.assertEqual(node.chunks_done, 5)    # 4 scripted + 1 idle; the 2nd idle chunk is never executed
 
+    def test_home_moves_to_training_start_and_settles(self):
+        World.reset(tf_after=2, real_after=5, follow_after=3)
+        log = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False).name
+        node = self.make_node(*self.EXECUTE, "--test-axis", "home", "--jsonl-log", log)
+        self.run_until_done(node)
+        self.assertFalse(node.fault); self.assertTrue(node.finished)
+        hold, *motion = World.targets
+        self.assertGreater(len(motion), 1)
+        np.testing.assert_allclose(target_xyz(motion[-1]), self.adapter.TASK0_START_POSITION, atol=1e-9)
+        steps = np.diff([target_xyz(r) for r in [hold, *motion]], axis=0)
+        self.assertLessEqual(np.linalg.norm(steps, axis=1).max(), 0.004 + 1e-9)
+        names = [e["event"] for e in self.events(log)]
+        self.assertLess(names.index("settled"), names.index("complete"))   # reached before the hold
+
+    def test_home_refuses_when_too_far(self):
+        World.reset(tf_after=2, real_after=5)
+        node = self.make_node(*self.EXECUTE, "--test-axis", "home")
+        self.adapter.TASK0_START_POSITION_BACKUP = self.adapter.TASK0_START_POSITION
+        self.adapter.TASK0_START_POSITION = (0.2555, 0.0, 0.3)     # 30 cm away
+        try: self.run_until_done(node)
+        finally: self.adapter.TASK0_START_POSITION = self.adapter.TASK0_START_POSITION_BACKUP
+        self.assertTrue(node.fault); self.assertEqual(len(World.targets), 1)   # only the hold
+
     def test_tick_is_inert_until_armed(self):
         World.reset(tf_after=10**9, real_after=10**9)
         node = self.make_node(*self.EXECUTE)

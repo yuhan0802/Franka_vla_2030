@@ -13,7 +13,8 @@ SCRIPTS = ROOT / "workspace/src/franka_vr/franka_vr/scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from eef_pose_safety import (  # noqa: E402
-    ACTION_SHAPE, ANGULAR_SCALE_RAD, LINEAR_SCALE_M, ChunkTargetIntegrator, GripperHysteresis,
+    ACTION_SHAPE, ANGULAR_SCALE_RAD, LINEAR_SCALE_M, TASK0_START_POSITION, TASK0_START_QUATERNION,
+    ChunkTargetIntegrator, GripperHysteresis, goto_chunk,
     axis_test_chunk, build_state, gripper_open_from_width, inside_workspace, physical_step,
     quaternion_multiply, quaternion_to_rotvec, rotation_angle_between, rotvec_to_quaternion,
     validate_action_chunk,
@@ -157,6 +158,24 @@ class EefPoseTests(unittest.TestCase):
         self.assertIsNone(hysteresis.desired_open(0.5, False))
         self.assertIsNone(hysteresis.desired_open(0.5, True))
         self.assertIs(hysteresis.desired_open(0.65, False), True)
+
+    def test_goto_chunk_lands_on_the_training_start(self):
+        # Full-run start pose, 15 mm below the Task0 start.
+        start_p, start_q = [0.5546, -0.0018, 0.3049], [0.925, -0.379, -0.025, 0.009]
+        for frame in ("tool", "world"):
+            chunk = goto_chunk(start_p, start_q, TASK0_START_POSITION, TASK0_START_QUATERNION, frame)
+            self.assertLessEqual(len(chunk), ACTION_SHAPE[0])
+            integrator = ChunkTargetIntegrator(frame); integrator.start(start_p, start_q)
+            for action in chunk:
+                step = physical_step(action, 0.006, 0.035)          # adapter limits: never clipped
+                self.assertFalse(step.translation_clipped or step.rotation_clipped)
+                position, quaternion = integrator.step(step.delta_position, step.delta_rotvec)
+            np.testing.assert_allclose(position, TASK0_START_POSITION, atol=1e-9)
+            self.assertLess(rotation_angle_between(quaternion, TASK0_START_QUATERNION), 1e-6)
+
+    def test_goto_chunk_refuses_far_goals(self):
+        with self.assertRaisesRegex(ValueError, "move closer"):
+            goto_chunk([0.4, 0.1, 0.5], TASK0_START_QUATERNION, TASK0_START_POSITION, TASK0_START_QUATERNION, "tool")
 
     def test_workspace_and_axis_chunks(self):
         self.assertTrue(inside_workspace([0.5, 0, 0.3], [0.38, -0.2, 0.18], [0.75, 0.2, 0.78]))

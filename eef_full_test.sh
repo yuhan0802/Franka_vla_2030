@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # EEF 完整任务测试（Task0 模型）：dry-run 预检 → 确认 → 真机执行 → 打包日志。
-# 预检：夹爪必须张开（训练都从张开开始），起点偏离训练起点 >2 cm 时提醒。
+# 预检：夹爪必须张开（训练都从张开开始），起点偏离训练起点 >5 mm 时可先回到起点。
 # 执行中可随时 Ctrl-C（Servo 保持当前位置），日志照样打包。
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -18,7 +18,13 @@ start=$(grep -m1 '"event": "armed"' "$log" 2>/dev/null | sed -n 's/.*"position":
 awk -v w="$width" 'BEGIN { exit !(w >= 0.06) }' || { echo "夹爪宽度 ${width} m，未张开，停止（先张开夹爪）"; pack; exit 1; }
 offset=$(awk -v p="$start" 'BEGIN { split(p, a, " "); printf "%.3f", sqrt((a[1]-0.558)^2 + (a[2]+0.002)^2 + (a[3]-0.320)^2) }')
 echo "预检：夹爪 ${width} m，起点 [${start}]，距训练起点 [0.558 -0.002 0.320] ${offset} m"
-awk -v d="$offset" 'BEGIN { exit !(d > 0.02) }' && echo "提醒：起点偏离训练起点超过 2 cm"
+# 训练的 29 条示范起点几乎完全相同（<0.3 mm），起点偏差会让模型偏离分布。
+if awk -v d="$offset" 'BEGIN { exit !(d > 0.005) }'; then
+  read -r -p "起点偏离 ${offset} m，先回到训练起点？[Y/n] " answer
+  if [[ "$answer" != n && "$answer" != N ]]; then
+    EEF_LOG_DIR="$dir/home" EEF_ENABLE_REAL_ROBOT=I_UNDERSTAND_EEF_POSE ./run_eef_pose.sh home || { echo "回起点失败，停止"; pack; exit 1; }
+  fi
+fi
 
 read -r -p "开始真机完整执行？手放在急停上 [y/N] " answer
 [[ "$answer" == y || "$answer" == Y ]] || { echo "已取消"; pack; exit 0; }

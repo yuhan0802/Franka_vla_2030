@@ -40,6 +40,7 @@ from franka_vr.srv import SetTargetPose
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eef_pose_safety import (  # noqa: E402
     ACTION_REPRESENTATION, ACTION_SHAPE, LINEAR_SCALE_M, ROTATION_EXECUTION, ROTVEC_FLIP_WARNING_RAD, STATE_PROTOCOL,
+    TASK0_START_POSITION, TASK0_START_QUATERNION, goto_chunk,
     ChunkTargetIntegrator, GripperHysteresis, PoseJumpMonitor, PoseStabilityWindow, axis_test_chunk, build_state,
     gripper_open_from_width, inside_workspace, joints_consistent, physical_step, rotation_angle_between,
     validate_action_chunk,
@@ -344,9 +345,20 @@ class EefAdapter(Node):
         if self.chunk:
             if now >= self.next_action_at: self.execute_step(now)
             return
+        if self.settling and not self.settled(now): return
         if self.executed >= self.args.max_actions or self.chunks_done >= self.args.max_chunks:
             self.finish("budget reached"); return
-        if self.settling and not self.settled(now): return
+        if self.args.test_axis == "home":
+            if now >= self.need_fresh_after:
+                pose = self.checked_pose()
+                if pose is None: return
+                try: chunk = goto_chunk(pose[0], pose[1], TASK0_START_POSITION, TASK0_START_QUATERNION,
+                                        self.integrator.rotation_frame, 1.0 if self.commanded_gripper_open else 0.0)
+                except ValueError as error: self.latch(f"home: {error}"); return
+                self.get_logger().warning(f"home: {len(chunk)} steps from {np.round(pose[0], 4).tolist()} "
+                                          f"to the Task0 start {list(TASK0_START_POSITION)}")
+                self.start_chunk(chunk, policy_latency=0.0)
+            return
         if self.args.test_axis:
             if now >= self.need_fresh_after:
                 self.start_chunk(axis_test_chunk(self.args.test_axis, self.args.test_magnitude, self.args.test_steps,
@@ -643,7 +655,8 @@ def parse_args() -> argparse.Namespace:
     add("--finish-idle-chunks", type=int, default=2,
         help="finish after the release once this many consecutive chunks barely move; 0 disables")
     add("--idle-translation", type=float, default=0.005, help="chunk translation (m) counted as idle")
-    add("--test-axis", default="", help="six-direction commissioning: +x,-x,+y,-y,+z,-z,+rx,...,-rz (no policy)")
+    add("--test-axis", default="", help="six-direction commissioning: +x,-x,+y,-y,+z,-z,+rx,...,-rz, or 'home' "
+        "to move to the Task0 training start pose (no policy)")
     add("--test-magnitude", type=float, default=0.04, help="command units; 0.04 -> 3 mm or 0.006 rad per step")
     add("--test-steps", type=int, default=5)
     add("--save-observation-dir", default="", help="save every image pair sent to the policy here")
