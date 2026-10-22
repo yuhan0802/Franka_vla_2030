@@ -234,3 +234,63 @@ def axis_test_chunk(axis: str, magnitude: float, steps: int, gripper_open: float
     chunk[:, index] = sign * magnitude
     chunk[:, 6] = gripper_open
     return chunk
+
+
+def joints_consistent(reference: dict, observed: dict, names: tuple, tolerance: float) -> bool:
+    """True when `observed` has every joint in `names` within `tolerance` of `reference`."""
+    return all(name in reference and name in observed and abs(reference[name] - observed[name]) <= tolerance
+               for name in names)
+
+
+class PoseStabilityWindow:
+    """Reports stable once the pose stays near one sample for `duration` seconds.
+
+    Used before arming: right after launch, TF can be driven by
+    joint_state_publisher's default joints before real Franka feedback arrives.
+    """
+
+    def __init__(self, duration: float = 1.0, max_position: float = 0.001, max_rotation: float = 0.01) -> None:
+        if duration <= 0 or max_position <= 0 or max_rotation <= 0:
+            raise ValueError("stability window parameters must be positive")
+        self.duration, self.max_position, self.max_rotation = duration, max_position, max_rotation
+        self.reset()
+
+    def reset(self) -> None:
+        self.start: Optional[tuple] = None
+
+    def add(self, t: float, position: object, quaternion_xyzw: object) -> bool:
+        p, q = np.asarray(position, dtype=np.float64), normalize_quaternion(quaternion_xyzw)
+        if (self.start is None or np.linalg.norm(p - self.start[1]) > self.max_position
+                or rotation_angle_between(q, self.start[2]) > self.max_rotation):
+            self.start = (t, p, q)
+            return False
+        return t - self.start[0] >= self.duration
+
+
+class PoseJumpMonitor:
+    """Flags measured-pose changes faster than the arm can physically move.
+
+    MoveIt Servo caps the tracker at 0.30 m/s and 0.975 rad/s; the defaults
+    allow twice that plus a small absolute slack for TF jitter.
+    """
+
+    def __init__(self, max_speed: float = 0.6, max_angular_speed: float = 2.0,
+                 slack_position: float = 0.003, slack_rotation: float = 0.03) -> None:
+        self.max_speed, self.max_angular_speed = max_speed, max_angular_speed
+        self.slack_position, self.slack_rotation = slack_position, slack_rotation
+        self.reset()
+
+    def reset(self) -> None:
+        self.last: Optional[tuple] = None
+
+    def check(self, t: float, position: object, quaternion_xyzw: object) -> Optional[str]:
+        p, q = np.asarray(position, dtype=np.float64), normalize_quaternion(quaternion_xyzw)
+        reason = None
+        if self.last is not None:
+            dt = max(0.0, t - self.last[0])
+            moved = float(np.linalg.norm(p - self.last[1]))
+            turned = rotation_angle_between(q, self.last[2])
+            if moved > self.max_speed * dt + self.slack_position or turned > self.max_angular_speed * dt + self.slack_rotation:
+                reason = f"{moved:.4f} m / {turned:.4f} rad in {dt:.3f} s"
+        self.last = (t, p, q)
+        return reason

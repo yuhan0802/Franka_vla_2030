@@ -40,12 +40,14 @@ from franka_vr.srv import SetTargetPose
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eef_pose_safety import (  # noqa: E402
     ACTION_REPRESENTATION, ACTION_SHAPE, ROTATION_EXECUTION, ROTVEC_FLIP_WARNING_RAD, STATE_PROTOCOL,
-    ChunkTargetIntegrator, GripperHysteresis, axis_test_chunk, build_state, gripper_open_from_width,
-    inside_workspace, physical_step, rotation_angle_between, validate_action_chunk,
+    ChunkTargetIntegrator, GripperHysteresis, PoseJumpMonitor, PoseStabilityWindow, axis_test_chunk, build_state,
+    gripper_open_from_width, inside_workspace, joints_consistent, physical_step, rotation_angle_between,
+    validate_action_chunk,
 )
 
 CONFIRM_TOKEN = "EEF_POSE_TARGET"
 FINGERS = ("fr3_finger_joint1", "fr3_finger_joint2")
+ARM_JOINTS = tuple(f"fr3_joint{index}" for index in range(1, 8))
 
 
 def _pack(value: Any) -> Any:
@@ -146,6 +148,17 @@ class EefAdapter(Node):
                 raise RuntimeError(f"--rotation-frame {args.rotation_frame} contradicts server "
                                    f"rotation_execution={self.policy.metadata['rotation_execution']}")
             self.metadata = self.policy.metadata
+            declared = self.metadata.get("gripper_state_source")
+            if declared is not None and declared != args.gripper_state_source:
+                raise RuntimeError(f"server expects gripper_state_source={declared!r}, "
+                                   f"adapter uses {args.gripper_state_source!r}")
+            if args.expected_checkpoint and self.metadata.get("checkpoint") != args.expected_checkpoint:
+                raise RuntimeError(f"server on port {args.server_port} serves {self.metadata.get('checkpoint')!r}, "
+                                   f"expected {args.expected_checkpoint!r}; stop the stale server first")
+            trained = self.metadata.get("training_instruction")
+            if trained and args.instruction.strip().lower() != trained:
+                self.get_logger().warning(f"instruction {args.instruction!r} differs from the training "
+                                          f"instruction {trained!r}; the model never saw it")
         self.integrator = ChunkTargetIntegrator(rotation_frame)
         self.hysteresis = GripperHysteresis(args.gripper_open_threshold, args.gripper_close_threshold)
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="eef-policy")
@@ -155,6 +168,13 @@ class EefAdapter(Node):
         self.fault = False; self.finished = False
         # arm() spins the node while waiting for TF/services; tick must not act until it has finished.
         self.armed = False
+        # Real arm feedback (/franka/joint_states, ros2_control) versus the merged
+        # /joint_states that drives TF; joint_state_publisher publishes URDF
+        # defaults there until the real feedback arrives.
+        self.real_joints: Dict[str, float] = {}; self.real_joint_time = 0.0
+        self.merged_joints: Dict[str, float] = {}; self.merged_joint_time = 0.0
+        self.armed_pose: Optional[tuple] = None
+        self.jump_monitor = PoseJumpMonitor()
         self.gripper_open: Optional[bool] = None; self.pending_gripper_open: Optional[bool] = None
         self.commanded_gripper_open = True
         self.target_client = None; self.move_client = None; self.grasp_client = None
@@ -162,7 +182,8 @@ class EefAdapter(Node):
         for key, topic in (("exterior", args.exterior_image_topic), ("wrist", args.wrist_image_topic)):
             self.create_subscription(Image, topic, functools.partial(self.image_cb, key), qos_profile_sensor_data)
         self.create_subscription(JointState, "/fr3_gripper/franka_gripper/joint_states", self.joint_cb, qos_profile_sensor_data)
-        self.create_subscription(JointState, "/joint_states", self.joint_cb, qos_profile_sensor_data)
+        self.create_subscription(JointState, "/joint_states", self.merged_joint_cb, qos_profile_sensor_data)
+        self.create_subscription(JointState, "/franka/joint_states", self.real_joint_cb, qos_profile_sensor_data)
         if args.execute:
             self.target_client = self.create_client(SetTargetPose, "/set_target_pose")
             if args.enable_gripper:
@@ -190,6 +211,20 @@ class EefAdapter(Node):
         for name in FINGERS:
             if name in values: self.fingers[name] = float(values[name]); self.gripper_time = time.monotonic()
 
+    def merged_joint_cb(self, message: JointState) -> None:
+        self.joint_cb(message)
+        values = dict(zip(message.name, message.position))
+        if all(name in values for name in ARM_JOINTS):
+            self.merged_joints = {name: float(values[name]) for name in ARM_JOINTS}; self.merged_joint_time = time.monotonic()
+
+    def real_joint_cb(self, message: JointState) -> None:
+        values = dict(zip(message.name, message.position))
+        if all(name in values for name in ARM_JOINTS) and all(np.isfinite(values[name]) for name in ARM_JOINTS):
+            self.real_joints = {name: float(values[name]) for name in ARM_JOINTS}; self.real_joint_time = time.monotonic()
+
+    def now_s(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
+
     def gripper_width(self) -> Optional[float]:
         if any(name not in self.fingers for name in FINGERS): return None
         # Same total-opening definition as lerobot_episode_recorder.gripper_width().
@@ -208,23 +243,37 @@ class EefAdapter(Node):
         t, q = transform.transform.translation, transform.transform.rotation
         return np.array([t.x, t.y, t.z]), np.array([q.x, q.y, q.z, q.w])
 
+    def checked_pose(self) -> Optional[tuple]:
+        """Measured pose, latching on physically impossible jumps once armed."""
+        pose = self.pose()
+        if pose is None or not self.armed: return pose
+        reason = self.jump_monitor.check(self.now_s(), *pose)
+        if reason:
+            self.log("pose_jump", reason=reason, position=pose[0].tolist(), quaternion_xyzw=pose[1].tolist())
+            self.latch(f"measured end-effector pose jumped {reason}; TF source unstable"); return None
+        return pose
+
     def gripper_state_value(self) -> Optional[float]:
         if self.args.gripper_state_source == "command":
             return 1.0 if self.commanded_gripper_open else 0.0
         width = self.gripper_width()
         if width is None: return None
+        if self.args.gripper_state_source == "binary":
+            # Task0 training: open iff measured width >= midpoint of the closed/open targets.
+            midpoint = 0.5 * (self.args.gripper_state_closed_width + self.args.gripper_state_open_width)
+            return 1.0 if width >= midpoint else 0.0
         return gripper_open_from_width(width, self.args.gripper_state_closed_width, self.args.gripper_state_open_width)
 
     def observation(self) -> Optional[Dict[str, Any]]:
         now = time.monotonic()
         if set(self.images) != {"exterior", "wrist"}: return None
         stamps = [self.image_times["exterior"], self.image_times["wrist"]]
-        if self.args.gripper_state_source == "measured":
+        if self.args.gripper_state_source in ("measured", "binary"):
             if self.gripper_width() is None: return None
             stamps.append(self.gripper_time)
         if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age: return None
         if abs(self.image_times["exterior"] - self.image_times["wrist"]) > self.args.max_camera_skew: return None
-        pose = self.pose()
+        pose = self.checked_pose()
         gripper = self.gripper_state_value()
         if pose is None or gripper is None: return None
         state = build_state(pose[0], pose[1], gripper)
@@ -243,6 +292,9 @@ class EefAdapter(Node):
     # ----------------------------------------------------------------- loop
     def tick(self) -> None:
         if not self.armed or self.finished or self.fault: return
+        # Sample the pose every tick so the jump monitor sees consecutive 10 ms samples.
+        self.checked_pose()
+        if self.fault: return
         now = time.monotonic()
         if self.future is not None:
             if not self.future.done():
@@ -268,7 +320,7 @@ class EefAdapter(Node):
             self.inference_started = now; self.future = self.pool.submit(self.policy.infer, observation)
 
     def start_chunk(self, chunk: np.ndarray, policy_latency: float) -> None:
-        pose = self.pose()
+        pose = self.checked_pose()
         if pose is None: self.latch("end-effector pose unavailable at chunk start"); return
         start_position, start_quaternion = pose
         if (self.args.chunk_start == "last_target" and self.integrator.position is not None
@@ -299,7 +351,7 @@ class EefAdapter(Node):
             self.log("workspace_violation", **record)
             self.latch(f"target {np.round(target_position, 4).tolist()} outside workspace "
                        f"{self.minimum.tolist()}..{self.maximum.tolist()}"); return
-        pose = self.pose()
+        pose = self.checked_pose()
         if pose is None: self.latch("end-effector pose unavailable during chunk"); return
         lead = float(np.linalg.norm(target_position - pose[0]))
         lead_rotation = rotation_angle_between(target_quaternion, pose[1])
@@ -384,12 +436,39 @@ class EefAdapter(Node):
         self.get_logger().info(f"gripper {'OPENED' if self.gripper_open else 'CLOSED'}; width={self.gripper_width()}")
 
     # ----------------------------------------------------------------- lifecycle
+    def real_joints_fresh(self) -> bool:
+        return len(self.real_joints) == 7 and time.monotonic() - self.real_joint_time <= self.args.max_joint_age
+
+    def tf_from_real_joints(self) -> bool:
+        return (time.monotonic() - self.merged_joint_time <= self.args.max_joint_age and joints_consistent(
+            self.real_joints, self.merged_joints, ARM_JOINTS, self.args.joint_consistency_tolerance))
+
     def arm(self) -> None:
+        """Arm only once TF is driven by real, fresh, steady Franka feedback."""
         deadline = time.monotonic() + self.args.startup_timeout
-        while time.monotonic() < deadline and self.pose() is None:
-            rclpy.spin_once(self, timeout_sec=.1)
-        if self.pose() is None: raise RuntimeError("world -> fr3_link8 unavailable; is run_robot.sh running?")
-        if self.args.gripper_state_source == "measured" or self.args.enable_gripper:
+        window = PoseStabilityWindow(self.args.stability_duration, self.args.stability_position,
+                                     self.args.stability_rotation)
+        stable_pose, waiting = None, "world -> fr3_link8"
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=.02)
+            pose = self.pose()
+            if pose is None:
+                waiting = "world -> fr3_link8"
+            elif not self.real_joints_fresh():
+                waiting = "fresh /franka/joint_states with all 7 arm joints (real Franka feedback)"
+            elif not self.tf_from_real_joints():
+                waiting = "/joint_states (TF source) to match /franka/joint_states"
+            else:
+                if window.add(self.now_s(), *pose):
+                    stable_pose = pose; break
+                waiting = f"end-effector pose steady for {self.args.stability_duration:.1f}s"
+                continue
+            window.reset()
+            self.get_logger().info(f"arming: waiting for {waiting}", throttle_duration_sec=2.0)
+        if stable_pose is None: raise RuntimeError(f"startup timed out waiting for {waiting}")
+        self.log("pose_stable", position=stable_pose[0].tolist(), quaternion_xyzw=stable_pose[1].tolist(),
+                 real_joints=self.real_joints, merged_joints=self.merged_joints)
+        if self.args.gripper_state_source in ("measured", "binary") or self.args.enable_gripper:
             while time.monotonic() < deadline and self.gripper_width() is None:
                 rclpy.spin_once(self, timeout_sec=.1)
             if self.gripper_width() is None: raise RuntimeError("gripper finger feedback unavailable")
@@ -403,9 +482,25 @@ class EefAdapter(Node):
             if self.args.enable_gripper:
                 if not self.move_client.wait_for_server(timeout_sec=10) or not self.grasp_client.wait_for_server(timeout_sec=10):
                     raise RuntimeError("gripper action server unavailable")
+            # Seed Servo with the confirmed measured pose, then re-check that
+            # nothing moved: the first motion target is then a small increment.
+            if not self.send_target(*stable_pose): raise RuntimeError("could not send the initial hold target")
+            settle_until = self.now_s() + self.args.hold_settle
+            while self.now_s() < settle_until and time.monotonic() < deadline:
+                rclpy.spin_once(self, timeout_sec=.02)
+            if self.fault: raise RuntimeError("initial hold target was rejected")
+        pose = self.pose()
+        if pose is None or not self.real_joints_fresh() or not self.tf_from_real_joints():
+            raise RuntimeError("feedback became unavailable or inconsistent after the stability check")
+        drift = float(np.linalg.norm(pose[0] - stable_pose[0])); turn = rotation_angle_between(pose[1], stable_pose[1])
+        if drift > 2 * self.args.stability_position + 0.001 or turn > 2 * self.args.stability_rotation:
+            raise RuntimeError(f"pose moved {drift:.4f} m / {turn:.4f} rad after the stability check")
+        self.armed_pose = pose
+        self.jump_monitor.reset(); self.jump_monitor.check(self.now_s(), *pose)
         self.armed = True
-        self.log("armed")
-        self.get_logger().info("startup checks passed: TF, feedback and services ready")
+        self.log("armed", position=pose[0].tolist(), quaternion_xyzw=pose[1].tolist(), real_joints=self.real_joints)
+        self.get_logger().info(f"startup checks passed: real joint feedback, steady TF at "
+                               f"{np.round(pose[0], 4).tolist()}, services ready")
 
     def finish(self, reason: str) -> None:
         self.request_stop(); self.finished = True
@@ -451,8 +546,14 @@ def parse_args() -> argparse.Namespace:
     add("--max-policy-latency", type=float, default=5.0); add("--max-observation-age", type=float, default=.2)
     add("--max-camera-skew", type=float, default=.05); add("--max-tf-age", type=float, default=.1)
     add("--startup-timeout", type=float, default=60.0)
-    add("--gripper-state-source", choices=("measured", "command"), default="measured",
-        help="state[6]: measured finger width mapped linearly, or the last commanded open/close")
+    add("--stability-duration", type=float, default=1.0, help="pose must stay steady this long before arming (s)")
+    add("--stability-position", type=float, default=0.001); add("--stability-rotation", type=float, default=0.01)
+    add("--joint-consistency-tolerance", type=float, default=0.002, help="rad, /joint_states vs /franka/joint_states")
+    add("--max-joint-age", type=float, default=0.1); add("--hold-settle", type=float, default=0.5)
+    add("--gripper-state-source", choices=("measured", "binary", "command"), default="measured",
+        help="state[6]: measured width mapped linearly, measured width thresholded at the "
+             "closed/open midpoint (Task0 training), or the last commanded open/close")
+    add("--expected-checkpoint", default="", help="refuse a server whose metadata names another checkpoint")
     add("--gripper-state-closed-width", type=float, default=0.01)
     add("--gripper-state-open-width", type=float, default=0.08)
     add("--enable-gripper", action="store_true")

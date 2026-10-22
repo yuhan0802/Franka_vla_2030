@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Offline regression test for the EEF adapter startup order (no ROS needed).
+"""Offline regression tests for the EEF adapter startup order (no ROS needed).
 
-Reproduces eef_pose_test_report_20261022: while arm() waits for world ->
-fr3_link8, rclpy.spin_once() also fires the 100 Hz tick timer. Before the fix
-the axis-test chunk started immediately and latched "end-effector pose
-unavailable at chunk start" with zero actions executed.
+eef_pose_test_report_20261022: while arm() waited for TF, spin_once() fired the
+tick timer and the axis test latched before TF existed.
+
+eef_pose_tf_stability_report_20261022: right after launch, TF was driven by
+joint_state_publisher's default joints; the adapter armed on that pose
+([0.607, 0, 0.729]) and sent a target 0.42 m away from the real arm.
 """
 
 from __future__ import annotations
@@ -15,9 +17,19 @@ import tempfile
 import types
 import unittest
 
+import numpy as np
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "workspace/src/franka_vr/franka_vr/scripts"
 sys.path.insert(0, str(SCRIPTS))
+
+ARM = [f"fr3_joint{i}" for i in range(1, 8)]
+DEFAULT_JOINTS = [0.0] * 7
+REAL_JOINTS = [0.0, -0.4, 0.0, -2.4, 0.0, 2.0, 0.8]
+# Poses taken from the TF stability report.
+DEFAULT_POSE = ((0.6068832062, 0.0, 0.7285231268), (0.8929792022, 0.0, 0.4500979277, 0.0))
+REAL_POSE = ((0.5555923705, -0.0011345801, 0.3160732120), (0.9250127665, -0.3794856352, -0.0176199627, 0.0056188382))
+FAR_POSE = ((0.30, 0.20, 0.50), (1.0, 0.0, 0.0, 0.0))
 
 
 class _Namespace(types.SimpleNamespace):
@@ -40,24 +52,46 @@ class FakeTime:
 
 
 class World:
-    """Shared fake clock and TF availability."""
+    """Shared fake robot: clock, TF source and which joint feedback exists."""
     now_ns = 10**12
     spins = 0
-    tf_ready_after_spins = 5
+    tf_after = 5            # spins before any TF exists
+    real_after = 5          # spins before real /franka/joint_states arrive
+    jump_at = None          # spin at which TF jumps to FAR_POSE
     targets: list = []
+
+    @classmethod
+    def reset(cls, tf_after=5, real_after=5, jump_at=None):
+        cls.spins, cls.tf_after, cls.real_after, cls.jump_at, cls.targets = 0, tf_after, real_after, jump_at, []
+
+    @classmethod
+    def real(cls):
+        return cls.spins >= cls.real_after
+
+    @classmethod
+    def pose(cls):
+        if cls.jump_at is not None and cls.spins >= cls.jump_at:
+            return FAR_POSE
+        return REAL_POSE if cls.real() else DEFAULT_POSE
 
 
 class FakeNode:
     def __init__(self, name):
-        self._timers = []
+        self._timers, self._subscriptions = [], {}
 
-    def create_subscription(self, *args, **kwargs): return None
+    def create_subscription(self, message_type, topic, callback, qos):
+        self._subscriptions.setdefault(topic, []).append(callback)
+
     def create_timer(self, period, callback): self._timers.append(callback)
     def create_client(self, *args): return FakeServiceClient()
     def get_logger(self): return _Namespace(info=lambda *a, **k: None, warning=lambda *a, **k: None,
                                             error=lambda *a, **k: None)
     def get_clock(self): return _Namespace(now=lambda: FakeTime(World.now_ns))
     def destroy_node(self): return None
+
+    def publish(self, topic, names, positions):
+        for callback in self._subscriptions.get(topic, []):
+            callback(_Namespace(name=list(names), position=list(positions)))
 
 
 class FakeFuture:
@@ -77,17 +111,23 @@ class FakeServiceClient:
 
 class FakeBuffer:
     def lookup_transform(self, target, source, time):
-        if World.spins < World.tf_ready_after_spins:
+        if World.spins < World.tf_after:
             raise RuntimeError('"world" passed to lookupTransform argument target_frame does not exist')
+        (x, y, z), (qx, qy, qz, qw) = World.pose()
         return _Namespace(
             header=_Namespace(stamp=_Namespace(nanoseconds=World.now_ns)),
-            transform=_Namespace(translation=_Namespace(x=0.5, y=0.0, z=0.4),
-                                 rotation=_Namespace(x=1.0, y=0.0, z=0.0, w=0.0)))
+            transform=_Namespace(translation=_Namespace(x=x, y=y, z=z), rotation=_Namespace(x=qx, y=qy, z=qz, w=qw)))
 
 
 def spin_once(node, timeout_sec=None):
     World.spins += 1
     World.now_ns += 10_000_000
+    joints = REAL_JOINTS if World.real() else DEFAULT_JOINTS
+    if World.real():
+        node.publish("/franka/joint_states", ARM, REAL_JOINTS)
+    # joint_state_publisher always publishes, with URDF defaults until real feedback arrives.
+    node.publish("/joint_states", ARM + ["fr3_finger_joint1", "fr3_finger_joint2"], joints + [0.04, 0.04])
+    node.publish("/fr3_gripper/franka_gripper/joint_states", ["fr3_finger_joint1", "fr3_finger_joint2"], [0.04, 0.04])
     for callback in list(node._timers):
         callback()
 
@@ -125,6 +165,11 @@ def install_fake_ros() -> None:
     sys.modules.update(modules)
 
 
+def target_xyz(request):
+    p = request.target_pose.pose.position
+    return np.array([p.x, p.y, p.z])
+
+
 class AdapterStartupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -132,43 +177,73 @@ class AdapterStartupTests(unittest.TestCase):
         import eef_pose_policy_adapter
         cls.adapter = eef_pose_policy_adapter
 
-    def make_node(self, *extra):
+    def make_node(self, *extra, steps="1", magnitude="0.01", timeout="5"):
         bounds = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
-        bounds.write("workspace_bounds_world:\n  min: [0.3, -0.3, 0.1]\n  max: [0.8, 0.3, 0.8]\n"); bounds.close()
+        bounds.write("workspace_bounds_world:\n  min: [0.2, -0.4, 0.1]\n  max: [0.8, 0.4, 0.9]\n"); bounds.close()
         sys.argv = ["adapter", "--bounds-config", bounds.name, "--test-axis", "+x", "--rotation-frame", "tool",
-                    "--test-magnitude", "0.01", "--test-steps", "1", "--max-chunks", "1", "--max-actions", "15",
-                    "--gripper-state-source", "command", "--startup-timeout", "5", *extra]
-        World.spins = 0; World.targets = []
+                    "--test-magnitude", magnitude, "--test-steps", steps, "--max-chunks", "1", "--max-actions", "15",
+                    "--gripper-state-source", "binary", "--startup-timeout", timeout, *extra]
         return self.adapter.EefAdapter(self.adapter.parse_args())
 
     def run_until_done(self, node):
         node.arm()
-        for _ in range(200):
+        for _ in range(500):
             if node.finished or node.fault: break
             spin_once(node)
 
-    def test_late_tf_does_not_latch_before_arm(self):
-        World.tf_ready_after_spins = 5
-        node = self.make_node("--execute", "--confirm-real-robot", "EEF_POSE_TARGET")
+    EXECUTE = ("--execute", "--confirm-real-robot", "EEF_POSE_TARGET")
+
+    def test_report_default_pose_is_never_used(self):
+        # Reproduces the TF stability report: defaults for 0.5 s, then real feedback.
+        World.reset(tf_after=2, real_after=50)
+        node = self.make_node(*self.EXECUTE)
         self.run_until_done(node)
         self.assertFalse(node.fault)
-        self.assertTrue(node.finished)
         self.assertEqual(node.executed, 1)
-        self.assertEqual(len(World.targets), 1)
-        target = World.targets[0].target_pose
-        self.assertEqual(target.header.frame_id, "world")
-        self.assertAlmostEqual(target.pose.position.x, 0.5 + 0.01 * 0.075)
+        np.testing.assert_allclose(node.armed_pose[0], REAL_POSE[0])
+        hold, motion = World.targets
+        np.testing.assert_allclose(target_xyz(hold), REAL_POSE[0])
+        np.testing.assert_allclose(target_xyz(motion), np.add(REAL_POSE[0], [0.01 * 0.075, 0, 0]), atol=1e-9)
+        for request in World.targets:
+            self.assertGreater(np.linalg.norm(target_xyz(request) - DEFAULT_POSE[0]), 0.3)
+
+    def test_arming_requires_real_joint_feedback(self):
+        World.reset(tf_after=2, real_after=10**9)   # TF from defaults, real feedback never arrives
+        node = self.make_node(*self.EXECUTE, timeout="0.3")
+        with self.assertRaisesRegex(RuntimeError, "franka/joint_states"):
+            node.arm()
+        self.assertEqual(World.targets, [])
+
+    def test_late_tf_does_not_latch_before_arm(self):
+        World.reset(tf_after=30, real_after=5)
+        node = self.make_node(*self.EXECUTE)
+        self.run_until_done(node)
+        self.assertFalse(node.fault)
+        self.assertEqual(node.executed, 1)
+
+    def test_pose_jump_latches_before_next_target(self):
+        World.reset(tf_after=2, real_after=5)
+        node = self.make_node(*self.EXECUTE, steps="5", magnitude="0.04")
+        node.arm()
+        World.jump_at = World.spins + 10            # TF source switches mid-chunk
+        for _ in range(500):
+            if node.finished or node.fault: break
+            spin_once(node)
+        self.assertTrue(node.fault)
+        self.assertLess(node.executed, 5)
+        for request in World.targets:
+            self.assertLess(np.linalg.norm(target_xyz(request) - REAL_POSE[0]), 0.02)
 
     def test_tick_is_inert_until_armed(self):
-        World.tf_ready_after_spins = 10**9
-        node = self.make_node("--execute", "--confirm-real-robot", "EEF_POSE_TARGET")
+        World.reset(tf_after=10**9, real_after=10**9)
+        node = self.make_node(*self.EXECUTE)
         for _ in range(20): spin_once(node)
         self.assertFalse(node.fault)
         self.assertEqual(node.executed, 0)
         self.assertEqual(World.targets, [])
 
     def test_dry_run_sends_nothing(self):
-        World.tf_ready_after_spins = 3
+        World.reset(tf_after=2, real_after=40)
         node = self.make_node()
         self.run_until_done(node)
         self.assertFalse(node.fault)
