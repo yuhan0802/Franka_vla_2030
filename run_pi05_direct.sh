@@ -208,13 +208,14 @@ if [[ "$mode" == commission || "$mode" == fake-commission ]]; then
 fi
 
 if [[ "$mode" == full-execute ]]; then
+  # 真机执行前只验证真实观测推理，不发布控制命令；首次真实图像推理允许 5 秒。
   echo "Running mandatory live-observation dry-run before full direct execution..."
   docker compose run --rm \
     -v "$log_dir:/pi05_logs" franka_vr bash -lc '
       set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
       exec python3 src/franka_vr/franka_vr/scripts/pi05_direct_policy_adapter.py \
         --server-host "'"$host"'" --server-port "'"$port"'" --instruction "'"$instruction"'" \
-        --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 \
+        --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 --max-policy-latency 5 \
         --jsonl-log /pi05_logs/full_dry_run_policy.jsonl
     ' 2>&1 | tee "$log_dir/full_dry_run.log"
   grep -q '"robot_command_sent": false' "$log_dir/full_dry_run_policy.jsonl" || {

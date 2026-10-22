@@ -23,6 +23,7 @@ def main() -> None:
     # 明确的总接收超时，不用心跳把正常的首次编译误判成断线。
     connection = websockets.sync.client.connect(
         f"ws://{args.host}:{args.port}",
+        proxy=None,
         compression=None,
         max_size=None,
         open_timeout=10,
