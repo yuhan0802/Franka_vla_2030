@@ -7,13 +7,16 @@
 #   dry-run    policy + cameras + robot state; no target is sent
 #   axis-test  one hand-built small motion along EEF_TEST_AXIS; no policy
 #   execute    serial 15-step chunks on the real robot
+#   probe      robot stack + cameras; record images and every gripper/arm state
+#              source without commanding the arm (EEF_GRIPPER_TEST=I_UNDERSTAND_GRIPPER_MOTION
+#              adds an open/close gripper cycle, EEF_GRIPPER_HOMING=true homes first)
 #   status | stop
 #   server | server-status | server-stop   EEF model server on the GPU host (ssh)
 set -euo pipefail
 
 mode="${1:-dry-run}"
-case "$mode" in dry-run|axis-test|execute|status|stop|server|server-status|server-stop) ;; *)
-  echo "Usage: $0 {dry-run|axis-test|execute|status|stop|server|server-status|server-stop}" >&2; exit 2;; esac
+case "$mode" in dry-run|axis-test|execute|probe|status|stop|server|server-status|server-stop) ;; *)
+  echo "Usage: $0 {dry-run|axis-test|execute|probe|status|stop|server|server-status|server-stop}" >&2; exit 2;; esac
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root_dir"
 robot_session=franka_vr_eef_robot
@@ -123,6 +126,35 @@ if [[ "$mode" != axis-test ]]; then
   fi
 fi
 
+# Keep the robot/camera console output next to the run's own logs.
+capture_sessions() {
+  local name
+  for name in "$robot_session" "$camera_session"; do
+    tmux has-session -t "$name" 2>/dev/null && tmux capture-pane -p -J -S - -t "$name" > "$log_dir/${name#franka_vr_eef_}_tmux.log" || true
+  done
+}
+
+if [[ "$mode" == probe ]]; then
+  probe_flags=(--out-dir /eef_logs --exterior-image-topic "/camera_${exterior_camera}/$suffix"
+    --duration "${EEF_PROBE_DURATION:-20}" --image-period "${EEF_PROBE_IMAGE_PERIOD:-0.5}")
+  if [[ "${EEF_GRIPPER_TEST:-}" == I_UNDERSTAND_GRIPPER_MOTION ]]; then
+    probe_flags+=(--gripper-cycle --confirm-gripper GRIPPER_MOTION)
+    [[ "${EEF_GRIPPER_HOMING:-false}" == true ]] && probe_flags+=(--homing)
+  fi
+  printf -v quoted_flags '%q ' "${probe_flags[@]}"
+  echo "EEF STATE PROBE: camera=$exterior_camera/$camera_mode logs=$log_dir (the arm is never commanded)"
+  set +e
+  docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+    set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
+    exec python3 src/franka_vr/franka_vr/scripts/eef_state_probe.py '"$quoted_flags"'
+  ' 2>&1 | tee "$log_dir/probe.log"
+  status=${PIPESTATUS[0]}
+  set -e
+  capture_sessions
+  echo "Probe exited with $status. Pack the logs with: tar -czf $(basename "$log_dir").tar.gz -C $(dirname "$log_dir") $(basename "$log_dir")"
+  exit "$status"
+fi
+
 adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instruction"
   --exterior-image-topic "/camera_${exterior_camera}/$suffix"
   --bounds-config /ws_franka_vr/src/franka_vr/franka_vr/config/vla_calibration.yaml
@@ -132,6 +164,8 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl)
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
 [[ "$mode" != axis-test && -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
+# Save every image pair sent to the policy (EEF_SAVE_IMAGES=false to skip).
+[[ "$mode" != axis-test && "${EEF_SAVE_IMAGES:-true}" == true ]] && adapter_flags+=(--save-observation-dir /eef_logs/observations)
 
 case "$mode" in
   dry-run)
@@ -161,5 +195,6 @@ docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
 ' 2>&1 | tee "$log_dir/adapter.log"
 status=${PIPESTATUS[0]}
 set -e
+capture_sessions
 echo "Adapter exited with $status. The Servo stack keeps holding; stop it with: $0 stop. Logs: $log_dir"
 exit "$status"

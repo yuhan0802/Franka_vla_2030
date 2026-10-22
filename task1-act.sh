@@ -20,10 +20,12 @@ export EEF_EXTERIOR_CAMERA="${EEF_EXTERIOR_CAMERA:-left}"
 mode="${1:-run}"
 case "$mode" in
   run|dry-run) ;;
+  # 只观测：保存图像与各来源的夹爪/机械臂状态，不发机械臂命令（夹爪测试见 run_eef_pose.sh 说明）。
+  probe) exec "$script_dir/run_eef_pose.sh" probe ;;
   stop|STOP)
     "$script_dir/run_eef_pose.sh" stop || true
     exec "$script_dir/run_eef_pose.sh" server-stop ;;
-  *) echo "Usage: $0 [dry-run|stop]" >&2; exit 2 ;;
+  *) echo "Usage: $0 [dry-run|probe|stop]" >&2; exit 2 ;;
 esac
 
 "$script_dir/run_eef_pose.sh" server

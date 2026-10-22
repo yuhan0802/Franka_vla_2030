@@ -133,6 +133,10 @@ class EefAdapter(Node):
         self.bridge = CvBridge()
         self.images: Dict[str, np.ndarray] = {}; self.image_times: Dict[str, float] = {}
         self.fingers: Dict[str, float] = {}; self.gripper_time = 0.0
+        # Diagnostics: finger values per topic (both topics feed self.fingers).
+        self.finger_sources: Dict[str, Dict[str, Any]] = {}
+        self.observation_count = 0
+        if args.save_observation_dir: Path(args.save_observation_dir).mkdir(parents=True, exist_ok=True)
         self.tf = Buffer(); self.listener = TransformListener(self.tf, self)
         bounds = yaml.safe_load(open(args.bounds_config))["workspace_bounds_world"]
         self.minimum, self.maximum = np.asarray(bounds["min"], float), np.asarray(bounds["max"], float)
@@ -206,13 +210,16 @@ class EefAdapter(Node):
         except Exception as error:
             self.get_logger().warning(f"cannot decode {key} image: {error}", throttle_duration_sec=2)
 
-    def joint_cb(self, message: JointState) -> None:
+    def joint_cb(self, message: JointState, source: str = "gripper") -> None:
         values = dict(zip(message.name, message.position))
         for name in FINGERS:
             if name in values: self.fingers[name] = float(values[name]); self.gripper_time = time.monotonic()
+        if any(name in values for name in FINGERS):
+            self.finger_sources[source] = {"fingers": [float(values[name]) if name in values else None for name in FINGERS],
+                                           "time": time.monotonic()}
 
     def merged_joint_cb(self, message: JointState) -> None:
-        self.joint_cb(message)
+        self.joint_cb(message, source="joint_states")
         values = dict(zip(message.name, message.position))
         if all(name in values for name in ARM_JOINTS):
             self.merged_joints = {name: float(values[name]) for name in ARM_JOINTS}; self.merged_joint_time = time.monotonic()
@@ -285,9 +292,22 @@ class EefAdapter(Node):
                                       throttle_duration_sec=5.0)
         observation = {"eef_state": state, "exterior_image": self.images["exterior"].copy(),
                        "wrist_image": self.images["wrist"].copy(), "instruction": self.args.instruction}
+        saved = self.save_observation(observation)
         self.log("observation", eef_state=state.tolist(), rotvec_norm=rotvec_norm,
-                 gripper_width=self.gripper_width(), quaternion_xyzw=pose[1].tolist())
+                 gripper_width=self.gripper_width(), quaternion_xyzw=pose[1].tolist(), saved_images=saved,
+                 finger_sources={source: {"fingers": entry["fingers"], "age_s": now - entry["time"]}
+                                 for source, entry in self.finger_sources.items()})
+        self.observation_count += 1
         return observation
+
+    def save_observation(self, observation: Dict[str, Any]) -> Optional[str]:
+        """Write the exact images sent to the policy (RGB arrays) as JPEGs."""
+        if not self.args.save_observation_dir: return None
+        stem = f"obs_{self.observation_count:04d}"
+        for key in ("exterior", "wrist"):
+            path = Path(self.args.save_observation_dir) / f"{stem}_{key}.jpg"
+            cv2.imwrite(str(path), cv2.cvtColor(observation[f"{key}_image"], cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
+        return stem
 
     # ----------------------------------------------------------------- loop
     def tick(self) -> None:
@@ -564,6 +584,7 @@ def parse_args() -> argparse.Namespace:
     add("--test-axis", default="", help="six-direction commissioning: +x,-x,+y,-y,+z,-z,+rx,...,-rz (no policy)")
     add("--test-magnitude", type=float, default=0.04, help="command units; 0.04 -> 3 mm or 0.006 rad per step")
     add("--test-steps", type=int, default=5)
+    add("--save-observation-dir", default="", help="save every image pair sent to the policy here")
     add("--jsonl-log", default=""); add("--execute", action="store_true"); add("--confirm-real-robot", default="")
     args = parser.parse_args(rclpy.utilities.remove_ros_args()[1:])
     if not 1 <= args.execute_horizon <= ACTION_SHAPE[0]: parser.error(f"execute-horizon must be in [1, {ACTION_SHAPE[0]}]")
