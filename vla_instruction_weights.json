@@ -36,6 +36,18 @@
         "max_joint_acceleration": 2.0,
         "gripper_force": 10.0
       }
+    },
+    {
+      "instruction": "open the lid",
+      "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/task6_open_lid_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 2000,
+        "max_joint_velocity": 0.6,
+        "max_joint_acceleration": 2.0,
+        "gripper_force": 10.0
+      }
     }
   ]
 }
