@@ -58,11 +58,14 @@ class World:
     tf_after = 5            # spins before any TF exists
     real_after = 5          # spins before real /franka/joint_states arrive
     jump_at = None          # spin at which TF jumps to FAR_POSE
+    follow_after = None     # spins the arm lags behind the latest target (None: never moves)
     targets: list = []
+    target_spins: list = []
 
     @classmethod
-    def reset(cls, tf_after=5, real_after=5, jump_at=None):
+    def reset(cls, tf_after=5, real_after=5, jump_at=None, follow_after=None):
         cls.spins, cls.tf_after, cls.real_after, cls.jump_at, cls.targets = 0, tf_after, real_after, jump_at, []
+        cls.follow_after, cls.target_spins = follow_after, []
 
     @classmethod
     def real(cls):
@@ -72,6 +75,12 @@ class World:
     def pose(cls):
         if cls.jump_at is not None and cls.spins >= cls.jump_at:
             return FAR_POSE
+        if cls.follow_after is not None:
+            # Arm reaches each target `follow_after` spins after it was sent (P-controller lag).
+            reached = [r for r, s in zip(cls.targets, cls.target_spins) if cls.spins - s >= cls.follow_after]
+            if reached:
+                p, q = reached[-1].target_pose.pose.position, reached[-1].target_pose.pose.orientation
+                return (p.x, p.y, p.z), (q.x, q.y, q.z, q.w)
         return REAL_POSE if cls.real() else DEFAULT_POSE
 
 
@@ -105,7 +114,7 @@ class FakeServiceClient:
     def wait_for_service(self, timeout_sec=None): return True
 
     def call_async(self, request):
-        if not request.stop: World.targets.append(request)
+        if not request.stop: World.targets.append(request); World.target_spins.append(World.spins)
         return FakeFuture(_Namespace(success=True, message="ok"))
 
 
@@ -176,6 +185,8 @@ class AdapterStartupTests(unittest.TestCase):
         install_fake_ros()
         import eef_pose_policy_adapter
         cls.adapter = eef_pose_policy_adapter
+        # Action scheduling and deadlines follow the simulated clock (10 ms per spin), not wall time.
+        eef_pose_policy_adapter.time = types.SimpleNamespace(monotonic=lambda: World.now_ns * 1e-9)
 
     def make_node(self, *extra, steps="1", magnitude="0.01", timeout="5"):
         bounds = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
@@ -233,6 +244,35 @@ class AdapterStartupTests(unittest.TestCase):
         self.assertLess(node.executed, 5)
         for request in World.targets:
             self.assertLess(np.linalg.norm(target_xyz(request) - REAL_POSE[0]), 0.02)
+
+    def events(self, path):
+        import json
+        return [json.loads(line) for line in open(path)]
+
+    def test_next_observation_waits_until_arm_reaches_target(self):
+        # Full-run report: the photo was taken while the arm still lagged 2-3 cm behind.
+        World.reset(tf_after=2, real_after=5, follow_after=40)        # arm catches up 0.4 s late
+        log = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False).name
+        node = self.make_node(*self.EXECUTE, "--max-chunks", "2", "--max-actions", "30", "--jsonl-log", log,
+                              steps="5", magnitude="0.8")
+        self.run_until_done(node)
+        self.assertFalse(node.fault)
+        events = self.events(log)
+        settled = [e for e in events if e["event"] == "settled"]
+        self.assertTrue(settled and not settled[0]["timed_out"])
+        self.assertLessEqual(settled[0]["lead_m"], 0.003)
+        names = [e["event"] for e in events]
+        self.assertLess(names.index("settled"), [i for i, n in enumerate(names) if n == "chunk"][1])
+
+    def test_settle_times_out_instead_of_hanging(self):
+        World.reset(tf_after=2, real_after=5)                          # arm never moves
+        log = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False).name
+        node = self.make_node(*self.EXECUTE, "--max-chunks", "2", "--max-actions", "30", "--jsonl-log", log,
+                              "--settle-timeout", "0.3", steps="5", magnitude="0.04")
+        self.run_until_done(node)
+        settled = [e for e in self.events(log) if e["event"] == "settled"]
+        self.assertTrue(settled[0]["timed_out"]); self.assertGreaterEqual(settled[0]["waited_s"], 0.3)
+        self.assertEqual(node.chunks_done, 2)
 
     def test_tick_is_inert_until_armed(self):
         World.reset(tf_after=10**9, real_after=10**9)

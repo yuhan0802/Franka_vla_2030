@@ -170,6 +170,9 @@ class EefAdapter(Node):
         self.chunk: list = []; self.chunk_index = 0; self.chunks_done = 0
         self.executed = 0; self.next_action_at = 0.0; self.need_fresh_after = 0.0
         self.fault = False; self.finished = False
+        # Execute: after a chunk, wait for the arm to reach its final target before the next
+        # observation, so the policy plans from the pose the next chunk actually starts at.
+        self.settling = False; self.settle_started = 0.0
         # arm() spins the node while waiting for TF/services; tick must not act until it has finished.
         self.armed = False
         # Real arm feedback (/franka/joint_states, ros2_control) versus the merged
@@ -330,6 +333,7 @@ class EefAdapter(Node):
             return
         if self.executed >= self.args.max_actions or self.chunks_done >= self.args.max_chunks:
             self.finish("budget reached"); return
+        if self.settling and not self.settled(now): return
         if self.args.test_axis:
             if now >= self.need_fresh_after:
                 self.start_chunk(axis_test_chunk(self.args.test_axis, self.args.test_magnitude, self.args.test_steps,
@@ -399,6 +403,21 @@ class EefAdapter(Node):
             self.chunks_done += 1
             # The next observation must follow the final action's full interval.
             self.need_fresh_after = now + 1.0 / self.args.action_hz
+            if self.args.execute and self.args.settle_timeout > 0:
+                self.settling = True; self.settle_started = now
+
+    def settled(self, now: float) -> bool:
+        """True once the arm tracks the last chunk's final target (or the wait timed out)."""
+        pose = self.checked_pose()
+        if pose is None: return False
+        lead = float(np.linalg.norm(self.integrator.position - pose[0]))
+        lead_rotation = rotation_angle_between(self.integrator.quaternion, pose[1])
+        waited = now - self.settle_started
+        reached = lead <= self.args.settle_position and lead_rotation <= self.args.settle_rotation
+        if not reached and waited < self.args.settle_timeout: return False
+        self.settling = False; self.need_fresh_after = max(self.need_fresh_after, now)
+        self.log("settled", lead_m=lead, lead_rad=lead_rotation, waited_s=waited, timed_out=not reached)
+        return True
 
     # ----------------------------------------------------------------- outputs
     def send_target(self, position: np.ndarray, quaternion: np.ndarray) -> bool:
@@ -570,6 +589,10 @@ def parse_args() -> argparse.Namespace:
     add("--stability-position", type=float, default=0.001); add("--stability-rotation", type=float, default=0.01)
     add("--joint-consistency-tolerance", type=float, default=0.002, help="rad, /joint_states vs /franka/joint_states")
     add("--max-joint-age", type=float, default=0.1); add("--hold-settle", type=float, default=0.5)
+    add("--settle-position", type=float, default=0.003, help="execute: observe only once the arm is this close "
+        "to the previous chunk's final target (m)")
+    add("--settle-rotation", type=float, default=0.02, help="same for rotation (rad)")
+    add("--settle-timeout", type=float, default=1.5, help="observe anyway after this wait (s); 0 disables settling")
     add("--gripper-state-source", choices=("measured", "binary", "command"), default="measured",
         help="state[6]: measured width mapped linearly, measured width thresholded at the "
              "closed/open midpoint (Task0 training), or the last commanded open/close")
