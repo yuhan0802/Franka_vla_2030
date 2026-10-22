@@ -61,11 +61,15 @@ class World:
     follow_after = None     # spins the arm lags behind the latest target (None: never moves)
     targets: list = []
     target_spins: list = []
+    finger = 0.04           # each finger; 0.04 -> width 0.08 (open)
+    gripper_moves = True    # False: Move/Grasp report success but the fingers stay put
+    gripper_goals: list = []
 
     @classmethod
-    def reset(cls, tf_after=5, real_after=5, jump_at=None, follow_after=None):
+    def reset(cls, tf_after=5, real_after=5, jump_at=None, follow_after=None, finger=0.04, gripper_moves=True):
         cls.spins, cls.tf_after, cls.real_after, cls.jump_at, cls.targets = 0, tf_after, real_after, jump_at, []
         cls.follow_after, cls.target_spins = follow_after, []
+        cls.finger, cls.gripper_moves, cls.gripper_goals = finger, gripper_moves, []
 
     @classmethod
     def real(cls):
@@ -118,6 +122,33 @@ class FakeServiceClient:
         return FakeFuture(_Namespace(success=True, message="ok"))
 
 
+class FakeGripperClient:
+    def __init__(self, node, kind, name): self.name = name.rsplit("/", 1)[1]
+    def wait_for_server(self, timeout_sec=None): return True
+
+    def send_goal_async(self, goal):
+        World.gripper_goals.append(self.name)
+        if World.gripper_moves: World.finger = goal.width / 2
+        result = FakeFuture(_Namespace(result=_Namespace(success=True, error="")))
+        return FakeFuture(_Namespace(accepted=True, get_result_async=lambda: result))
+
+
+class FakePolicy:
+    """Scripted EEF server: returns the queued chunks in order, then idle chunks."""
+    chunks: list = []
+    metadata = {"gripper_state_source": "binary"}
+    rotation_frame = "tool"
+
+    def __init__(self, host, port): pass
+    def infer(self, observation): return FakePolicy.chunks.pop(0) if FakePolicy.chunks else idle_chunk(1.0)
+    def close(self): pass
+
+
+def idle_chunk(gripper, dx=0.0):
+    chunk = np.zeros((15, 7), np.float32); chunk[:, 0] = dx; chunk[:, 6] = gripper
+    return chunk
+
+
 class FakeBuffer:
     def lookup_transform(self, target, source, time):
         if World.spins < World.tf_after:
@@ -135,8 +166,11 @@ def spin_once(node, timeout_sec=None):
     if World.real():
         node.publish("/franka/joint_states", ARM, REAL_JOINTS)
     # joint_state_publisher always publishes, with URDF defaults until real feedback arrives.
-    node.publish("/joint_states", ARM + ["fr3_finger_joint1", "fr3_finger_joint2"], joints + [0.04, 0.04])
-    node.publish("/fr3_gripper/franka_gripper/joint_states", ["fr3_finger_joint1", "fr3_finger_joint2"], [0.04, 0.04])
+    node.publish("/joint_states", ARM + ["fr3_finger_joint1", "fr3_finger_joint2"], joints + [World.finger] * 2)
+    node.publish("/fr3_gripper/franka_gripper/joint_states", ["fr3_finger_joint1", "fr3_finger_joint2"], [World.finger] * 2)
+    if hasattr(node, "images"):     # cameras: a fresh frame every spin
+        node.images = {key: np.zeros((480, 640, 3), np.uint8) for key in ("exterior", "wrist")}
+        node.image_times = {key: World.now_ns * 1e-9 for key in ("exterior", "wrist")}
     for callback in list(node._timers):
         callback()
 
@@ -157,12 +191,13 @@ def install_fake_ros() -> None:
     modules["rclpy"].spin_once = spin_once
     modules["rclpy"].utilities = modules["rclpy.utilities"]
     modules["rclpy.utilities"].remove_ros_args = lambda: list(sys.argv)
-    modules["rclpy.action"].ActionClient = lambda *a: _Namespace(wait_for_server=lambda timeout_sec=None: True)
+    modules["rclpy.action"].ActionClient = FakeGripperClient
     modules["rclpy.node"].Node = FakeNode
     modules["rclpy.qos"].qos_profile_sensor_data = None
     modules["rclpy.time"].Time = FakeTime
     modules["cv_bridge"].CvBridge = lambda: None
-    modules["franka_msgs.action"].Grasp = modules["franka_msgs.action"].Move = _Namespace
+    modules["franka_msgs.action"].Grasp = modules["franka_msgs.action"].Move = _Namespace(
+        Goal=lambda: _Namespace(epsilon=_Namespace()))
     modules["geometry_msgs.msg"].PoseStamped = _message(
         header=lambda: _Namespace(frame_id="", stamp=None),
         pose=lambda: _Namespace(position=_Namespace(x=0, y=0, z=0), orientation=None))
@@ -196,9 +231,9 @@ class AdapterStartupTests(unittest.TestCase):
                     "--gripper-state-source", "binary", "--startup-timeout", timeout, *extra]
         return self.adapter.EefAdapter(self.adapter.parse_args())
 
-    def run_until_done(self, node):
+    def run_until_done(self, node, spins=500):
         node.arm()
-        for _ in range(500):
+        for _ in range(spins):
             if node.finished or node.fault: break
             spin_once(node)
 
@@ -273,6 +308,51 @@ class AdapterStartupTests(unittest.TestCase):
         settled = [e for e in self.events(log) if e["event"] == "settled"]
         self.assertTrue(settled[0]["timed_out"]); self.assertGreaterEqual(settled[0]["waited_s"], 0.3)
         self.assertEqual(node.chunks_done, 2)
+
+    def policy_node(self, *extra):
+        self.adapter.EefPolicyClient = FakePolicy
+        bounds = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+        bounds.write("workspace_bounds_world:\n  min: [0.2, -0.4, 0.1]\n  max: [0.8, 0.4, 0.9]\n"); bounds.close()
+        self.log_path = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False).name
+        sys.argv = ["adapter", "--bounds-config", bounds.name, "--gripper-state-source", "binary",
+                    "--max-chunks", "20", "--max-actions", "300", "--jsonl-log", self.log_path,
+                    "--execute", "--confirm-real-robot", "EEF_POSE_TARGET", "--enable-gripper", *extra]
+        return self.adapter.EefAdapter(self.adapter.parse_args())
+
+    def test_execute_refuses_to_start_with_closed_gripper(self):
+        World.reset(tf_after=2, real_after=5, finger=0.00003)        # first failed full run: width 5e-5
+        FakePolicy.chunks = []
+        node = self.policy_node()
+        with self.assertRaisesRegex(RuntimeError, "gripper is closed"): node.arm()
+        self.assertEqual(World.targets, [])
+
+    def test_open_success_without_finger_motion_latches(self):
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        FakePolicy.chunks = [idle_chunk(0.0, dx=0.02), idle_chunk(1.0, dx=0.02)]
+        node = self.policy_node()
+        node.arm()
+        # First failed full run: fingers stuck closed while every Move reports success.
+        World.gripper_moves = False; World.finger = 0.00003
+        for _ in range(3000):
+            if node.finished or node.fault: break
+            spin_once(node)
+        self.assertTrue(node.fault)
+        self.assertIn("did not move", [e for e in self.events(self.log_path) if e["event"] == "fault"][0]["reason"])
+
+    def test_stale_reversal_is_suppressed_then_release_finishes_task(self):
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        close_then_echo = idle_chunk(0.0, dx=0.02); close_then_echo[3:, 6] = 1.0   # first failed run pattern
+        FakePolicy.chunks = [idle_chunk(1.0, dx=0.02), close_then_echo, idle_chunk(0.0, dx=0.02),
+                             idle_chunk(1.0, dx=0.02)]                # carry, then release; idle afterwards
+        node = self.policy_node()
+        self.run_until_done(node, spins=6000)
+        self.assertFalse(node.fault)
+        self.assertEqual(World.gripper_goals, ["grasp", "move"])      # no open 0.2 s after the close
+        events = self.events(self.log_path)
+        self.assertTrue(any(e.get("gripper_suppressed") == "open" for e in events if e["event"] == "action"))
+        complete = [e for e in events if e["event"] == "complete"][0]
+        self.assertIn("task complete", complete["reason"])
+        self.assertEqual(node.chunks_done, 5)    # 4 scripted + 1 idle; the 2nd idle chunk is never executed
 
     def test_tick_is_inert_until_armed(self):
         World.reset(tf_after=10**9, real_after=10**9)

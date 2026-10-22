@@ -39,7 +39,7 @@ from franka_vr.srv import SetTargetPose
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eef_pose_safety import (  # noqa: E402
-    ACTION_REPRESENTATION, ACTION_SHAPE, ROTATION_EXECUTION, ROTVEC_FLIP_WARNING_RAD, STATE_PROTOCOL,
+    ACTION_REPRESENTATION, ACTION_SHAPE, LINEAR_SCALE_M, ROTATION_EXECUTION, ROTVEC_FLIP_WARNING_RAD, STATE_PROTOCOL,
     ChunkTargetIntegrator, GripperHysteresis, PoseJumpMonitor, PoseStabilityWindow, axis_test_chunk, build_state,
     gripper_open_from_width, inside_workspace, joints_consistent, physical_step, rotation_angle_between,
     validate_action_chunk,
@@ -173,6 +173,10 @@ class EefAdapter(Node):
         # Execute: after a chunk, wait for the arm to reach its final target before the next
         # observation, so the policy plans from the pose the next chunk actually starts at.
         self.settling = False; self.settle_started = 0.0
+        # Gripper bookkeeping: reversal dwell, open verification, and task completion
+        # (Task0 episodes end right after the release, so the policy then only hovers).
+        self.last_gripper_request_at = -1e9; self.verify_open_deadline: Optional[float] = None
+        self.grasp_seen = False; self.released = False; self.idle_chunks = 0
         # arm() spins the node while waiting for TF/services; tick must not act until it has finished.
         self.armed = False
         # Real arm feedback (/franka/joint_states, ros2_control) versus the merged
@@ -263,6 +267,9 @@ class EefAdapter(Node):
             self.latch(f"measured end-effector pose jumped {reason}; TF source unstable"); return None
         return pose
 
+    def open_midpoint(self) -> float:
+        return 0.5 * (self.args.gripper_state_closed_width + self.args.gripper_state_open_width)
+
     def gripper_state_value(self) -> Optional[float]:
         if self.args.gripper_state_source == "command":
             return 1.0 if self.commanded_gripper_open else 0.0
@@ -319,6 +326,12 @@ class EefAdapter(Node):
         self.checked_pose()
         if self.fault: return
         now = time.monotonic()
+        if self.verify_open_deadline is not None:
+            width = self.gripper_width()
+            if width is not None and width >= self.open_midpoint():
+                self.verify_open_deadline = None; self.log("gripper_verified", open=True, measured_width=width)
+            elif now > self.verify_open_deadline:
+                self.latch(f"gripper reported OPEN but width stays {width} m; the fingers did not move"); return
         if self.future is not None:
             if not self.future.done():
                 if now - self.inference_started > self.args.max_policy_latency: self.latch("policy latency timeout")
@@ -351,6 +364,12 @@ class EefAdapter(Node):
                 and np.linalg.norm(self.integrator.position - start_position) <= self.args.max_target_lead
                 and rotation_angle_between(self.integrator.quaternion, start_quaternion) <= self.args.max_target_lead_rotation):
             start_position, start_quaternion = self.integrator.position, self.integrator.quaternion
+        if self.released and not self.args.test_axis and self.args.finish_idle_chunks > 0:
+            moved = float(np.linalg.norm(np.asarray(chunk)[:, :3].sum(axis=0))) * LINEAR_SCALE_M
+            self.idle_chunks = self.idle_chunks + 1 if moved < self.args.idle_translation else 0
+            if self.idle_chunks >= self.args.finish_idle_chunks:
+                self.finish(f"task complete: gripper released and the policy idles "
+                            f"({self.idle_chunks} chunks under {self.args.idle_translation * 1000:.0f} mm)"); return
         self.integrator.start(start_position, start_quaternion)
         budget = self.args.max_actions - self.executed
         self.chunk = [row.copy() for row in chunk[:min(self.args.execute_horizon, budget)]]
@@ -386,7 +405,14 @@ class EefAdapter(Node):
             self.log("tracking_violation", **record)
             self.latch(f"target leads measured pose by {lead:.4f} m / {lead_rotation:.4f} rad; arm is not following"); return
         desired_open = self.hysteresis.desired_open(step.gripper_open, self.commanded_gripper_open)
+        if desired_open is not None and now - self.last_gripper_request_at < self.args.gripper_min_dwell:
+            # A reversal right after a request is the policy echoing a stale state, not a decision.
+            record["gripper_suppressed"] = "open" if desired_open else "close"; desired_open = None
         record["gripper_request"] = None if desired_open is None else ("open" if desired_open else "close")
+        if desired_open is not None:
+            self.last_gripper_request_at = now
+            if not desired_open: self.grasp_seen = True
+            elif self.grasp_seen: self.released = True
         if self.args.execute:
             if not self.send_target(target_position, target_quaternion): return
             self.executed += 1
@@ -471,6 +497,8 @@ class EefAdapter(Node):
         except Exception as error: self.latch(f"gripper action failed: {error}"); return
         if not result.success: self.latch(f"gripper action reported failure: {result.error}"); return
         self.gripper_open = self.pending_gripper_open; self.pending_gripper_open = None
+        # A Move "success" without finger motion was seen on the robot; require the width to follow.
+        if self.gripper_open: self.verify_open_deadline = time.monotonic() + self.args.gripper_verify_timeout
         self.log("gripper_done", open=self.gripper_open, measured_width=self.gripper_width())
         self.get_logger().info(f"gripper {'OPENED' if self.gripper_open else 'CLOSED'}; width={self.gripper_width()}")
 
@@ -515,6 +543,10 @@ class EefAdapter(Node):
             self.commanded_gripper_open = gripper_open_from_width(
                 width, self.args.gripper_state_closed_width, self.args.gripper_state_open_width) >= 0.5
             self.get_logger().info(f"gripper feedback width={width:.4f}m -> open={self.commanded_gripper_open}")
+            if (self.args.execute and self.args.enable_gripper and not self.args.test_axis
+                    and self.args.require_open_start and not self.commanded_gripper_open):
+                raise RuntimeError(f"gripper is closed (width {width:.4f} m); training episodes start open, "
+                                   "open the gripper before execute")
         if self.args.execute:
             if not self.target_client.wait_for_service(timeout_sec=max(1.0, deadline - time.monotonic())):
                 raise RuntimeError("/set_target_pose unavailable; run_robot.sh (Servo stack) must be running")
@@ -604,6 +636,13 @@ def parse_args() -> argparse.Namespace:
     add("--gripper-open-width", type=float, default=.08); add("--gripper-closed-width", type=float, default=.01)
     add("--gripper-speed", type=float, default=.05); add("--gripper-force", type=float, default=20.)
     add("--gripper-epsilon-inner", type=float, default=.1); add("--gripper-epsilon-outer", type=float, default=.2)
+    add("--gripper-min-dwell", type=float, default=1.0, help="ignore an open/close reversal within this time (s)")
+    add("--gripper-verify-timeout", type=float, default=0.5,
+        help="after an OPEN success the measured width must reach the open/closed midpoint within this time (s)")
+    add("--require-open-start", type=int, choices=(0, 1), default=1, help="execute: refuse to start with a closed gripper")
+    add("--finish-idle-chunks", type=int, default=2,
+        help="finish after the release once this many consecutive chunks barely move; 0 disables")
+    add("--idle-translation", type=float, default=0.005, help="chunk translation (m) counted as idle")
     add("--test-axis", default="", help="six-direction commissioning: +x,-x,+y,-y,+z,-z,+rx,...,-rz (no policy)")
     add("--test-magnitude", type=float, default=0.04, help="command units; 0.04 -> 3 mm or 0.006 rad per step")
     add("--test-steps", type=int, default=5)
