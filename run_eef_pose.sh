@@ -8,16 +8,23 @@
 #   axis-test  one hand-built small motion along EEF_TEST_AXIS; no policy
 #   execute    serial 15-step chunks on the real robot
 #   status | stop
+#   server | server-status | server-stop   EEF model server on the GPU host (ssh)
 set -euo pipefail
 
 mode="${1:-dry-run}"
-case "$mode" in dry-run|axis-test|execute|status|stop) ;; *)
-  echo "Usage: $0 {dry-run|axis-test|execute|status|stop}" >&2; exit 2;; esac
+case "$mode" in dry-run|axis-test|execute|status|stop|server|server-status|server-stop) ;; *)
+  echo "Usage: $0 {dry-run|axis-test|execute|status|stop|server|server-status|server-stop}" >&2; exit 2;; esac
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root_dir"
 robot_session=franka_vr_eef_robot
 camera_session=franka_vr_eef_cameras
-host="${EEF_SERVER_HOST:-10.24.116.66}"; port="${EEF_SERVER_PORT:-8095}"
+host="${EEF_SERVER_HOST:-10.24.116.20}"; port="${EEF_SERVER_PORT:-8095}"
+# The Task0 EEF checkpoint lives on the 20 machine's /data2; the server runs there.
+remote="${EEF_REMOTE_SSH:-mac_20}"
+remote_project="${EEF_REMOTE_PROJECT:-/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA}"
+checkpoint="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+droid_pretrained_bar_eef01/save_6000_chkpt}"
+server_gpu="${EEF_SERVER_GPU:-1}"
+remote_session="franka_eef_server_$port"
 instruction="${VLA_INSTRUCTION:-place the test tube rack in the black tray}"
 # Training recorded /camera_left/image_rect, so default to calibrated images.
 camera_mode="${VLA_CAMERA_MODE:-calibrated}"
@@ -47,7 +54,44 @@ running_commands() {
     --filter "label=com.docker.compose.oneoff=True")
 }
 
+remote_listening() { ssh "$remote" "ss -ltn | grep -q ':$port '"; }
+start_server() {
+  if remote_listening; then
+    echo "EEF server already listening on $host:$port; the adapter verifies its checkpoint."; return 0
+  fi
+  local script; script="$(mktemp)"
+  cat > "$script" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+P='$remote_project'
+PY="\$P/.conda/qwenvla/bin/python"; [[ -x "\$PY" ]] || PY=/home/xmu/anaconda3/envs/qwenvla/bin/python
+cd ~/franka_eef_server
+export CUDA_VISIBLE_DEVICES='$server_gpu' PYTHONPATH="\$P/third_party/python:\$P" VLA_PROJECT_ROOT="\$P"
+export HF_HOME="\$P/actioncodec_libero/.cache/huggingface" USE_TF=0 TRANSFORMERS_NO_TF=1 TF_CPP_MIN_LOG_LEVEL=3 TOKENIZERS_PARALLELISM=false
+"\$PY" -u deploy_franka_task0_qwen_actioncodec_eef.py --checkpoint '$checkpoint' --port '$port' 2>&1 | tee -a server_$port.log
+EOF
+  ssh "$remote" "mkdir -p ~/franka_eef_server"
+  scp -q "$root_dir/deploy_franka_task0_qwen_actioncodec_eef.py" "$remote:franka_eef_server/"
+  scp -q "$script" "$remote:franka_eef_server/run_server_$port.sh"; rm -f "$script"
+  ssh "$remote" "tmux kill-session -t '$remote_session' 2>/dev/null || true; tmux new-session -d -s '$remote_session' 'bash ~/franka_eef_server/run_server_$port.sh'"
+  echo "Starting EEF server on $remote (GPU $server_gpu, port $port)..."
+  for _ in $(seq 1 120); do
+    if remote_listening; then echo "EEF server ready at $host:$port."; return 0; fi
+    ssh "$remote" "tmux has-session -t '$remote_session' 2>/dev/null" || break
+    sleep 2
+  done
+  echo "EEF server did not start; inspect: ssh $remote 'tail -50 ~/franka_eef_server/server_$port.log'" >&2
+  return 1
+}
+
 case "$mode" in
+  server) start_server; exit $?;;
+  server-status)
+    if remote_listening; then echo "EEF server $host:$port: listening"; else echo "EEF server $host:$port: stopped"; fi
+    exit 0;;
+  server-stop)
+    ssh "$remote" "tmux kill-session -t '$remote_session' 2>/dev/null || true"; echo "EEF server session stopped."
+    exit 0;;
   status)
     status_session "$robot_session"; status_session "$camera_session"
     echo "Latest logs:"; ls -dt "$root_dir"/logs/eef_pose_* 2>/dev/null | head -3 || true
@@ -87,6 +131,7 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl)
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
+[[ "$mode" != axis-test && -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
 
 case "$mode" in
   dry-run)
