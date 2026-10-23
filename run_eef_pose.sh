@@ -162,7 +162,7 @@ fi
 
 adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instruction"
   --exterior-image-topic "/camera_${exterior_camera}/$suffix"
-  --bounds-config /ws_franka_vr/src/franka_vr/franka_vr/config/vla_calibration.yaml
+  --bounds-config "${EEF_BOUNDS_CONFIG:-/ws_franka_vr/src/franka_vr/franka_vr/config/eef_workspace_bounds.yaml}"
   --chunk-start "${EEF_CHUNK_START:-measured}"
   --gripper-state-source "${EEF_GRIPPER_STATE_SOURCE:-measured}"
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
