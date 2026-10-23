@@ -129,7 +129,8 @@ class FakeGripperClient:
 
     def send_goal_async(self, goal):
         World.gripper_goals.append(self.name)
-        if World.gripper_moves: World.finger = 0.04 if self.name == "homing" else goal.width / 2
+        # The real FR3 ends homing with the fingers closed.
+        if World.gripper_moves: World.finger = 0.0001 if self.name == "homing" else goal.width / 2
         result = FakeFuture(_Namespace(result=_Namespace(success=True, error="")))
         return FakeFuture(_Namespace(accepted=True, get_result_async=lambda: result))
 
@@ -343,7 +344,7 @@ class AdapterStartupTests(unittest.TestCase):
         FakePolicy.chunks = []
         node = self.policy_node()
         node.arm()
-        self.assertEqual(World.gripper_goals, ["homing"])
+        self.assertEqual(World.gripper_goals, ["homing", "move"])
         self.assertAlmostEqual(node.gripper_width(), 0.08)
         self.assertTrue(node.armed)
 

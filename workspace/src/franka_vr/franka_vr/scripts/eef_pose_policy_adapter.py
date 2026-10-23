@@ -613,26 +613,39 @@ class EefAdapter(Node):
         self.get_logger().info(f"startup checks passed: real joint feedback, steady TF at "
                                f"{np.round(pose[0], 4).tolist()}, services ready")
 
-    def home_gripper(self, deadline: float) -> float:
-        """Run franka_gripper Homing (fingers close fully, then open) and return the new width."""
-        self.get_logger().warning("gripper width implausible: homing the gripper (fingers travel fully)")
-        if not self.homing_client.wait_for_server(timeout_sec=10): raise RuntimeError("gripper homing server unavailable")
-        goal_future = self.homing_client.send_goal_async(Homing.Goal())
-        until = min(deadline, time.monotonic() + 40.0)
+    def run_gripper_action(self, client, goal, name: str, until: float) -> None:
+        """Send one gripper action goal and spin until it succeeds (raises otherwise)."""
+        goal_future = client.send_goal_async(goal)
         while not goal_future.done() and time.monotonic() < until: rclpy.spin_once(self, timeout_sec=.05)
         handle = goal_future.result() if goal_future.done() else None
-        if handle is None or not handle.accepted: raise RuntimeError("gripper homing goal not accepted")
+        if handle is None or not handle.accepted: raise RuntimeError(f"gripper {name} goal not accepted")
         result_future = handle.get_result_async()
         while not result_future.done() and time.monotonic() < until: rclpy.spin_once(self, timeout_sec=.05)
         if not result_future.done() or not result_future.result().result.success:
-            raise RuntimeError("gripper homing failed or timed out")
-        settle_until = time.monotonic() + 0.5
-        while time.monotonic() < settle_until: rclpy.spin_once(self, timeout_sec=.05)
-        width = self.gripper_width()
-        self.log("gripper_homed", measured_width=width)
-        if width is None or not self.open_midpoint() <= width <= self.args.gripper_max_plausible_width:
-            raise RuntimeError(f"gripper width {width} m after homing is still implausible")
-        self.get_logger().warning(f"gripper homed: width={width:.4f} m")
+            raise RuntimeError(f"gripper {name} failed or timed out")
+
+    def home_gripper(self, deadline: float) -> float:
+        """Home (calibrate) the gripper, then open it like every training episode starts; return the width."""
+        self.get_logger().warning("gripper width implausible: homing the gripper (fingers travel fully)")
+        if not self.homing_client.wait_for_server(timeout_sec=10): raise RuntimeError("gripper homing server unavailable")
+        until = min(deadline, time.monotonic() + 40.0)
+        self.run_gripper_action(self.homing_client, Homing.Goal(), "homing", until)
+        # On this FR3 homing ends with the fingers closed (0.0003 m on 2026-10-23); open explicitly.
+        self.log("gripper_homed", measured_width=self.gripper_width())
+        goal = Move.Goal(); goal.width = self.args.gripper_open_width; goal.speed = self.args.gripper_speed
+        self.run_gripper_action(self.move_client, goal, "open after homing", until)
+        # Judge only feedback that arrived after the move finished; earlier samples are pre-homing.
+        opened_at = time.monotonic(); settle_until = opened_at + 2.0; width = None
+        while time.monotonic() < settle_until:
+            rclpy.spin_once(self, timeout_sec=.05)
+            if self.gripper_time > opened_at:
+                width = self.gripper_width()
+                if self.args.gripper_open_width - 0.005 <= width <= self.args.gripper_max_plausible_width: break
+        self.log("gripper_opened_after_homing", measured_width=width)
+        if width is None or not self.args.gripper_open_width - 0.005 <= width <= self.args.gripper_max_plausible_width:
+            raise RuntimeError(f"gripper width {width} m after homing and opening to "
+                               f"{self.args.gripper_open_width} m is still implausible")
+        self.get_logger().warning(f"gripper homed and opened: width={width:.4f} m")
         return width
 
     def finish(self, reason: str) -> None:
