@@ -306,6 +306,21 @@ R_delta = inverse(R_previous) × R_current
 
 测试 `+rot_z` 时，夹爪应绕自身 z 轴（fr3_link8 z 轴，夹爪朝下时约为基座 −z）转动；如果绕基座 +z 转动，说明旋转被错误地当作 base-frame action。
 
+#### DROID 权重的末端坐标系（2026-10-23 核实）
+
+DROID 预训练权重（`task1-droid.sh`）的 state/action 同样以法兰 link8 为末端，**不需要 TCP 外参**：
+
+- 在 droid_1.0.1 的 6 个分片、18 条示范、720 帧上，用 `observation.joint_position` 按 FR3/Panda
+  运动学（`kinematics.yaml`，至 link8）计算法兰位姿，与同帧 `observation.cartesian_position` 比较：
+  平移最大差 3.1e-8 m，旋转最大差 1.4e-7 rad（float32 舍入量级），即二者是同一个坐标系，
+  不是夹爪中心/TCP；
+- `cartesian_position` 的 RPY 按 `Rotation.from_euler("xyz", …)` 解释正确（与 `droid_data.reshape_episode` 一致）；
+- `action_dict.cartesian_velocity` 由同一坐标系的 `cartesian_position` 目标导出，旋转动作绕 link8 原点，
+  执行时不会额外带出平移。
+
+坐标系一致不代表指尖位置一致：DROID 使用 Robotiq 2F-85，指尖距法兰比 Franka Hand 更远，相同法兰位姿下
+指尖落点不同。这只能由模型从图像适应，外参无法补偿，DROID 权重在本机上可能出现系统性的抓取高度偏差。
+
 ### 5.4 累计目标
 
 推荐一个 action chunk 内维护累计目标：
