@@ -29,6 +29,7 @@ host="${EEF_SERVER_HOST:-10.24.116.20}"; port="${EEF_SERVER_PORT:-8095}"
 remote="${EEF_REMOTE_SSH:-mac_20}"
 remote_project="${EEF_REMOTE_PROJECT:-/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA}"
 checkpoint="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+droid_pretrained_bar_eef01/save_6000_chkpt}"
+actioncodec="${EEF_ACTIONCODEC:-}"
 server_gpu="${EEF_SERVER_GPU:-1}"
 remote_session="franka_eef_server_$port"
 instruction="${VLA_INSTRUCTION:-place the test tube rack in the black tray}"
@@ -74,7 +75,7 @@ PY="\$P/.conda/qwenvla/bin/python"; [[ -x "\$PY" ]] || PY=/home/xmu/anaconda3/en
 cd ~/franka_eef_server
 export CUDA_VISIBLE_DEVICES='$server_gpu' PYTHONPATH="\$P/third_party/python:\$P" VLA_PROJECT_ROOT="\$P"
 export HF_HOME="\$P/actioncodec_libero/.cache/huggingface" USE_TF=0 TRANSFORMERS_NO_TF=1 TF_CPP_MIN_LOG_LEVEL=3 TOKENIZERS_PARALLELISM=false
-"\$PY" -u deploy_franka_task0_qwen_actioncodec_eef.py --checkpoint '$checkpoint' --port '$port' 2>&1 | tee -a server_$port.log
+"\$PY" -u deploy_franka_task0_qwen_actioncodec_eef.py --checkpoint '$checkpoint' --actioncodec '$actioncodec' --port '$port' 2>&1 | tee -a server_$port.log
 EOF
   ssh "$remote" "mkdir -p ~/franka_eef_server"
   scp -q "$root_dir/deploy_franka_task0_qwen_actioncodec_eef.py" "$remote:franka_eef_server/"
