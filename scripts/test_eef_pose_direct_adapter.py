@@ -34,11 +34,13 @@ class Sim:
     executor_message = "armed"
     feedback = True
     finger = 0.04
+    exterior = True
 
     @classmethod
     def reset(cls):
         cls.joints, cls.velocity, cls.commands = REAL_JOINTS.copy(), np.zeros(7), []
         cls.executor_level, cls.executor_message, cls.feedback, cls.finger = 0, "armed", True, 0.04
+        cls.exterior = True
         harness.World.now_ns = cls.now_ns
 
 
@@ -67,8 +69,9 @@ def sim_spin(node, timeout_sec=None):
     status = harness._Namespace(name="pi05_direct_velocity_executor", level=Sim.executor_level, message=Sim.executor_message)
     for callback in node._subscriptions.get("/pi05/direct_executor/status", []):
         callback(harness._Namespace(status=[status]))
-    node.images = {key: np.zeros((480, 640, 3), np.uint8) for key in ("exterior", "wrist")}
-    node.image_times = {key: Sim.now_ns * 1e-9 for key in ("exterior", "wrist")}
+    keys = ("exterior", "wrist") if Sim.exterior else ("wrist",)
+    node.images = {key: np.zeros((480, 640, 3), np.uint8) for key in keys}
+    node.image_times = {key: Sim.now_ns * 1e-9 for key in keys}
     for callback in list(node._timers):
         callback()
 
@@ -148,6 +151,16 @@ class DirectAdapterTests(unittest.TestCase):
         # only the final settle tolerance (3 mm) is left, never a per-chunk loss
         self.assertGreater(moved[0], 0.09 - 0.003 - 0.0005)
         np.testing.assert_allclose(node.integrator.position[0] - start[0], 0.09, atol=1e-6)
+
+    def test_missing_camera_is_reported_instead_of_waiting_silently(self):
+        Sim.exterior = False                       # 2026-10-23 20:09: rectify never got camera_info
+        node = self.node(execute=False)
+        node.arm()
+        for _ in range(700): sim_spin(node)        # 7 s
+        self.assertEqual(node.observation_count, 0)
+        self.assertIn("no image yet on /camera_left/image_rect", node.observation_blocker)
+        self.assertIsNotNone(node.observation_wait_since)
+        self.assertGreater(node.observation_warned_at, 0)
 
     def test_dry_run_publishes_nothing(self):
         harness.FakePolicy.chunks = [harness.idle_chunk(1.0, dx=0.04)]

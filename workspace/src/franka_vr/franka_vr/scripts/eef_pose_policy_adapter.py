@@ -138,6 +138,8 @@ class EefAdapter(Node):
         # Diagnostics: finger values per topic (both topics feed self.fingers).
         self.finger_sources: Dict[str, Dict[str, Any]] = {}
         self.observation_count = 0
+        self.observation_blocker = "not checked yet"; self.observation_wait_since: Optional[float] = None
+        self.observation_warned_at = -1e9
         if args.save_observation_dir: Path(args.save_observation_dir).mkdir(parents=True, exist_ok=True)
         self.tf = Buffer(); self.listener = TransformListener(self.tf, self)
         bounds = yaml.safe_load(open(args.bounds_config))["workspace_bounds_world"]
@@ -301,16 +303,25 @@ class EefAdapter(Node):
 
     def observation(self) -> Optional[Dict[str, Any]]:
         now = time.monotonic()
-        if set(self.images) != {"exterior", "wrist"}: return None
+        missing = sorted({"exterior", "wrist"} - set(self.images))
+        if missing:
+            topics = {"exterior": self.args.exterior_image_topic, "wrist": self.args.wrist_image_topic}
+            self.observation_blocker = "no image yet on " + ", ".join(topics[key] for key in missing); return None
         stamps = [self.image_times["exterior"], self.image_times["wrist"]]
         if self.args.gripper_state_source in ("measured", "binary"):
-            if self.gripper_width() is None: return None
+            if self.gripper_width() is None: self.observation_blocker = "no gripper finger feedback"; return None
             stamps.append(self.gripper_time)
-        if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age: return None
-        if abs(self.image_times["exterior"] - self.image_times["wrist"]) > self.args.max_camera_skew: return None
+        if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age:
+            ages = {"exterior": now - self.image_times["exterior"], "wrist": now - self.image_times["wrist"],
+                    "gripper": now - self.gripper_time}
+            self.observation_blocker = "stale inputs (age s): " + ", ".join(f"{k}={v:.2f}" for k, v in ages.items())
+            return None
+        if abs(self.image_times["exterior"] - self.image_times["wrist"]) > self.args.max_camera_skew:
+            self.observation_blocker = (f"camera skew {abs(self.image_times['exterior'] - self.image_times['wrist']):.3f} s "
+                                        f"> {self.args.max_camera_skew} s"); return None
         pose = self.checked_pose()
         gripper = self.gripper_state_value()
-        if pose is None or gripper is None: return None
+        if pose is None or gripper is None: self.observation_blocker = "end-effector pose or gripper state unavailable"; return None
         state = build_state(pose[0], pose[1], gripper)
         rotvec_norm = float(np.linalg.norm(state[3:6]))
         if rotvec_norm > ROTVEC_FLIP_WARNING_RAD:
@@ -383,7 +394,16 @@ class EefAdapter(Node):
             return
         observation = self.observation()
         if observation is not None:
+            self.observation_wait_since = None
             self.inference_started = now; self.future = self.pool.submit(self.policy.infer, observation)
+        else:
+            # A silent wait looked like a hang (2026-10-23 20:09: rectify got no camera_info for 12 min).
+            if self.observation_wait_since is None: self.observation_wait_since = now
+            waited = now - self.observation_wait_since
+            if waited > 5.0 and now - self.observation_warned_at > 5.0:
+                self.observation_warned_at = now
+                self.get_logger().warning(f"no observation for {waited:.0f} s: {self.observation_blocker}")
+                self.log("observation_waiting", waited_s=waited, blocker=self.observation_blocker)
 
     def start_chunk(self, chunk: np.ndarray, policy_latency: float) -> None:
         pose = self.checked_pose()
