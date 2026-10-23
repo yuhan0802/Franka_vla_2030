@@ -177,8 +177,9 @@ class EefAdapter(Node):
                                    + "; restart it (run_eef_pose.sh server-stop, then server)")
             trained = self.metadata.get("training_instruction")
             if trained and args.instruction.strip().lower() != trained:
-                self.get_logger().warning(f"instruction {args.instruction!r} differs from the training "
-                                          f"instruction {trained!r}; the model never saw it")
+                # A paraphrase silently degraded the real Task0 runs; the model only saw this exact prompt.
+                raise RuntimeError(f"instruction {args.instruction!r} differs from the training "
+                                   f"instruction {trained!r}; the model never saw it")
         self.integrator = ChunkTargetIntegrator(rotation_frame)
         self.hysteresis = GripperHysteresis(args.gripper_open_threshold, args.gripper_close_threshold)
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="eef-policy")

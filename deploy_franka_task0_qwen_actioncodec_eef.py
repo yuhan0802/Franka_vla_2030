@@ -17,6 +17,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 import types
@@ -79,6 +80,13 @@ class Task0EefPolicy:
         if mismatched:
             raise RuntimeError(f"checkpoint is not the Task0 EEF BAR protocol: {mismatched}")
         self.default_instruction = str(self.training.get("task_instruction", "")).strip().lower()
+        if not self.default_instruction:
+            # Task{x} runs take the prompt from tasks.json (FrankaTask0Dataset), not from training_config.
+            task = re.fullmatch(r"Task(\d+)", Path(self.training.get("data_root_dir", "")).name)
+            tasks_path = Path(self.training.get("tasks_path", ""))
+            if task and tasks_path.is_file():
+                prompts = json.loads(tasks_path.read_text(encoding="utf-8"))
+                self.default_instruction = str(prompts.get(task.group(1), "")).strip().lower()
 
         self.processor = AutoProcessor.from_pretrained(checkpoint, trust_remote_code=True, local_files_only=True)
         vla = AutoModelForImageTextToText.from_pretrained(
