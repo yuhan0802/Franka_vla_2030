@@ -18,6 +18,8 @@ export VLA_INSTRUCTION="put the red test tube into the basket"
 # 训练状态：夹爪宽度 >= 0.045 m 为张开(1)，否则闭合(0)。
 export EEF_GRIPPER_STATE_SOURCE=binary
 export EEF_EXTERIOR_CAMERA="${EEF_EXTERIOR_CAMERA:-left}"
+# 该权重训练时两路图像都缩放到 256x256；adapter 拒绝不按此缩放的（旧）模型服务。
+export EEF_MODEL_IMAGE_SIZE="${EEF_MODEL_IMAGE_SIZE:-256}"
 
 mode="${1:-run}"
 case "$mode" in
@@ -37,9 +39,39 @@ run_dir="${EEF_RUN_DIR:-$script_dir/logs/eef_task1_act_$(date +%Y%m%d_%H%M%S)_$$
 EEF_LOG_DIR="$run_dir/dry_run" EEF_MAX_CHUNKS=1 "$script_dir/run_eef_pose.sh" dry-run
 grep -q '"robot_command_sent": false' "$run_dir/dry_run/policy.jsonl" || {
   echo "Mandatory dry-run did not prove robot_command_sent=false; refusing to execute." >&2; exit 1; }
+
+# 训练的 29 条示范起点几乎相同（<0.3 mm / 0.13°），起点偏差会让抓取位置明显偏移。
+# 与 eef_pose_safety.TASK0_START_POSITION/QUATERNION 一致。
+start_offset() {  # 输出 "位置偏差(m) 姿态偏差(rad)"，取自 armed 事件
+  local line position quaternion
+  line="$(grep -m1 '"event": "armed"' "$1" 2>/dev/null)" || return 1
+  position="$(sed -n 's/.*"position": \[\([^]]*\)\].*/\1/p' <<<"$line" | tr -d ,)"
+  quaternion="$(sed -n 's/.*"quaternion_xyzw": \[\([^]]*\)\].*/\1/p' <<<"$line" | tr -d ,)"
+  [[ -n "$position" && -n "$quaternion" ]] || return 1
+  awk -v p="$position" -v q="$quaternion" 'BEGIN {
+    split(p, a, " "); split(q, b, " ")
+    d = sqrt((a[1] - 0.5577)^2 + (a[2] + 0.0015)^2 + (a[3] - 0.3205)^2)
+    c = b[1] * 0.92537 + b[2] * -0.37885 + b[3] * -0.01236 + b[4] * 0.00364; if (c < 0) c = -c; if (c > 1) c = 1
+    printf "%.4f %.4f\n", d, 2 * atan2(sqrt(1 - c * c), c) }'
+}
+read -r offset turn < <(start_offset "$run_dir/dry_run/policy.jsonl") || {
+  echo "Dry-run log has no armed pose; refusing to execute." >&2; exit 1; }
+echo "Start pose: ${offset} m / ${turn} rad from the Task0 training start."
+if awk -v d="$offset" -v r="$turn" 'BEGIN { exit !(d > 0.005 || r > 0.02) }'; then
+  home_cmd="EEF_ENABLE_REAL_ROBOT=I_UNDERSTAND_EEF_POSE $script_dir/run_eef_pose.sh home"
+  if [[ "$mode" == dry-run ]]; then
+    echo "Start pose is off the training start; run executes home first (or: $home_cmd)."
+  elif [[ "${EEF_AUTO_HOME:-true}" != true ]]; then
+    echo "Start pose is off the training start and EEF_AUTO_HOME=false; run: $home_cmd" >&2; exit 1
+  else
+    echo "Moving to the Task0 training start first (home)."
+    EEF_LOG_DIR="$run_dir/home" EEF_ENABLE_REAL_ROBOT=I_UNDERSTAND_EEF_POSE "$script_dir/run_eef_pose.sh" home || {
+      echo "home failed; refusing to execute." >&2; exit 1; }
+  fi
+fi
 [[ "$mode" == dry-run ]] && { echo "Dry-run finished. Logs: $run_dir/dry_run"; exit 0; }
 
-# 完整任务：串行 15 步动作块，默认最多 60 块（约 60 s），启用夹爪。
+# 完整任务：串行 15 步动作块，默认最多 60 块，启用夹爪。每块约 3 s（执行 1 s + 到位等待 + 推理）。
 exec env \
   EEF_LOG_DIR="$run_dir/execute" \
   EEF_ENABLE_REAL_ROBOT=I_UNDERSTAND_EEF_POSE \

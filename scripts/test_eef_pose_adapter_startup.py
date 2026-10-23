@@ -319,6 +319,24 @@ class AdapterStartupTests(unittest.TestCase):
                     "--execute", "--confirm-real-robot", "EEF_POSE_TARGET", "--enable-gripper", *extra]
         return self.adapter.EefAdapter(self.adapter.parse_args())
 
+    def test_reused_server_with_other_preprocessing_is_refused(self):
+        World.reset(tf_after=2, real_after=5)
+        expect = ("--expected-model-image-size", "256", "--expected-actioncodec", "/data2/codec",
+                  "--expected-state-stats", "/data2/stats.json")
+        served = {"gripper_state_source": "binary", "model_image_size": [256, 256],
+                  "actioncodec": "/data2/codec/", "state_stats": "/data2/stats.json"}
+        try:
+            FakePolicy.metadata = {"gripper_state_source": "binary"}   # server started before the 256 resize
+            with self.assertRaisesRegex(RuntimeError, "stale: model_image_size=None.*actioncodec=None"):
+                self.policy_node(*expect)
+            FakePolicy.metadata = {**served, "actioncodec": "/data2/old_codec"}
+            with self.assertRaisesRegex(RuntimeError, "actioncodec='/data2/old_codec'"):
+                self.policy_node(*expect)
+            FakePolicy.metadata = served                               # trailing slash is the same path
+            self.policy_node(*expect)
+        finally:
+            FakePolicy.metadata = {"gripper_state_source": "binary"}
+
     def test_execute_refuses_to_start_with_closed_gripper(self):
         World.reset(tf_after=2, real_after=5, finger=0.00003)        # first failed full run: width 5e-5
         FakePolicy.chunks = []

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import functools
 import json
+import os
 import sys
 import threading
 import time
@@ -160,6 +161,20 @@ class EefAdapter(Node):
             if args.expected_checkpoint and self.metadata.get("checkpoint") != args.expected_checkpoint:
                 raise RuntimeError(f"server on port {args.server_port} serves {self.metadata.get('checkpoint')!r}, "
                                    f"expected {args.expected_checkpoint!r}; stop the stale server first")
+            # A server that is already listening is reused as is; the checkpoint alone
+            # does not prove it preprocesses images or decodes actions like this run expects.
+            stale = []
+            if (args.expected_model_image_size
+                    and self.metadata.get("model_image_size") != [args.expected_model_image_size] * 2):
+                stale.append(f"model_image_size={self.metadata.get('model_image_size')!r}, "
+                             f"expected {args.expected_model_image_size}")
+            for key, expected in (("actioncodec", args.expected_actioncodec), ("state_stats", args.expected_state_stats)):
+                served = self.metadata.get(key)
+                if expected and (not served or os.path.normpath(served) != os.path.normpath(expected)):
+                    stale.append(f"{key}={served!r}, expected {expected!r}")
+            if stale:
+                raise RuntimeError(f"server on port {args.server_port} is stale: " + "; ".join(stale)
+                                   + "; restart it (run_eef_pose.sh server-stop, then server)")
             trained = self.metadata.get("training_instruction")
             if trained and args.instruction.strip().lower() != trained:
                 self.get_logger().warning(f"instruction {args.instruction!r} differs from the training "
@@ -641,12 +656,16 @@ def parse_args() -> argparse.Namespace:
         help="state[6]: measured width mapped linearly, measured width thresholded at the "
              "closed/open midpoint (Task0 training), or the last commanded open/close")
     add("--expected-checkpoint", default="", help="refuse a server whose metadata names another checkpoint")
+    add("--expected-model-image-size", type=int, default=0, help="refuse a server not resizing images to NxN (0: no check)")
+    add("--expected-actioncodec", default="", help="refuse a server whose metadata names another ActionCodec")
+    add("--expected-state-stats", default="", help="refuse a server whose metadata names other state stats")
     add("--gripper-state-closed-width", type=float, default=0.01)
     add("--gripper-state-open-width", type=float, default=0.08)
     add("--enable-gripper", action="store_true")
     add("--gripper-open-threshold", type=float, default=.6); add("--gripper-close-threshold", type=float, default=.4)
     add("--gripper-open-width", type=float, default=.08); add("--gripper-closed-width", type=float, default=.01)
-    add("--gripper-speed", type=float, default=.05); add("--gripper-force", type=float, default=20.)
+    # Close at the VR collection speed (start_franka_vr.py Grasp 0.10 m/s); 0.05 took 1.5 s on the robot.
+    add("--gripper-speed", type=float, default=.10); add("--gripper-force", type=float, default=20.)
     add("--gripper-epsilon-inner", type=float, default=.1); add("--gripper-epsilon-outer", type=float, default=.2)
     add("--gripper-min-dwell", type=float, default=1.0, help="ignore an open/close reversal within this time (s)")
     add("--gripper-verify-timeout", type=float, default=0.5,

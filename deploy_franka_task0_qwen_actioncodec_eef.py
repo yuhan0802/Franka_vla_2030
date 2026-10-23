@@ -85,6 +85,7 @@ class Task0EefPolicy:
             checkpoint, dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True, local_files_only=True,
         ).to(self.device)
         codec_path = Path(args.actioncodec or self.training["actioncodec_path"])
+        self.codec_path = codec_path
         codec = AutoModel.from_pretrained(codec_path, trust_remote_code=True, local_files_only=True)
         restore_actioncodec_derived_buffers(codec)
         tokenizer = self.processor.tokenizer
@@ -113,6 +114,7 @@ class Task0EefPolicy:
         self.model.eval()
 
         stats_path = Path(args.state_stats or self.training["state_stats_path"])
+        self.stats_path = stats_path
         stats = json.loads(stats_path.read_text())["norm_stats"]["state"]
         self.q01 = np.asarray(stats["q01"], dtype=np.float32)
         self.q99 = np.asarray(stats["q99"], dtype=np.float32)
@@ -200,6 +202,8 @@ class Task0EefPolicy:
         return {
             "model_family": "qwen3vl2b_franka_task0_droid_bar_eef",
             "checkpoint": str(self.checkpoint),
+            # Declared so the adapter can refuse a reused server started with other assets.
+            "actioncodec": str(self.codec_path), "state_stats": str(self.stats_path),
             "state_protocol": STATE_PROTOCOL,
             "action_representation": ACTION_REPRESENTATION,
             "action_shape": [15, 7], "action_hz": 15,

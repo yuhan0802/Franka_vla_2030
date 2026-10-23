@@ -170,6 +170,10 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl)
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
 [[ "$mode" != axis-test && -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
+# A reused server must also match these (refused otherwise; restart with server-stop).
+[[ "$mode" != axis-test && -n "$actioncodec" ]] && adapter_flags+=(--expected-actioncodec "$actioncodec")
+[[ "$mode" != axis-test && -n "$state_stats" ]] && adapter_flags+=(--expected-state-stats "$state_stats")
+[[ "$mode" != axis-test && -n "${EEF_MODEL_IMAGE_SIZE:-}" ]] && adapter_flags+=(--expected-model-image-size "$EEF_MODEL_IMAGE_SIZE")
 # Save every image pair sent to the policy (EEF_SAVE_IMAGES=false to skip).
 [[ "$mode" != axis-test && "${EEF_SAVE_IMAGES:-true}" == true ]] && adapter_flags+=(--save-observation-dir /eef_logs/observations)
 
