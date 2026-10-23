@@ -57,7 +57,8 @@ STATE_PROTOCOL = "droid_eef_axis_angle6_gripper_open1_singleturn_v1"
 # training_config. Verified on the Task0 data: command vs measured orientation
 # change has mean cosine +0.42 in the tool frame and -0.36 in the world frame.
 ROTATION_EXECUTION = "relative_rotvec_right_multiply"
-IMAGE_SHAPE = (480, 640, 3)  # Task0 trained on full recorder frames, no resize
+IMAGE_SHAPE = (480, 640, 3)  # Camera/request shape before training-compatible preprocessing.
+MODEL_IMAGE_SIZE = 256
 
 
 class Task0EefPolicy:
@@ -72,6 +73,7 @@ class Task0EefPolicy:
             "action_representation": ACTION_REPRESENTATION, "action_horizon": 15,
             "action_frequency_hz": 15, "action_embodiment_id": 2, "action_prediction_mode": "block_ar_16",
             "predict_future_state": True, "prediction_order": "state_then_action",
+            "image_size": MODEL_IMAGE_SIZE,
         }
         mismatched = {key: self.training.get(key) for key, value in expected.items() if self.training.get(key) != value}
         if mismatched:
@@ -130,7 +132,13 @@ class Task0EefPolicy:
             image = np.asarray(raw[key], dtype=np.uint8)
             if image.shape != IMAGE_SHAPE:
                 raise ValueError(f"{key} must be {IMAGE_SHAPE} RGB like the Task0 recordings, got {image.shape}")
-            images.append(Image.fromarray(image, "RGB"))
+            # Match FrankaTask0Dataset validation/inference preprocessing exactly:
+            # no augmentation or random crop, only a bilinear square resize.
+            images.append(
+                Image.fromarray(image, "RGB").resize(
+                    (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE), Image.Resampling.BILINEAR
+                )
+            )
         instruction = str(raw.get("instruction", "")).strip().lower() or self.default_instruction
         normalized = np.clip(2.0 * (state - self.q01) / self.span - 1.0, -1.0, 1.0).astype(np.float32)
         # Identical to FrankaTask0Dataset.transform with predict_future_state=True.
@@ -199,6 +207,7 @@ class Task0EefPolicy:
             "gripper_state_source": "binary",
             "rotation_execution": ROTATION_EXECUTION,
             "observation_format": "franka_task0_main_wrist_640x480_eef7_v1",
+            "model_image_size": [MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE],
             "training_instruction": self.default_instruction,
             "port": port,
         }
