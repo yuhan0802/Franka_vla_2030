@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-effector pose control option for 15x7 EEF policies (see
-# franka_eef_pose_control_adapter.md). Independent of the pi0.5 direct joint
+# docs/franka_eef_pose_control_adapter.md). Independent of the pi0.5 direct joint
 # velocity workflow: it uses the MoveIt Servo pose stack (run_robot.sh,
 # /set_target_pose) and its own tmux sessions and log directory.
 #
