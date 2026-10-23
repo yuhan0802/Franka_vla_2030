@@ -138,6 +138,17 @@ class DirectAdapterTests(unittest.TestCase):
         self.assertTrue(np.allclose(Sim.commands[-1], 0.0), "must end with an explicit zero command")
         self.assertLessEqual(np.abs(np.array(Sim.commands)).max(), 0.5 + 1e-9)
 
+    def test_last_target_chunk_start_keeps_every_commanded_millimetre(self):
+        start, _, _ = self.fk()
+        harness.FakePolicy.chunks = [harness.idle_chunk(1.0, dx=0.04)] * 2
+        node = self.node("--chunk-start", "last_target")
+        self.run_node(node)
+        self.assertFalse(node.fault)
+        moved = self.fk()[0] - start
+        # only the final settle tolerance (3 mm) is left, never a per-chunk loss
+        self.assertGreater(moved[0], 0.09 - 0.003 - 0.0005)
+        np.testing.assert_allclose(node.integrator.position[0] - start[0], 0.09, atol=1e-6)
+
     def test_dry_run_publishes_nothing(self):
         harness.FakePolicy.chunks = [harness.idle_chunk(1.0, dx=0.04)]
         node = self.node(execute=False)

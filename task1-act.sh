@@ -27,6 +27,10 @@ export EEF_GRIPPER_STATE_SOURCE=binary
 export EEF_EXTERIOR_CAMERA="${EEF_EXTERIOR_CAMERA:-left}"
 # 该权重训练时两路图像都缩放到 256x256；adapter 拒绝不按此缩放的（旧）模型服务。
 export EEF_MODEL_IMAGE_SIZE="${EEF_MODEL_IMAGE_SIZE:-256}"
+# 每块从上一块的最终目标接着积分（到位等待后二者相差 <=3 mm）。训练时机械臂一直在追领先
+# 约 2 cm 的 VR 目标，进度从不清零；从实测位姿重起会让接近试管时每块 1-2 mm 的细调
+# 被 3 mm 到位容差吃掉（2026-10-23 实测 z 指令 -1.8 mm/块只走 -1.5 mm，悬停 15 块）。
+export EEF_CHUNK_START="${EEF_CHUNK_START:-last_target}"
 
 control="${EEF_CONTROL:-direct}"
 case "$control" in

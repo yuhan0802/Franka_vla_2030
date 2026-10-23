@@ -28,7 +28,7 @@ import websockets.sync.client
 import yaml
 import rclpy
 from cv_bridge import CvBridge
-from franka_msgs.action import Grasp, Move
+from franka_msgs.action import Grasp, Homing, Move
 from geometry_msgs.msg import PoseStamped, Quaternion
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -205,7 +205,7 @@ class EefAdapter(Node):
         self.jump_monitor = PoseJumpMonitor()
         self.gripper_open: Optional[bool] = None; self.pending_gripper_open: Optional[bool] = None
         self.commanded_gripper_open = True
-        self.target_client = None; self.move_client = None; self.grasp_client = None
+        self.target_client = None; self.move_client = None; self.grasp_client = None; self.homing_client = None
         self.log_file = open(args.jsonl_log, "a", buffering=1) if args.jsonl_log else None
         for key, topic in (("exterior", args.exterior_image_topic), ("wrist", args.wrist_image_topic)):
             self.create_subscription(Image, topic, functools.partial(self.image_cb, key), qos_profile_sensor_data)
@@ -217,6 +217,7 @@ class EefAdapter(Node):
             if args.enable_gripper:
                 self.move_client = ActionClient(self, Move, "/fr3_gripper/franka_gripper/move")
                 self.grasp_client = ActionClient(self, Grasp, "/fr3_gripper/franka_gripper/grasp")
+                self.homing_client = ActionClient(self, Homing, "/fr3_gripper/franka_gripper/homing")
         self.create_timer(0.01, self.tick)
         self.get_logger().warning(
             f"mode={'EXECUTE' if args.execute else 'DRY-RUN'} source={'axis-test ' + args.test_axis if args.test_axis else f'{args.server_host}:{args.server_port}'} "
@@ -568,6 +569,17 @@ class EefAdapter(Node):
                 rclpy.spin_once(self, timeout_sec=.1)
             if self.gripper_width() is None: raise RuntimeError("gripper finger feedback unavailable")
             width = self.gripper_width()
+            if width > self.args.gripper_max_plausible_width:
+                # An unhomed FR3 gripper reports widths offset by ~7 cm (0.139 m open, 0.071 m closed on
+                # 2026-10-23): the binary state then never reads closed and "open" leaves it closed.
+                self.log("gripper_implausible", measured_width=width)
+                if not (self.args.execute and self.args.enable_gripper and self.args.home_gripper_if_needed):
+                    message = (f"gripper reports {width:.4f} m > {self.args.gripper_max_plausible_width} m; "
+                               "it is not homed and its width/state are wrong")
+                    if self.args.execute: raise RuntimeError(message + "; home it first")
+                    self.get_logger().error(message + " (dry-run continues; execute will home it)")
+                else:
+                    width = self.home_gripper(deadline)
             self.commanded_gripper_open = gripper_open_from_width(
                 width, self.args.gripper_state_closed_width, self.args.gripper_state_open_width) >= 0.5
             self.get_logger().info(f"gripper feedback width={width:.4f}m -> open={self.commanded_gripper_open}")
@@ -600,6 +612,28 @@ class EefAdapter(Node):
         self.log("armed", position=pose[0].tolist(), quaternion_xyzw=pose[1].tolist(), real_joints=self.real_joints)
         self.get_logger().info(f"startup checks passed: real joint feedback, steady TF at "
                                f"{np.round(pose[0], 4).tolist()}, services ready")
+
+    def home_gripper(self, deadline: float) -> float:
+        """Run franka_gripper Homing (fingers close fully, then open) and return the new width."""
+        self.get_logger().warning("gripper width implausible: homing the gripper (fingers travel fully)")
+        if not self.homing_client.wait_for_server(timeout_sec=10): raise RuntimeError("gripper homing server unavailable")
+        goal_future = self.homing_client.send_goal_async(Homing.Goal())
+        until = min(deadline, time.monotonic() + 40.0)
+        while not goal_future.done() and time.monotonic() < until: rclpy.spin_once(self, timeout_sec=.05)
+        handle = goal_future.result() if goal_future.done() else None
+        if handle is None or not handle.accepted: raise RuntimeError("gripper homing goal not accepted")
+        result_future = handle.get_result_async()
+        while not result_future.done() and time.monotonic() < until: rclpy.spin_once(self, timeout_sec=.05)
+        if not result_future.done() or not result_future.result().result.success:
+            raise RuntimeError("gripper homing failed or timed out")
+        settle_until = time.monotonic() + 0.5
+        while time.monotonic() < settle_until: rclpy.spin_once(self, timeout_sec=.05)
+        width = self.gripper_width()
+        self.log("gripper_homed", measured_width=width)
+        if width is None or not self.open_midpoint() <= width <= self.args.gripper_max_plausible_width:
+            raise RuntimeError(f"gripper width {width} m after homing is still implausible")
+        self.get_logger().warning(f"gripper homed: width={width:.4f} m")
+        return width
 
     def finish(self, reason: str) -> None:
         self.request_stop(); self.finished = True
@@ -671,6 +705,10 @@ def parse_args() -> argparse.Namespace:
     add("--gripper-min-dwell", type=float, default=1.0, help="ignore an open/close reversal within this time (s)")
     add("--gripper-verify-timeout", type=float, default=0.5,
         help="after an OPEN success the measured width must reach the open/closed midpoint within this time (s)")
+    add("--gripper-max-plausible-width", type=float, default=0.085,
+        help="a wider reading means the gripper is not homed (FR3 opens to 0.08 m)")
+    add("--home-gripper-if-needed", type=int, choices=(0, 1), default=1,
+        help="execute with gripper: home it when the width is implausible, otherwise refuse")
     add("--require-open-start", type=int, choices=(0, 1), default=1, help="execute: refuse to start with a closed gripper")
     add("--finish-idle-chunks", type=int, default=2,
         help="finish after the release once this many consecutive chunks barely move; 0 disables")

@@ -111,6 +111,7 @@ class FakeFuture:
     def __init__(self, value): self.value = value
     def add_done_callback(self, callback): callback(self)
     def result(self): return self.value
+    def done(self): return True
 
 
 class FakeServiceClient:
@@ -128,7 +129,7 @@ class FakeGripperClient:
 
     def send_goal_async(self, goal):
         World.gripper_goals.append(self.name)
-        if World.gripper_moves: World.finger = goal.width / 2
+        if World.gripper_moves: World.finger = 0.04 if self.name == "homing" else goal.width / 2
         result = FakeFuture(_Namespace(result=_Namespace(success=True, error="")))
         return FakeFuture(_Namespace(accepted=True, get_result_async=lambda: result))
 
@@ -196,7 +197,7 @@ def install_fake_ros() -> None:
     modules["rclpy.qos"].qos_profile_sensor_data = None
     modules["rclpy.time"].Time = FakeTime
     modules["cv_bridge"].CvBridge = lambda: None
-    modules["franka_msgs.action"].Grasp = modules["franka_msgs.action"].Move = _Namespace(
+    modules["franka_msgs.action"].Grasp = modules["franka_msgs.action"].Move = modules["franka_msgs.action"].Homing = _Namespace(
         Goal=lambda: _Namespace(epsilon=_Namespace()))
     modules["geometry_msgs.msg"].PoseStamped = _message(
         header=lambda: _Namespace(frame_id="", stamp=None),
@@ -336,6 +337,21 @@ class AdapterStartupTests(unittest.TestCase):
             self.policy_node(*expect)
         finally:
             FakePolicy.metadata = {"gripper_state_source": "binary"}
+
+    def test_unhomed_gripper_is_homed_before_execute(self):
+        World.reset(tf_after=2, real_after=5, finger=0.0695)        # 2026-10-23: unhomed, reads 0.139 m open
+        FakePolicy.chunks = []
+        node = self.policy_node()
+        node.arm()
+        self.assertEqual(World.gripper_goals, ["homing"])
+        self.assertAlmostEqual(node.gripper_width(), 0.08)
+        self.assertTrue(node.armed)
+
+    def test_unhomed_gripper_refused_without_auto_homing(self):
+        World.reset(tf_after=2, real_after=5, finger=0.0695)
+        node = self.policy_node("--home-gripper-if-needed", "0")
+        with self.assertRaisesRegex(RuntimeError, "not homed"): node.arm()
+        self.assertEqual(World.gripper_goals, []); self.assertEqual(World.targets, [])
 
     def test_execute_refuses_to_start_with_closed_gripper(self):
         World.reset(tf_after=2, real_after=5, finger=0.00003)        # first failed full run: width 5e-5
