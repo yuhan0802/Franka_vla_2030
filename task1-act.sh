@@ -10,9 +10,9 @@ export EEF_REMOTE_SSH="${EEF_REMOTE_SSH:-mac_20}"
 export EEF_SERVER_HOST="${EEF_SERVER_HOST:-10.24.116.20}"
 export EEF_SERVER_PORT="${EEF_SERVER_PORT:-8095}"
 export EEF_SERVER_GPU="${EEF_SERVER_GPU:-1}"
-export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+droid_pretrained_bar_eef01/save_6000_chkpt}"
-# 训练时所有片段的指令都是 "task 0"（training_config.task_instruction）。
-export VLA_INSTRUCTION="task 0"
+export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+taskprompt_resize256_localdata_resume1k_8gpu_b256/save_8000_chkpt}"
+# 必须与训练数据中的任务指令完全一致。
+export VLA_INSTRUCTION="put the red test tube into the basket"
 # 训练状态：夹爪宽度 >= 0.045 m 为张开(1)，否则闭合(0)。
 export EEF_GRIPPER_STATE_SOURCE=binary
 export EEF_EXTERIOR_CAMERA="${EEF_EXTERIOR_CAMERA:-left}"
