@@ -121,13 +121,13 @@ mkdir -p "$log_dir"; log_dir="$(cd "$log_dir" && pwd)"
 if [[ "$commands" == *franka_twist.launch.py* ]]; then
   echo "Reusing the running Servo pose stack (franka_twist.launch.py)."
 else
-  start_session "$robot_session" "ROBOT_IP='${ROBOT_IP:-172.16.0.2}' LOAD_GRIPPER=true USE_RVIZ=false ./run_robot.sh"
+  start_session "$robot_session" "set -o pipefail; ROBOT_IP='${ROBOT_IP:-172.16.0.2}' LOAD_GRIPPER=true USE_RVIZ=false ./run_robot.sh 2>&1 | tee -a '$log_dir/robot_live.log'; status=\${PIPESTATUS[0]}; echo ROBOT_RUNNER_EXIT=\$status | tee -a '$log_dir/robot_live.log'; exit \$status"
 fi
 if [[ "$mode" != axis-test ]]; then
   if [[ "$commands" == *vla_cameras.launch.py* ]]; then
     echo "Reusing running VLA cameras; make sure they publish $camera_mode images."
   else
-    start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh"
+    start_session "$camera_session" "set -o pipefail; VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh 2>&1 | tee -a '$log_dir/cameras_live.log'; status=\${PIPESTATUS[0]}; echo CAMERA_RUNNER_EXIT=\$status | tee -a '$log_dir/cameras_live.log'; exit \$status"
   fi
 fi
 
@@ -166,6 +166,7 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --chunk-start "${EEF_CHUNK_START:-measured}"
   --gripper-state-source "${EEF_GRIPPER_STATE_SOURCE:-measured}"
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
+  --max-tf-age "${EEF_MAX_TF_AGE:-0.15}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl)
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
 [[ "$mode" != axis-test && -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")

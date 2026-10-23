@@ -4,14 +4,14 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Task0 EEF 模型（Qwen3-VL-2B + DROID BAR，末端位姿控制），走 run_eef_pose.sh。
-# 模型服务在 20 服务器上运行（权重位于其 /data2），端口 8095。
+# 模型服务默认在 63 服务器上运行（权重位于其 /data2），端口 8095。
 # 所有参数仍可在命令行临时覆盖，例如 EEF_SERVER_GPU=2 ./task1-act.sh。
-export EEF_REMOTE_SSH="${EEF_REMOTE_SSH:-mac_20}"
-export EEF_SERVER_HOST="${EEF_SERVER_HOST:-10.24.116.20}"
+export EEF_REMOTE_SSH="${EEF_REMOTE_SSH:-mac_63}"
+export EEF_SERVER_HOST="${EEF_SERVER_HOST:-10.24.116.63}"
 export EEF_SERVER_PORT="${EEF_SERVER_PORT:-8095}"
 export EEF_SERVER_GPU="${EEF_SERVER_GPU:-1}"
 export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+taskprompt_resize256_localdata_resume1k_8gpu_b256/save_8000_chkpt}"
-export EEF_ACTIONCODEC="${EEF_ACTIONCODEC:-/data2/lyh/weights/ActionCodec-Base-RVQft}"
+export EEF_ACTIONCODEC="${EEF_ACTIONCODEC:-/data2/lyh/vla/assets/ActionCodec-Base-RVQft}"
 export EEF_STATE_STATS="${EEF_STATE_STATS:-/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json}"
 # 必须与训练数据中的任务指令完全一致。
 export VLA_INSTRUCTION="put the red test tube into the basket"

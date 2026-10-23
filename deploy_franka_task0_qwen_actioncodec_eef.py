@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import time
+import types
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,10 @@ from transformers import AutoModel, AutoModelForImageTextToText, AutoProcessor
 
 PROJECT_ROOT = Path(os.environ.get("VLA_PROJECT_ROOT", "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA"))
 sys.path.insert(0, str(PROJECT_ROOT))
+# The training module imports W&B only for its training entry point.  The
+# inference server does not use it, and should not depend on the health of the
+# optional W&B/Pydantic installation on the serving host.
+sys.modules.setdefault("wandb", types.ModuleType("wandb"))
 from train.franka_task0_qwen_actioncodec_droid_pretrained_bar import (  # noqa: E402
     ACTION_REPRESENTATION, BAR_BOS_TOKEN, DROID_Q01, DROID_Q99, FUTURE_STATE_END_TOKEN,
     FUTURE_STATE_START_TOKEN, FUTURE_STATE_TOKENS, STATE_TOKENS, ActionTokenizer, VLAWithState,
