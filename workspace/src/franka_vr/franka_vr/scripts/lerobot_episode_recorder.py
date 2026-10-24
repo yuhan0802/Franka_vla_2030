@@ -469,7 +469,8 @@ class EpisodeRecorder(Node):
         if previous is None:
             return np.zeros(3, dtype=np.float32), np.zeros(3, dtype=np.float32)
         position = current[:3] - previous[:3]
-        # q_delta = q_current * inverse(q_previous), with quaternion xyzw.
+        # q_delta = inverse(q_previous) * q_current (xyzw): a TOOL-frame (fr3_link8) delta, so
+        # q_current = q_previous * q_delta. Translation stays a world-frame difference.
         px, py, pz, pw = previous[3:]
         cx, cy, cz, cw = current[3:]
         x = cw * -px + cx * pw - cy * -pz + cz * -py

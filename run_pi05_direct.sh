@@ -2,6 +2,15 @@
 # Explicit entry point for the parallel pi0.5 direct joint velocity workflow.
 set -euo pipefail
 
+# Optional end-effector pose control (15x7 EEF policies). The default keeps the
+# joint velocity workflow below unchanged; eef_pose hands off to a separate
+# launcher with its own Servo stack, sessions and logs.
+case "${PI05_CONTROL_MODE:-joint_velocity}" in
+  joint_velocity) ;;
+  eef_pose) exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run_eef_pose.sh" "$@";;
+  *) echo "PI05_CONTROL_MODE must be joint_velocity or eef_pose" >&2; exit 2;;
+esac
+
 mode="${1:-dry-run}"
 case "$mode" in server|probe|dry-run|fake-execute|fake-commission|commission|execute|full-execute|status|stop) ;; *)
   echo "Usage: $0 {server|probe|dry-run|fake-execute|fake-commission|commission|execute|full-execute|status|stop}" >&2; exit 2;; esac
