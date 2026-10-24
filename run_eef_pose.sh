@@ -41,6 +41,8 @@ case "${EEF_ROTATION_EXECUTION:-}" in
     rotation_option="--rotation-execution '${EEF_ROTATION_EXECUTION}'" ;;
   *) echo "EEF_ROTATION_EXECUTION must be relative_rotvec_left_multiply or relative_rotvec_right_multiply" >&2; exit 2 ;;
 esac
+# Extra flags for the server program, e.g. EEF_SERVER_ARGS="--execute-horizon 15" for the replay server.
+server_args="${EEF_SERVER_ARGS:-}"
 remote_session="franka_eef_server_$port"
 instruction="${VLA_INSTRUCTION:-place the test tube rack in the black tray}"
 # Training recorded /camera_left/image_rect, so default to calibrated images.
@@ -85,7 +87,7 @@ PY="\$P/.conda/qwenvla/bin/python"; [[ -x "\$PY" ]] || PY=/home/xmu/anaconda3/en
 cd ~/franka_eef_server
 export CUDA_VISIBLE_DEVICES='$server_gpu' PYTHONPATH="\$P/third_party/python:\$P" VLA_PROJECT_ROOT="\$P"
 export HF_HOME="\$P/actioncodec_libero/.cache/huggingface" USE_TF=0 TRANSFORMERS_NO_TF=1 TF_CPP_MIN_LOG_LEVEL=3 TOKENIZERS_PARALLELISM=false
-"\$PY" -u $server_script --checkpoint '$checkpoint' --actioncodec '$actioncodec' --state-stats '$state_stats' --port '$port' $rotation_option 2>&1 | tee -a server_$port.log
+"\$PY" -u $server_script --checkpoint '$checkpoint' --actioncodec '$actioncodec' --state-stats '$state_stats' --port '$port' $rotation_option $server_args 2>&1 | tee -a server_$port.log
 EOF
   ssh "$remote" "mkdir -p ~/franka_eef_server"
   scp -q "$root_dir/$server_script" "$remote:franka_eef_server/"
