@@ -23,8 +23,8 @@ export EEF_STATE_STATS="${EEF_STATE_STATS:-/data2/lyh/vla/config/droid_eef_axis_
 # 必须与训练数据中的任务指令完全一致（/data2/lyh/vla/Franka_vr/tasks.json 的 "0"）。
 # 其他权重（如 task1-droid.sh）用 EEF_INSTRUCTION 覆盖；不读 VLA_INSTRUCTION，避免沿用 pi0.5 流程的旧值。
 export VLA_INSTRUCTION="${EEF_INSTRUCTION:-place the red test tube in the red basket}"
-# 训练状态：夹爪宽度 >= 0.045 m 为张开(1)，否则闭合(0)。
-export EEF_GRIPPER_STATE_SOURCE="${EEF_GRIPPER_STATE_SOURCE:-binary}"
+# v4 训练状态：夹爪开度连续，clip((width - 0.01) / 0.07, 0, 1)；动作里的夹爪仍是 0/1 目标。
+export EEF_GRIPPER_STATE_SOURCE="${EEF_GRIPPER_STATE_SOURCE:-measured}"
 export EEF_EXTERIOR_CAMERA="${EEF_EXTERIOR_CAMERA:-left}"
 # 该权重训练时两路图像都缩放到 256x256；adapter 拒绝不按此缩放的（旧）模型服务。
 export EEF_MODEL_IMAGE_SIZE="${EEF_MODEL_IMAGE_SIZE:-256}"

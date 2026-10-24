@@ -8,7 +8,7 @@ decoder, DROID scales) is imported from the training code rather than copied:
   train/droid_qwen_actioncodec_state_first_bar.py
 
 Wire protocol (client: eef_pose_policy_adapter.py)
-  request : eef_state float32[7] = xyz, absolute rotvec, gripper open 0/1
+  request : eef_state float32[7] = xyz, absolute rotvec, gripper openness 0..1 (continuous)
             exterior_image / wrist_image uint8 480x640x3 RGB, instruction str
   response: action float32[15, 7] = linear/0.075, angular/0.15, gripper open 0..1
 """
@@ -53,11 +53,10 @@ network_utils = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(network_utils)
 
 STATE_PROTOCOL = "droid_eef_axis_angle6_gripper_open1_singleturn_v1"
-# Task0 labels come from lerobot_episode_recorder eef_delta_rotation_command,
-# which is inv(q_prev) * q_cur (tool frame) despite the "base_frame" wording in
-# training_config. Verified on the Task0 data: command vs measured orientation
-# change has mean cosine +0.42 in the tool frame and -0.36 in the world frame.
-ROTATION_EXECUTION = "relative_rotvec_right_multiply"
+# v4 labels (preprocess_franka_task_measured_eef_v4.py) are the measured world-frame
+# rotation q[t+2] * inv(q[t]), applied by left multiplication. Pre-v4 Task0 weights
+# were tool-frame right-multiply: pass --rotation-execution relative_rotvec_right_multiply.
+ROTATION_EXECUTION = "relative_rotvec_left_multiply"
 IMAGE_SHAPE = (480, 640, 3)  # Camera/request shape before training-compatible preprocessing.
 MODEL_IMAGE_SIZE = 256
 
@@ -217,7 +216,7 @@ class Task0EefPolicy:
             "action_representation": ACTION_REPRESENTATION,
             "action_shape": [15, 7], "action_hz": 15,
             "gripper_convention": "0_closed_1_open",
-            "gripper_state_source": "binary",
+            "gripper_state_source": "measured",
             "rotation_execution": self.rotation_execution,
             "observation_format": "franka_task0_main_wrist_640x480_eef7_v1",
             "model_image_size": [MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE],
