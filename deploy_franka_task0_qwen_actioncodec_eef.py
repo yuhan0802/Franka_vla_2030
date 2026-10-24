@@ -65,6 +65,7 @@ MODEL_IMAGE_SIZE = 256
 class Task0EefPolicy:
     def __init__(self, args: argparse.Namespace):
         self.device = torch.device(args.device)
+        self.rotation_execution = args.rotation_execution
         if self.device.type == "cuda" and not torch.cuda.is_available():
             raise RuntimeError(f"CUDA unavailable: {self.device}")
         checkpoint = Path(args.checkpoint).resolve()
@@ -217,7 +218,7 @@ class Task0EefPolicy:
             "action_shape": [15, 7], "action_hz": 15,
             "gripper_convention": "0_closed_1_open",
             "gripper_state_source": "binary",
-            "rotation_execution": ROTATION_EXECUTION,
+            "rotation_execution": self.rotation_execution,
             "observation_format": "franka_task0_main_wrist_640x480_eef7_v1",
             "model_image_size": [MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE],
             "training_instruction": self.default_instruction,
@@ -238,6 +239,9 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--actioncodec", default="", help="default: training_config actioncodec_path")
     parser.add_argument("--state-stats", default="", help="default: training_config state_stats_path")
+    parser.add_argument("--rotation-execution",
+                        choices=("relative_rotvec_left_multiply", "relative_rotvec_right_multiply"),
+                        default=ROTATION_EXECUTION)
     parser.add_argument("--host", default="0.0.0.0"); parser.add_argument("--port", type=int, default=8095)
     parser.add_argument("--device", default="cuda:0")
     args = parser.parse_args()

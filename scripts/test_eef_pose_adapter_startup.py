@@ -348,6 +348,15 @@ class AdapterStartupTests(unittest.TestCase):
         self.assertAlmostEqual(node.gripper_width(), 0.08)
         self.assertTrue(node.armed)
 
+    def test_negative_unhomed_gripper_is_homed_before_execute(self):
+        World.reset(tf_after=2, real_after=5, finger=-0.00023)      # 2026-10-24: physically open, reads closed
+        FakePolicy.chunks = []
+        node = self.policy_node()
+        node.arm()
+        self.assertEqual(World.gripper_goals, ["homing", "move"])
+        self.assertAlmostEqual(node.gripper_width(), 0.08)
+        self.assertTrue(node.armed)
+
     def test_unhomed_gripper_refused_without_auto_homing(self):
         World.reset(tf_after=2, real_after=5, finger=0.0695)
         node = self.policy_node("--home-gripper-if-needed", "0")

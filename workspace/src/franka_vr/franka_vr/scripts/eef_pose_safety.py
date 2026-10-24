@@ -133,20 +133,21 @@ class PhysicalStep:
 
 
 def physical_step(action: object, max_translation: float, max_rotation: float) -> PhysicalStep:
-    """Decode one 7D action into a norm-limited physical increment.
+    """Decode one 7D action into a physical increment with optional translation limiting.
 
-    Norm (not per-axis) limiting keeps the commanded direction unchanged.
+    A zero max_translation disables translation clipping. Norm (not per-axis)
+    limiting keeps the commanded direction unchanged when enabled.
     """
     a = np.asarray(action, dtype=np.float64)
     if a.shape != (7,) or not np.isfinite(a).all():
         raise ValueError("action must be finite with shape (7,)")
-    if max_translation <= 0 or max_rotation <= 0:
-        raise ValueError("step limits must be positive")
+    if max_translation < 0 or max_rotation <= 0:
+        raise ValueError("max_translation must be nonnegative and max_rotation must be positive")
     delta_position = a[:3] * LINEAR_SCALE_M
     delta_rotvec = a[3:6] * ANGULAR_SCALE_RAD
     translation = float(np.linalg.norm(delta_position))
     rotation = float(np.linalg.norm(delta_rotvec))
-    translation_clipped = translation > max_translation
+    translation_clipped = max_translation > 0 and translation > max_translation
     rotation_clipped = rotation > max_rotation
     if translation_clipped:
         delta_position *= max_translation / translation
