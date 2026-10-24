@@ -17,7 +17,7 @@ export EEF_REMOTE_SSH="${EEF_REMOTE_SSH:-mac_63}"
 export EEF_SERVER_HOST="${EEF_SERVER_HOST:-10.24.116.63}"
 export EEF_SERVER_PORT="${EEF_SERVER_PORT:-8095}"
 export EEF_SERVER_GPU="${EEF_SERVER_GPU:-1}"
-export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+taskprompt_resize256_localdata_resume1k_8gpu_b256/save_8000_chkpt}"
+export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar_v4/Qwen3VL2B+Franka-Task0+lr0.0001+v4_measured_world_left_aug_10k_8gpu_b256/save_6000_chkpt}"
 export EEF_ACTIONCODEC="${EEF_ACTIONCODEC:-/data2/lyh/vla/assets/ActionCodec-Base-RVQft}"
 export EEF_STATE_STATS="${EEF_STATE_STATS:-/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json}"
 # 必须与训练数据中的任务指令完全一致（/data2/lyh/vla/Franka_vr/tasks.json 的 "0"）。
