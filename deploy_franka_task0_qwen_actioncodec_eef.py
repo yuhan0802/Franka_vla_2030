@@ -129,7 +129,15 @@ class Task0EefPolicy:
         if self.q01.shape != (7,) or self.q99.shape != (7,):
             raise RuntimeError(f"DROID EEF state stats must be 7D: {stats_path}")
         self.span = np.maximum(self.q99 - self.q01, 1e-8)
-        self.scale = np.maximum(np.abs(DROID_Q01), np.abs(DROID_Q99))[:6]
+        configured_scale = self.training.get("action_arm_scale")
+        if configured_scale is None:
+            self.scale = np.maximum(np.abs(DROID_Q01), np.abs(DROID_Q99))[:6]
+            self.action_normalization = "legacy_droid_symmetric_scale"
+        else:
+            self.scale = np.asarray(configured_scale, dtype=np.float32)
+            if self.scale.shape != (6,) or not np.isfinite(self.scale).all() or np.any(self.scale <= 0):
+                raise RuntimeError(f"action_arm_scale must contain six positive finite values, got {configured_scale!r}")
+            self.action_normalization = str(self.training.get("action_normalization", "checkpoint_action_arm_scale"))
         self.dummy_action = "<|action_0|>" * BAR_ACTION_TOKENS
         self.checkpoint = checkpoint
 
@@ -215,6 +223,8 @@ class Task0EefPolicy:
             "state_protocol": STATE_PROTOCOL,
             "action_representation": ACTION_REPRESENTATION,
             "action_shape": [15, 7], "action_hz": 15,
+            "action_normalization": self.action_normalization,
+            "action_arm_scale": self.scale.tolist(),
             "gripper_convention": "0_closed_1_open",
             "gripper_state_source": "measured",
             "rotation_execution": self.rotation_execution,

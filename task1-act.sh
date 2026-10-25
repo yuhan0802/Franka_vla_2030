@@ -6,24 +6,24 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Task0 EEF 模型（Qwen3-VL-2B + DROID BAR，末端位姿控制）。
 # 默认绕过 MoveIt Servo：run_eef_direct.sh（pi0.5 direct 关节速度栈 + 进程内与 VR 采集时
 # Servo 相同的 P 跟踪器）。EEF_CONTROL=servo 退回 run_eef_pose.sh（MoveIt Servo）。
-# 模型服务默认在 63 服务器上运行（权重位于其 /data2），端口 8095。
+# 模型服务默认在 20 服务器上运行（权重位于其 /data2），端口 8095。
 # 所有参数仍可在命令行临时覆盖，例如 EEF_SERVER_GPU=2 ./task1-act.sh。
 #
 #   ./task1-act.sh axis-test +z   direct 首次使用先逐轴调试（每轴 5 步 x 3 mm），通过后才允许 run
 #   ./task1-act.sh dry-run        只推理，不发任何运动命令
 #   ./task1-act.sh                完整任务
 #   ./task1-act.sh home | probe | stop
-export EEF_REMOTE_SSH="${EEF_REMOTE_SSH:-mac_63}"
-export EEF_SERVER_HOST="${EEF_SERVER_HOST:-10.24.116.63}"
+export EEF_REMOTE_SSH="${EEF_REMOTE_SSH:-mac_20}"
+export EEF_SERVER_HOST="${EEF_SERVER_HOST:-10.24.116.20}"
 export EEF_SERVER_PORT="${EEF_SERVER_PORT:-8095}"
 export EEF_SERVER_GPU="${EEF_SERVER_GPU:-1}"
-export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar_v4/Qwen3VL2B+Franka-Task0+lr0.0001+v4_measured_world_left_aug_10k_8gpu_b256/save_9000_chkpt}"
-export EEF_ACTIONCODEC="${EEF_ACTIONCODEC:-/data2/lyh/vla/assets/ActionCodec-Base-RVQft}"
+export EEF_CHECKPOINT="${EEF_CHECKPOINT:-/data2/lyh/vla/runs/franka_task0_droid_bar_v5_x3/Qwen3VL2B+Franka-Task0+lr0.0001+v5_droid_x3_first15_all29_no_crop_10k_8gpu_b256/save_8000_chkpt}"
+export EEF_ACTIONCODEC="${EEF_ACTIONCODEC:-/data2/lyh/weights/ActionCodec-Base-RVQft}"
 export EEF_STATE_STATS="${EEF_STATE_STATS:-/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json}"
 # 必须与训练数据中的任务指令完全一致（/data2/lyh/vla/Franka_vr/tasks.json 的 "0"）。
 # 其他权重（如 task1-droid.sh）用 EEF_INSTRUCTION 覆盖；不读 VLA_INSTRUCTION，避免沿用 pi0.5 流程的旧值。
 export VLA_INSTRUCTION="${EEF_INSTRUCTION:-place the red test tube in the red basket}"
-# v4 训练状态：夹爪开度连续，clip((width - 0.01) / 0.07, 0, 1)；动作里的夹爪仍是 0/1 目标。
+# v5 训练状态：夹爪开度连续，clip((width - 0.01) / 0.07, 0, 1)；动作里的夹爪仍是 0/1 目标。
 export EEF_GRIPPER_STATE_SOURCE="${EEF_GRIPPER_STATE_SOURCE:-measured}"
 export EEF_EXTERIOR_CAMERA="${EEF_EXTERIOR_CAMERA:-left}"
 # 该权重训练时两路图像都缩放到 256x256；adapter 拒绝不按此缩放的（旧）模型服务。
