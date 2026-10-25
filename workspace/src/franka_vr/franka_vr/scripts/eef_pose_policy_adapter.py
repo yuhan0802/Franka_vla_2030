@@ -195,7 +195,9 @@ class EefAdapter(Node):
         # Gripper bookkeeping: reversal dwell, open verification, and task completion
         # (Task0 episodes end right after the release, so the policy then only hovers).
         self.last_gripper_request_at = -1e9; self.verify_open_deadline: Optional[float] = None
+        self.verify_close_deadline: Optional[float] = None
         self.grasp_seen = False; self.released = False; self.idle_chunks = 0
+        self.runtime_implausible_logged = False
         # arm() spins the node while waiting for TF/services; tick must not act until it has finished.
         self.armed = False
         # Real arm feedback (/franka/joint_states, ros2_control) versus the merged
@@ -226,6 +228,11 @@ class EefAdapter(Node):
             f"rotation_frame={rotation_frame} chunk_start={args.chunk_start} gripper={args.enable_gripper} "
             f"max_step={args.max_translation:.4f}m/{args.max_rotation:.4f}rad metadata={self.metadata}")
         if not args.execute: self.get_logger().warning("dry-run: /set_target_pose and gripper clients NOT created")
+        if args.execute_horizon < 12 and not args.test_axis:
+            # The model places the end of a motion and the gripper switch late in its 15-step chunk; executing only
+            # the first few steps keeps them in the never-executed future (2026-10-25: 12 predicted closes, 0 executed).
+            self.get_logger().warning(f"execute-horizon={args.execute_horizon}: gripper switches and slow approach "
+                                      "steps predicted after this step are never executed; use 15 unless testing")
         self.log("start", args=vars(args), metadata=self.metadata, rotation_frame=rotation_frame)
 
     # ----------------------------------------------------------------- inputs
@@ -310,6 +317,15 @@ class EefAdapter(Node):
         stamps = [self.image_times["exterior"], self.image_times["wrist"]]
         if self.args.gripper_state_source in ("measured", "binary"):
             if self.gripper_width() is None: self.observation_blocker = "no gripper finger feedback"; return None
+            if self.gripper_width() > self.args.gripper_max_plausible_width:
+                # The FR3 opens to 0.08 m; a wider reading is an unhomed gripper whose state input would be wrong
+                # (on 2026-10-25 0.1425 m read as state 1.0, so the policy re-opened right after a close).
+                message = (f"gripper width {self.gripper_width():.4f} m exceeds the physical maximum "
+                           f"{self.args.gripper_max_plausible_width} m; the gripper is not homed")
+                if self.args.execute: self.latch(message + "; home it and restart"); return None
+                if not self.runtime_implausible_logged:
+                    self.runtime_implausible_logged = True
+                    self.get_logger().error(message + " (dry-run continues; execute would stop)")
             stamps.append(self.gripper_time)
         if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age:
             ages = {"exterior": now - self.image_times["exterior"], "wrist": now - self.image_times["wrist"],
@@ -361,6 +377,13 @@ class EefAdapter(Node):
                 self.verify_open_deadline = None; self.log("gripper_verified", open=True, measured_width=width)
             elif now > self.verify_open_deadline:
                 self.latch(f"gripper reported OPEN but width stays {width} m; the fingers did not move"); return
+        if self.verify_close_deadline is not None:
+            width = self.gripper_width()
+            if width is not None and width < self.open_midpoint():
+                self.verify_close_deadline = None; self.log("gripper_verified", open=False, measured_width=width)
+            elif now > self.verify_close_deadline:
+                self.latch(f"gripper reported CLOSED but width stays {width} m; the fingers did not close "
+                           "or the finger feedback is wrong"); return
         if self.future is not None:
             if not self.future.done():
                 if now - self.inference_started > self.args.max_policy_latency: self.latch("policy latency timeout")
@@ -454,7 +477,10 @@ class EefAdapter(Node):
             self.log("tracking_violation", **record)
             self.latch(f"target leads measured pose by {lead:.4f} m / {lead_rotation:.4f} rad; arm is not following"); return
         desired_open = self.hysteresis.desired_open(step.gripper_open, self.commanded_gripper_open)
-        if desired_open is not None and now - self.last_gripper_request_at < self.args.gripper_min_dwell:
+        # Demonstrations hold the grasp 7.5-11 s before releasing, so a reopen soon after a close is the policy
+        # echoing a stale or wrong gripper state; the policy answers ~1-2 s after the observation it used.
+        hold = self.args.gripper_close_hold if desired_open and not self.commanded_gripper_open else self.args.gripper_min_dwell
+        if desired_open is not None and now - self.last_gripper_request_at < hold:
             # A reversal right after a request is the policy echoing a stale state, not a decision.
             record["gripper_suppressed"] = "open" if desired_open else "close"; desired_open = None
         record["gripper_request"] = None if desired_open is None else ("open" if desired_open else "close")
@@ -548,6 +574,7 @@ class EefAdapter(Node):
         self.gripper_open = self.pending_gripper_open; self.pending_gripper_open = None
         # A Move "success" without finger motion was seen on the robot; require the width to follow.
         if self.gripper_open: self.verify_open_deadline = time.monotonic() + self.args.gripper_verify_timeout
+        else: self.verify_close_deadline = time.monotonic() + self.args.gripper_verify_timeout
         self.log("gripper_done", open=self.gripper_open, measured_width=self.gripper_width())
         self.get_logger().info(f"gripper {'OPENED' if self.gripper_open else 'CLOSED'}; width={self.gripper_width()}")
 
@@ -661,11 +688,11 @@ class EefAdapter(Node):
         # Judge only feedback that arrived after the move finished; earlier samples are pre-homing.
         opened_at = time.monotonic(); settle_until = opened_at + 2.0; width = None
         minimum_open_width = self.args.gripper_open_width - self.args.gripper_open_tolerance
+        # Judge the value the fingers settle at, not the first in-range sample: a width passing through the
+        # accepted range while the fingers still travel was accepted on 2026-10-25, then 0.1425 m (unhomed) held.
         while time.monotonic() < settle_until:
             rclpy.spin_once(self, timeout_sec=.05)
-            if self.gripper_time > opened_at:
-                width = self.gripper_width()
-                if minimum_open_width <= width <= self.args.gripper_max_plausible_width: break
+            if self.gripper_time > opened_at: width = self.gripper_width()
         self.log("gripper_opened_after_homing", measured_width=width)
         if width is None or not minimum_open_width <= width <= self.args.gripper_max_plausible_width:
             raise RuntimeError(f"gripper width {width} m after homing and opening to "
@@ -743,8 +770,11 @@ def parse_args() -> argparse.Namespace:
     add("--gripper-speed", type=float, default=.10); add("--gripper-force", type=float, default=20.)
     add("--gripper-epsilon-inner", type=float, default=.1); add("--gripper-epsilon-outer", type=float, default=.2)
     add("--gripper-min-dwell", type=float, default=1.0, help="ignore an open/close reversal within this time (s)")
+    add("--gripper-close-hold", type=float, default=5.0,
+        help="ignore an OPEN request within this time after a CLOSE request (s); demonstrations hold >= 7.5 s")
     add("--gripper-verify-timeout", type=float, default=0.5,
-        help="after an OPEN success the measured width must reach the open/closed midpoint within this time (s)")
+        help="after an OPEN (CLOSE) success the measured width must reach (fall below) the open/closed midpoint "
+             "within this time (s)")
     add("--gripper-max-plausible-width", type=float, default=0.085,
         help="a wider reading means the gripper is not homed (FR3 opens to 0.08 m)")
     add("--gripper-open-tolerance", type=float, default=0.01,
@@ -769,6 +799,7 @@ def parse_args() -> argparse.Namespace:
         parser.error("max-translation must be in [0, 0.02] m (0 disables it) and max-rotation in (0, 0.15] rad")
     if not 0 < args.gripper_speed <= .1 or not 1 <= args.gripper_force <= 40: parser.error("gripper speed/force out of range")
     if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .08: parser.error("gripper widths must satisfy 0 <= closed < open <= 0.08")
+    if args.gripper_close_hold < 0: parser.error("gripper-close-hold must be >= 0")
     if not 0 <= args.gripper_open_tolerance < args.gripper_open_width - args.gripper_closed_width:
         parser.error("gripper-open-tolerance must keep the accepted open width above the closed width")
     if args.test_axis and not args.rotation_frame: parser.error("--test-axis requires an explicit --rotation-frame")

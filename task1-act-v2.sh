@@ -37,9 +37,10 @@ export EEF_MAX_TRANSLATION="${EEF_MAX_TRANSLATION:-0}"
 # 约 2 cm 的 VR 目标，进度从不清零；从实测位姿重起会让接近试管时每块 1-2 mm 的细调
 # 被 3 mm 到位容差吃掉（2026-10-23 实测 z 指令 -1.8 mm/块只走 -1.5 mm，悬停 15 块）。
 export EEF_CHUNK_START="${EEF_CHUNK_START:-last_target}"
-# v2：模型仍预测 15 步，只执行前 5 步（约 0.33 s）就用新观测重新推理，闭环更紧。
-# 其余与 task1-act.sh 完全一致；完成判据用的是整条预测块，不受影响。
-export EEF_EXECUTE_HORIZON="${EEF_EXECUTE_HORIZON:-5}"
+# v2：v5 maxabs 权重（每维最大绝对值归一化，63 服务器）。执行 15 步（整块）。
+# 不要改成只执行前几步：模型把夹爪切换和接近的收尾放在块的后半段，只执行前 5 步时这些动作永远落在
+# 没执行的未来（2026-10-25：预测了 12 次闭合，执行 0 次，机械臂一路下压到 z=0.237）。
+export EEF_EXECUTE_HORIZON="${EEF_EXECUTE_HORIZON:-15}"
 
 control="${EEF_CONTROL:-direct}"
 case "$control" in
@@ -134,11 +135,11 @@ if awk -v d="$offset" -v r="$turn" 'BEGIN { exit !(d > 0.005 || r > 0.02) }'; th
 fi
 [[ "$mode" == dry-run ]] && { echo "Dry-run finished ($control). Logs: $run_dir/dry_run"; exit 0; }
 
-# 完整任务：每块预测 15 步、执行前 5 步，默认最多 180 块（与 v1 的 60 块 x 15 步同量级，共 900 步），启用夹爪。
+# 完整任务：每块预测 15 步并全部执行，默认最多 60 块，启用夹爪。
 exec env \
   EEF_LOG_DIR="$run_dir/execute" \
   "$enable_var=$enable_token" \
   EEF_ENABLE_GRIPPER=true \
-  EEF_MAX_CHUNKS="${EEF_MAX_CHUNKS:-180}" \
+  EEF_MAX_CHUNKS="${EEF_MAX_CHUNKS:-60}" \
   EEF_MAX_ACTIONS="${EEF_MAX_ACTIONS:-900}" \
   "$runner" execute

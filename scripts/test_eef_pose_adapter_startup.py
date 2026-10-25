@@ -64,9 +64,11 @@ class World:
     finger = 0.04           # each finger; 0.04 -> width 0.08 (open)
     gripper_moves = True    # False: Move/Grasp report success but the fingers stay put
     gripper_goals: list = []
+    pending_settle = None   # (spin, finger): fingers pass through the open width, then settle at `finger`
 
     @classmethod
     def reset(cls, tf_after=5, real_after=5, jump_at=None, follow_after=None, finger=0.04, gripper_moves=True):
+        cls.pending_settle = None
         cls.spins, cls.tf_after, cls.real_after, cls.jump_at, cls.targets = 0, tf_after, real_after, jump_at, []
         cls.follow_after, cls.target_spins = follow_after, []
         cls.finger, cls.gripper_moves, cls.gripper_goals = finger, gripper_moves, []
@@ -131,6 +133,8 @@ class FakeGripperClient:
         World.gripper_goals.append(self.name)
         # The real FR3 ends homing with the fingers closed.
         if World.gripper_moves: World.finger = 0.0001 if self.name == "homing" else goal.width / 2
+        if self.name == "move" and World.pending_settle is not None:
+            World.pending_settle = (World.spins + 5, World.pending_settle[1])
         result = FakeFuture(_Namespace(result=_Namespace(success=True, error="")))
         return FakeFuture(_Namespace(accepted=True, get_result_async=lambda: result))
 
@@ -163,6 +167,8 @@ class FakeBuffer:
 
 def spin_once(node, timeout_sec=None):
     World.spins += 1
+    if World.pending_settle is not None and World.spins >= World.pending_settle[0]:
+        World.finger = World.pending_settle[1]; World.pending_settle = None
     World.now_ns += 10_000_000
     joints = REAL_JOINTS if World.real() else DEFAULT_JOINTS
     if World.real():
@@ -388,7 +394,7 @@ class AdapterStartupTests(unittest.TestCase):
         close_then_echo = idle_chunk(0.0, dx=0.02); close_then_echo[3:, 6] = 1.0   # first failed run pattern
         FakePolicy.chunks = [idle_chunk(1.0, dx=0.02), close_then_echo, idle_chunk(0.0, dx=0.02),
                              idle_chunk(1.0, dx=0.02)]                # carry, then release; idle afterwards
-        node = self.policy_node()
+        node = self.policy_node("--gripper-close-hold", "1.0")      # the scripted release comes ~2 s after the close
         self.run_until_done(node, spins=6000)
         self.assertFalse(node.fault)
         self.assertEqual(World.gripper_goals, ["grasp", "move"])      # no open 0.2 s after the close
@@ -397,6 +403,54 @@ class AdapterStartupTests(unittest.TestCase):
         complete = [e for e in events if e["event"] == "complete"][0]
         self.assertIn("task complete", complete["reason"])
         self.assertEqual(node.chunks_done, 5)    # 4 scripted + 1 idle; the 2nd idle chunk is never executed
+
+    def test_close_success_without_finger_motion_latches(self):
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        FakePolicy.chunks = [idle_chunk(0.0, dx=0.02)]
+        node = self.policy_node()
+        node.arm()
+        World.gripper_moves = False             # Grasp reports success, fingers stay open (or feedback is wrong)
+        for _ in range(3000):
+            if node.finished or node.fault: break
+            spin_once(node)
+        self.assertTrue(node.fault)
+        self.assertIn("did not close", [e for e in self.events(self.log_path) if e["event"] == "fault"][0]["reason"])
+
+    def test_reopen_soon_after_close_is_held(self):
+        # 2026-10-25: the policy re-opened 1.3 s after its own close; demonstrations hold the grasp >= 7.5 s.
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        FakePolicy.chunks = [idle_chunk(1.0, dx=0.02), idle_chunk(0.0, dx=0.02), idle_chunk(1.0, dx=0.02),
+                             idle_chunk(1.0, dx=0.02)]
+        node = self.policy_node()
+        node.arm()
+        for _ in range(6000):
+            if node.finished or node.fault or node.chunks_done >= 4: break
+            spin_once(node)
+        self.assertFalse(node.fault)
+        self.assertEqual(World.gripper_goals, ["grasp"])
+        events = self.events(self.log_path)
+        self.assertTrue(any(e.get("gripper_suppressed") == "open" for e in events if e["event"] == "action"))
+
+    def test_overwide_gripper_width_latches_execute(self):
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        FakePolicy.chunks = [idle_chunk(1.0, dx=0.02)]
+        node = self.policy_node()
+        node.arm()
+        World.finger = 0.0712                   # 2026-10-25: 0.1425 m total, read as state 1.0
+        for _ in range(500):
+            if node.finished or node.fault: break
+            spin_once(node)
+        self.assertTrue(node.fault)
+        self.assertIn("exceeds the physical maximum", [e for e in self.events(self.log_path) if e["event"] == "fault"][0]["reason"])
+        self.assertEqual(World.targets[1:], [])  # nothing but the initial hold target was sent
+
+    def test_homing_judges_the_settled_width_not_a_transient_sample(self):
+        World.reset(tf_after=2, real_after=5, finger=0.0695)        # unhomed -> homing path
+        World.pending_settle = (10**9, 0.0712)  # armed by the open Move: it passes 0.08 m, then settles at 0.1424 m
+        FakePolicy.chunks = []
+        node = self.policy_node()
+        with self.assertRaisesRegex(RuntimeError, "after homing and opening"): node.arm()
+        self.assertEqual(World.targets, [])
 
     def test_home_moves_to_training_start_and_settles(self):
         World.reset(tf_after=2, real_after=5, follow_after=3)
