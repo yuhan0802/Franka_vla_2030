@@ -124,9 +124,15 @@ class DirectAdapter(Node):
         self.log_file = open(args.jsonl_log, "a", buffering=1) if args.jsonl_log else None
         for key, topic in (("left", args.left_image_topic), ("wrist", args.wrist_image_topic)):
             self.create_subscription(Image, topic, functools.partial(self.image_cb, key), qos_profile_sensor_data)
-        self.create_subscription(JointState, "/franka/joint_states", self.joint_cb, qos_profile_sensor_data)
-        self.create_subscription(JointState, "/joint_states", self.joint_cb, qos_profile_sensor_data)
-        self.create_subscription(JointState, "/fr3_gripper/franka_gripper/joint_states", self.joint_cb, qos_profile_sensor_data)
+        # Do not merge the three joint-state streams here.  /joint_states may
+        # contain URDF/mimic finger values that differ by a factor of two from
+        # the real gripper driver.  Letting the last callback win made an open
+        # gripper look closed and caused the policy to alternate OPEN/CLOSE.
+        self.create_subscription(
+            JointState, "/franka/joint_states", self.arm_joint_cb, qos_profile_sensor_data)
+        self.create_subscription(
+            JointState, "/fr3_gripper/franka_gripper/joint_states",
+            self.gripper_joint_cb, qos_profile_sensor_data)
         self.create_subscription(DiagnosticArray, "/pi05/direct_executor/status", self.executor_status_cb, 10)
         if args.execute:
             self.publisher = self.create_publisher(JointJog, "/pi05/direct_joint_velocity_cmd", 10)
@@ -148,14 +154,18 @@ class DirectAdapter(Node):
         if self.count_subscribers("/pi05/direct_joint_velocity_cmd") != 1:
             raise RuntimeError("expected exactly one direct executor command subscriber")
         if self.args.enable_gripper:
-            if not self.move_client.wait_for_server(timeout_sec=10) or not self.grasp_client.wait_for_server(timeout_sec=10):
+            if not self.move_client.wait_for_server(timeout_sec=20) or not self.grasp_client.wait_for_server(timeout_sec=20):
                 raise RuntimeError("gripper action server unavailable")
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + 10
             while len(self.fingers) < 2 and time.monotonic() < deadline:
                 rclpy.spin_once(self, timeout_sec=.1)
             if len(self.fingers) < 2:
                 raise RuntimeError("complete gripper joint feedback unavailable")
             width = sum(self.fingers[name] for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
+            if width > self.args.gripper_max_plausible_width:
+                raise RuntimeError(
+                    f"gripper width {width:.4f}m exceeds the homed physical maximum "
+                    f"{self.args.gripper_max_plausible_width:.4f}m; run ./homing.sh and restart")
             self.last_gripper_closed = closedness_from_width(
                 width, self.args.gripper_open_width, self.args.gripper_closed_width
             ) >= self.args.gripper_close_threshold
@@ -171,10 +181,13 @@ class DirectAdapter(Node):
         except Exception as error:
             self.get_logger().warning(f"cannot decode {key} image: {error}", throttle_duration_sec=2)
 
-    def joint_cb(self, message: JointState) -> None:
+    def arm_joint_cb(self, message: JointState) -> None:
         values = dict(zip(message.name, message.position)); now = time.monotonic()
         if all(name in values for name in JOINT_NAMES):
             self.joints = {name: float(values[name]) for name in JOINT_NAMES}; self.joint_time = now
+
+    def gripper_joint_cb(self, message: JointState) -> None:
+        values = dict(zip(message.name, message.position)); now = time.monotonic()
         for name in ("fr3_finger_joint1", "fr3_finger_joint2"):
             if name in values: self.fingers[name] = float(values[name]); self.gripper_time = now
 
@@ -246,7 +259,7 @@ class DirectAdapter(Node):
             # This callback is itself the next 15 Hz boundary after the last
             # action. Send the explicit stop unconditionally: a timer callback
             # can arrive a fraction early, and waiting for another tick would
-            # exceed the executor's strict 120 ms nonzero-command watchdog.
+            # exceed the executor's 300 ms nonzero-command watchdog.
             if self.last_publish:
                 self.stop_command()
                 self.log("chunk_stop", actions_executed=self.executed, stop_requested=True)
@@ -303,12 +316,38 @@ class DirectAdapter(Node):
     def gripper_result(self, future) -> None:
         try: result = future.result().result
         except Exception as error: self.latch(f"gripper action failed: {error}"); return
-        if not result.success: self.latch(f"gripper action reported failure: {result.error}"); return
+        width = sum(self.fingers.get(name, 0.0) for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
+        if not result.success:
+            error_text = str(result.error).strip()
+            # libfranka reports an ordinary empty grasp as success=false with
+            # an empty error string.  This is a task-level miss, not a hardware
+            # fault: stop the stale chunk and replan from fresh observations.
+            if self.pending_gripper_closed is True and not error_text:
+                self.last_gripper_closed = closedness_from_width(
+                    width, self.args.gripper_open_width, self.args.gripper_closed_width
+                ) >= self.args.gripper_close_threshold
+                self.gripper_busy = False; self.pending_gripper_closed = None
+                self.queue.clear_for_gripper()
+                self.need_fresh_after = max(self.need_fresh_after, time.monotonic())
+                self.log("gripper_miss", measured_width=width, recovery="fresh_replan")
+                self.get_logger().warning(
+                    f"gripper grasp missed object; measured width={width:.4f}m; "
+                    "discarding stale actions and replanning")
+                return
+            self.latch(f"gripper action reported failure: {error_text or 'unspecified hardware failure'}")
+            return
+        if self.pending_gripper_closed is False:
+            minimum_open_width = self.args.gripper_open_width - self.args.gripper_open_tolerance
+            if width < minimum_open_width:
+                self.latch(
+                    f"gripper OPEN reported success but measured width={width:.4f}m "
+                    f"is below required {minimum_open_width:.4f}m")
+                return
         self.last_gripper_closed = self.pending_gripper_closed; self.gripper_busy = False
         self.pending_gripper_closed = None
         self.get_logger().warning(
             f"gripper {'CLOSED' if self.last_gripper_closed else 'OPENED'} successfully; "
-            f"continuing {len(self.queue)} remaining actions in current chunk")
+            f"measured width={width:.4f}m; continuing {len(self.queue)} remaining actions in current chunk")
 
     def stop_command(self) -> None:
         if self.publisher is None: return
@@ -340,13 +379,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--left-image-topic", default="/camera_left/image_rect")
     parser.add_argument("--wrist-image-topic", default="/camera/camera_front/color/image_raw")
     parser.add_argument("--action-hz", type=float, default=15.0); parser.add_argument("--execute-horizon", type=int, default=4)
-    parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=5.0)
-    parser.add_argument("--max-observation-age", type=float, default=.2); parser.add_argument("--max-camera-skew", type=float, default=.05)
-    parser.add_argument("--max-state-image-skew", type=float, default=.05); parser.add_argument("--enable-gripper", action="store_true")
+    parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=10.0)
+    parser.add_argument("--max-observation-age", type=float, default=.5); parser.add_argument("--max-camera-skew", type=float, default=.15)
+    parser.add_argument("--max-state-image-skew", type=float, default=.15); parser.add_argument("--enable-gripper", action="store_true")
     parser.add_argument("--gripper-open-width", type=float, default=.08)
     parser.add_argument("--gripper-closed-width", type=float, default=0.0)
     parser.add_argument("--gripper-epsilon-inner", type=float, default=.01)
     parser.add_argument("--gripper-epsilon-outer", type=float, default=.01)
+    parser.add_argument("--gripper-open-tolerance", type=float, default=.01)
+    parser.add_argument("--gripper-max-plausible-width", type=float, default=.085)
     parser.add_argument("--gripper-open-threshold", type=float, default=.4); parser.add_argument("--gripper-close-threshold", type=float, default=.6)
     parser.add_argument("--gripper-speed", type=float, default=.04); parser.add_argument("--gripper-force", type=float, default=10.)
     parser.add_argument("--jsonl-log", default=""); parser.add_argument("--execute", action="store_true")
@@ -357,10 +398,14 @@ def parse_args() -> argparse.Namespace:
     if not 1 <= args.max_actions <= 2000: parser.error("max-actions must be in [1, 2000]")
     if not 0 < args.gripper_speed <= .05: parser.error("gripper-speed must be in (0, 0.05]")
     if not 1 <= args.gripper_force <= 30: parser.error("gripper-force must be in [1, 30] N")
-    if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .2:
-        parser.error("gripper widths must satisfy 0 <= closed < open <= 0.2 m")
+    if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .08:
+        parser.error("gripper widths must satisfy 0 <= closed < open <= 0.08 m after homing")
     if not 0 <= args.gripper_epsilon_inner <= .2 or not 0 <= args.gripper_epsilon_outer <= .2:
         parser.error("gripper epsilon values must be in [0, 0.2] m")
+    if not 0 <= args.gripper_open_tolerance < args.gripper_open_width - args.gripper_closed_width:
+        parser.error("gripper open tolerance must keep accepted open width above closed width")
+    if not args.gripper_open_width <= args.gripper_max_plausible_width <= .1:
+        parser.error("gripper max plausible width must cover open width and be <= 0.1 m")
     if args.execute and args.confirm_real_robot != "DIRECT_JOINT_VELOCITY_PI05": parser.error("execute requires exact direct-flow confirmation token")
     return args
 

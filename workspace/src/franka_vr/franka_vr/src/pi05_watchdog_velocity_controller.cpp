@@ -34,7 +34,7 @@ public:
   CallbackReturn on_init() override
   {
     try {
-      auto_declare<double>("command_timeout_s", 0.05);
+      auto_declare<double>("command_timeout_s", 0.10);
       auto_declare<double>("max_velocity_rad_s", 0.6);
       auto_declare<double>("max_acceleration_rad_s2", 2.0);
       auto_declare<double>("max_jerk_rad_s3", 300.0);
@@ -137,7 +137,7 @@ private:
     bool valid{false};
   };
 
-  double timeout_{0.05}, vmax_{0.6}, amax_{2.0}, jmax_{300.0};
+  double timeout_{0.10}, vmax_{0.6}, amax_{2.0}, jmax_{300.0};
   std::array<double, 7> velocity_{}, acceleration_{};
   realtime_tools::RealtimeBuffer<Command> commands_;
   rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr command_sub_;

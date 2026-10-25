@@ -34,7 +34,7 @@ private:
   {
     std_msgs::msg::Bool stop;
     if (!monitor_->getStateMonitor() || !monitor_->getStateMonitor()->haveCompleteState()) {
-      stop.data = (now() - started_).seconds() > 10.0;
+      stop.data = (now() - started_).seconds() > 30.0;
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "collision monitor is waiting for complete robot state");
       publisher_->publish(stop);
       return;

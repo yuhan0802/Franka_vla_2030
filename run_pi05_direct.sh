@@ -176,12 +176,14 @@ else
     --gripper-open-width "${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.08}"
     --gripper-closed-width "${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}"
     --gripper-epsilon-inner "${PI05_DIRECT_GRIPPER_EPSILON_INNER:-0.01}"
-    --gripper-epsilon-outer "${PI05_DIRECT_GRIPPER_EPSILON_OUTER:-0.01}")
+    --gripper-epsilon-outer "${PI05_DIRECT_GRIPPER_EPSILON_OUTER:-0.01}"
+    --gripper-open-tolerance "${PI05_DIRECT_GRIPPER_OPEN_TOLERANCE:-0.01}"
+    --gripper-max-plausible-width "${PI05_DIRECT_GRIPPER_MAX_PLAUSIBLE_WIDTH:-0.085}")
 fi
 
-echo "Waiting for the direct robot stack to become ready (up to 120 seconds)..."
+echo "Waiting for the direct robot stack to become ready (up to 180 seconds)..."
 ready=false
-for attempt in $(seq 1 120); do
+for attempt in $(seq 1 180); do
   if ! tmux has-session -t "$robot_session" 2>/dev/null; then
     echo "Direct robot stack exited; inspect $log_dir/robot.log" >&2
     exit 1
@@ -224,7 +226,7 @@ if [[ "$mode" == full-execute ]]; then
       set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
       exec python3 src/franka_vr/franka_vr/scripts/pi05_direct_policy_adapter.py \
         --server-host "'"$host"'" --server-port "'"$port"'" --instruction "'"$instruction"'" \
-        --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 --max-policy-latency 5 \
+        --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 --max-policy-latency 10 \
         --jsonl-log /pi05_logs/full_dry_run_policy.jsonl
     ' 2>&1 | tee "$log_dir/full_dry_run.log"
   grep -q '"robot_command_sent": false' "$log_dir/full_dry_run_policy.jsonl" || {

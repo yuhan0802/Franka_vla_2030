@@ -76,8 +76,10 @@ class DirectVelocityTests(unittest.TestCase):
         policy_dt = 1 / 15
         steps = [0.01] * 6 + [policy_dt - .06]
         self.assertAlmostEqual(sum(velocity * dt for dt in steps), velocity * policy_dt, places=12)
-        # 120 ms watchdog corresponds to no more than 12 nominal 100 Hz cycles.
-        self.assertEqual(round(.12 / .01), 12)
+        # A 300 ms watchdog tolerates several delayed 15 Hz callbacks while
+        # still stopping within 30 nominal 100 Hz control cycles.
+        self.assertGreater(.30, 4 / 15)
+        self.assertEqual(round(.30 / .01), 30)
 
 
 if __name__ == "__main__":
