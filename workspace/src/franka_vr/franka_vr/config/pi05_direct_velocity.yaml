@@ -6,7 +6,9 @@ pi05_direct_velocity_executor:
     command_timeout_s: 0.12
     max_command_stamp_age_s: 0.20
     max_command_future_skew_s: 0.05
-    max_feedback_age_s: 0.05
+    # 关节状态通常稳定刷新，但控制栈启动阶段偶尔会出现超过 50 ms 的单次抖动。
+    # 100 ms 仍早于 120 ms 的策略命令 watchdog 和 150 ms 的碰撞心跳 watchdog。
+    max_feedback_age_s: 0.10
     collision_monitor_timeout_s: 0.15
     # 与 task2 的 run_20k runtime 设置一致。0.6 高于本轮观察到的模型峰值
     # 0.253 rad/s，因此不会再由 0.15 rad/s 的旧 direct 上限裁切该动作。

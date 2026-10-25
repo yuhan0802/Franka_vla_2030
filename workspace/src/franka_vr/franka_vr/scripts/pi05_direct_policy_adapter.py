@@ -340,7 +340,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--left-image-topic", default="/camera_left/image_rect")
     parser.add_argument("--wrist-image-topic", default="/camera/camera_front/color/image_raw")
     parser.add_argument("--action-hz", type=float, default=15.0); parser.add_argument("--execute-horizon", type=int, default=4)
-    parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=2.0)
+    parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=5.0)
     parser.add_argument("--max-observation-age", type=float, default=.2); parser.add_argument("--max-camera-skew", type=float, default=.05)
     parser.add_argument("--max-state-image-skew", type=float, default=.05); parser.add_argument("--enable-gripper", action="store_true")
     parser.add_argument("--gripper-open-width", type=float, default=.08)

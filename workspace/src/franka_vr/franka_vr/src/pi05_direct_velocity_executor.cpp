@@ -53,7 +53,7 @@ public:
     timeout_ = declare_parameter("command_timeout_s", 0.12);
     max_command_stamp_age_ = declare_parameter("max_command_stamp_age_s", 0.20);
     max_command_future_skew_ = declare_parameter("max_command_future_skew_s", 0.05);
-    feedback_timeout_ = declare_parameter("max_feedback_age_s", 0.05);
+    feedback_timeout_ = declare_parameter("max_feedback_age_s", 0.10);
     collision_timeout_ = declare_parameter("collision_monitor_timeout_s", 0.15);
     vmax_ = declare_parameter("max_joint_velocity_rad_s", 0.6);
     amax_ = declare_parameter("max_joint_acceleration_rad_s2", 2.0);
