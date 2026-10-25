@@ -201,7 +201,10 @@ private:
       if (++deadline_misses_ >= max_deadline_misses_) latch("consecutive control deadline misses");
     } else deadline_misses_ = 0;
 
-    const bool startup_expired = (now - started_).seconds() > 10.0;
+    // ros2_control controller discovery/activation can occasionally take more
+    // than 10 seconds on the real robot. Keep runtime watchdogs strict, but
+    // allow the one-time startup handshake enough time to finish.
+    const bool startup_expired = (now - started_).seconds() > 30.0;
     const bool dependencies_ready = armed_ && have_feedback_ && have_collision_heartbeat_ && velocity_pub_ &&
       controller_subscriber_ready();
     if (!runtime_ready_ && dependencies_ready) {
