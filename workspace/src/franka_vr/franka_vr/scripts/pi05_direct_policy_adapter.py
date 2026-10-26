@@ -29,6 +29,8 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from franka_msgs.action import Grasp, Move
 import rclpy
 from rclpy.action import ActionClient
+from rclpy.executors import ExternalShutdownException
+from rclpy._rclpy_pybind11 import RCLError
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, JointState
@@ -120,13 +122,22 @@ class DirectAdapter(Node):
         self.move_client = None; self.grasp_client = None
         self.executed = 0; self.last_publish = 0.0; self.need_fresh_after = 0.0
         self.fault = False; self.finished = False; self.gripper_busy = False
+        self.startup_ready = not args.execute
+        self.gripper_verification = None
+        self.observation_wait_started = None
+        self.observation_warned_at = 0.0
+        self.observation_blocker = "waiting for initial observations"
         self.last_gripper_closed: Optional[bool] = None; self.pending_gripper_closed: Optional[bool] = None
         self.log_file = open(args.jsonl_log, "a", buffering=1) if args.jsonl_log else None
         for key, topic in (("left", args.left_image_topic), ("wrist", args.wrist_image_topic)):
             self.create_subscription(Image, topic, functools.partial(self.image_cb, key), qos_profile_sensor_data)
-        self.create_subscription(JointState, "/franka/joint_states", self.joint_cb, qos_profile_sensor_data)
-        self.create_subscription(JointState, "/joint_states", self.joint_cb, qos_profile_sensor_data)
-        self.create_subscription(JointState, "/fr3_gripper/franka_gripper/joint_states", self.joint_cb, qos_profile_sensor_data)
+        # Keep measured arm and gripper state separate from merged URDF/mimic
+        # streams; merged values must not overwrite dedicated driver feedback.
+        self.create_subscription(
+            JointState, "/franka/joint_states", self.arm_joint_cb, qos_profile_sensor_data)
+        self.create_subscription(
+            JointState, "/fr3_gripper/franka_gripper/joint_states",
+            self.gripper_joint_cb, qos_profile_sensor_data)
         self.create_subscription(DiagnosticArray, "/pi05/direct_executor/status", self.executor_status_cb, 10)
         if args.execute:
             self.publisher = self.create_publisher(JointJog, "/pi05/direct_joint_velocity_cmd", 10)
@@ -148,20 +159,29 @@ class DirectAdapter(Node):
         if self.count_subscribers("/pi05/direct_joint_velocity_cmd") != 1:
             raise RuntimeError("expected exactly one direct executor command subscriber")
         if self.args.enable_gripper:
-            if not self.move_client.wait_for_server(timeout_sec=10) or not self.grasp_client.wait_for_server(timeout_sec=10):
+            if not self.move_client.wait_for_server(timeout_sec=20) or not self.grasp_client.wait_for_server(timeout_sec=20):
                 raise RuntimeError("gripper action server unavailable")
-            deadline = time.monotonic() + 5
-            while len(self.fingers) < 2 and time.monotonic() < deadline:
+            deadline = time.monotonic() + 10
+            requested_at = time.monotonic()
+            while (len(self.fingers) < 2 or self.gripper_time <= requested_at) and time.monotonic() < deadline:
                 rclpy.spin_once(self, timeout_sec=.1)
-            if len(self.fingers) < 2:
-                raise RuntimeError("complete gripper joint feedback unavailable")
+            if len(self.fingers) < 2 or self.gripper_time <= requested_at:
+                raise RuntimeError("fresh complete gripper joint feedback unavailable")
             width = sum(self.fingers[name] for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
+            error = self.gripper_feedback_error()
+            if error:
+                raise RuntimeError(error + "; run ./homing.sh and restart")
             self.last_gripper_closed = closedness_from_width(
-                width, self.args.gripper_open_width, self.args.gripper_closed_width
+                width, self.args.gripper_feedback_open_width, self.args.gripper_feedback_closed_width
             ) >= self.args.gripper_close_threshold
             self.get_logger().info(
                 f"initialized gripper state from feedback: width={width:.4f}m "
-                f"closed={self.last_gripper_closed}")
+                f"closed={self.last_gripper_closed} "
+                f"feedback_open={self.args.gripper_feedback_open_width:.4f}m "
+                f"feedback_closed={self.args.gripper_feedback_closed_width:.4f}m")
+        if self.fault:
+            raise RuntimeError("executor faulted during initialization")
+        self.startup_ready = True
 
     def image_cb(self, key: str, message: Image) -> None:
         try:
@@ -171,12 +191,25 @@ class DirectAdapter(Node):
         except Exception as error:
             self.get_logger().warning(f"cannot decode {key} image: {error}", throttle_duration_sec=2)
 
-    def joint_cb(self, message: JointState) -> None:
+    def arm_joint_cb(self, message: JointState) -> None:
         values = dict(zip(message.name, message.position)); now = time.monotonic()
         if all(name in values for name in JOINT_NAMES):
             self.joints = {name: float(values[name]) for name in JOINT_NAMES}; self.joint_time = now
-        for name in ("fr3_finger_joint1", "fr3_finger_joint2"):
-            if name in values: self.fingers[name] = float(values[name]); self.gripper_time = now
+
+    def gripper_joint_cb(self, message: JointState) -> None:
+        values = dict(zip(message.name, message.position)); now = time.monotonic()
+        names = ("fr3_finger_joint1", "fr3_finger_joint2")
+        if all(name in values for name in names):
+            self.fingers = {name: float(values[name]) for name in names}
+            self.gripper_time = now
+
+    def gripper_feedback_error(self) -> Optional[str]:
+        values = [self.fingers[name] for name in ("fr3_finger_joint1", "fr3_finger_joint2")]
+        if not all(np.isfinite(value) for value in values):
+            return "non-finite gripper feedback"
+        # Feedback range checks are disabled for this hardware setup. Keep
+        # rejecting NaN/Inf so invalid observations cannot reach the policy.
+        return None
 
     def executor_status_cb(self, message: DiagnosticArray) -> None:
         for status in message.status:
@@ -186,17 +219,29 @@ class DirectAdapter(Node):
 
     def observation(self) -> Optional[Dict[str, Any]]:
         now = time.monotonic()
-        if set(self.images) != {"left", "wrist"} or len(self.joints) != 7:
+        if set(self.images) != {"left", "wrist"}:
+            self.observation_blocker = "missing camera images: " + ", ".join(sorted({"left", "wrist"} - set(self.images)))
+            return None
+        if len(self.joints) != 7:
+            self.observation_blocker = "missing seven-joint feedback on /franka/joint_states"
             return None
         stamps = [self.image_times["left"], self.image_times["wrist"], self.joint_time]
         if self.args.enable_gripper:
-            if not self.fingers: return None
+            if not self.fingers:
+                self.observation_blocker = "missing dedicated gripper feedback"
+                return None
             stamps.append(self.gripper_time)
         if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age:
+            self.observation_blocker = (
+                f"waiting for fresh feedback/images: joint_age={now-self.joint_time:.2f}s "
+                f"gripper_age={now-self.gripper_time:.2f}s "
+                f"left_age={now-self.image_times['left']:.2f}s wrist_age={now-self.image_times['wrist']:.2f}s")
             return None
         if abs(self.image_times["left"] - self.image_times["wrist"]) > self.args.max_camera_skew:
+            self.observation_blocker = "camera streams exceed synchronization tolerance"
             return None
         if max(abs(self.joint_time - self.image_times[key]) for key in ("left", "wrist")) > self.args.max_state_image_skew:
+            self.observation_blocker = "joint and camera timestamps exceed synchronization tolerance"
             return None
         if self.fingers:
             width = sum(self.fingers.get(name, 0.0) for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
@@ -205,12 +250,15 @@ class DirectAdapter(Node):
                 "observation/wrist_image_left": self.images["wrist"].copy(),
                 "observation/joint_position": np.array([self.joints[name] for name in JOINT_NAMES], np.float32),
                 "observation/gripper_position": np.array([closedness_from_width(
-                    width, self.args.gripper_open_width, self.args.gripper_closed_width
+                    width, self.args.gripper_feedback_open_width, self.args.gripper_feedback_closed_width
                 )], np.float32),
                 "prompt": self.args.instruction}
 
     def policy_tick(self) -> None:
-        if self.finished or self.fault or self.gripper_busy: return
+        if not self.startup_ready or self.finished or self.fault: return
+        if self.gripper_verification is not None:
+            self.verify_gripper_result()
+        if self.fault or self.gripper_busy: return
         now = time.monotonic()
         if self.future is not None:
             if not self.future.done():
@@ -233,10 +281,25 @@ class DirectAdapter(Node):
         if self.args.execute and (len(self.queue) or self.executed >= self.args.max_actions): return
         observation = self.observation()
         if observation is not None:
+            self.observation_wait_started = None
             self.inference_started = now; self.future = self.pool.submit(self.policy.infer, observation)
+        else:
+            if self.observation_wait_started is None:
+                self.observation_wait_started = now
+            elapsed = now - self.observation_wait_started
+            if elapsed >= 2 and now - self.observation_warned_at >= 2:
+                self.get_logger().warning(f"Waiting for observations ({elapsed:.1f}s): {self.observation_blocker}")
+                self.observation_warned_at = now
+            if self.args.max_observation_wait > 0 and elapsed >= self.args.max_observation_wait:
+                self.latch(f"observation wait timeout: {self.observation_blocker}")
 
     def action_tick(self) -> None:
-        if not self.args.execute or self.finished or self.fault or self.gripper_busy: return
+        if not self.startup_ready or not self.args.execute or self.finished or self.fault or self.gripper_busy: return
+        if self.args.enable_gripper:
+            error = self.gripper_feedback_error()
+            if error:
+                self.latch(error + "; run ./homing.sh and restart")
+                return
         if self.executed >= self.args.max_actions:
             self.stop_command(); self.log("complete", actions_executed=self.executed, stop_requested=True)
             self.finished = True
@@ -246,7 +309,7 @@ class DirectAdapter(Node):
             # This callback is itself the next 15 Hz boundary after the last
             # action. Send the explicit stop unconditionally: a timer callback
             # can arrive a fraction early, and waiting for another tick would
-            # exceed the executor's strict 120 ms nonzero-command watchdog.
+            # exceed the executor's 300 ms nonzero-command watchdog.
             if self.last_publish:
                 self.stop_command()
                 self.log("chunk_stop", actions_executed=self.executed, stop_requested=True)
@@ -303,18 +366,80 @@ class DirectAdapter(Node):
     def gripper_result(self, future) -> None:
         try: result = future.result().result
         except Exception as error: self.latch(f"gripper action failed: {error}"); return
-        if not result.success: self.latch(f"gripper action reported failure: {result.error}"); return
+        error_text = str(result.error).strip()
+        if not result.success and (self.pending_gripper_closed is not True or error_text):
+            self.latch(f"gripper action reported failure: {error_text or 'unspecified hardware failure'}")
+            return
+        # Action completion can arrive before the next JointState callback.
+        # Keep the arm stopped until new, settled driver feedback is received.
+        self.gripper_verification = (time.monotonic(), result)
+
+    def verify_gripper_result(self) -> None:
+        completed_at, result = self.gripper_verification
+        now = time.monotonic()
+        if now - completed_at > self.args.gripper_verify_timeout:
+            self.latch("gripper action finished but fresh feedback or enabled width confirmation timed out")
+            return
+        if self.gripper_time <= completed_at + 0.2 or now - self.gripper_time > 0.5:
+            return
+        error = self.gripper_feedback_error()
+        if error:
+            self.latch(error + "; run ./homing.sh and restart")
+            return
+        width = sum(self.fingers.get(name, 0.0) for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
+        unconfirmed_close = (
+            not result.success and self.pending_gripper_closed is True
+            and not str(result.error).strip() and not self.args.gripper_require_grasp_success)
+        if not result.success and not unconfirmed_close:
+            error_text = str(result.error).strip()
+            # libfranka reports an ordinary empty grasp as success=false with
+            # an empty error string.  This is a task-level miss, not a hardware
+            # fault: stop the stale chunk and replan from fresh observations.
+            if self.pending_gripper_closed is True and not error_text:
+                self.last_gripper_closed = closedness_from_width(
+                    width, self.args.gripper_feedback_open_width, self.args.gripper_feedback_closed_width
+                ) >= self.args.gripper_close_threshold
+                self.gripper_busy = False; self.pending_gripper_closed = None
+                self.gripper_verification = None
+                self.queue.clear_for_gripper()
+                self.need_fresh_after = max(self.need_fresh_after, time.monotonic())
+                self.log("gripper_miss", measured_width=width, recovery="fresh_replan")
+                self.get_logger().warning(
+                    f"gripper grasp missed object; measured width={width:.4f}m; "
+                    "discarding stale actions and replanning")
+                return
+            self.latch(f"gripper action reported failure: {error_text or 'unspecified hardware failure'}")
+            return
+        if self.pending_gripper_closed is False and self.args.gripper_verify_open_width:
+            minimum_open_width = self.args.gripper_feedback_open_width - self.args.gripper_open_tolerance
+            if width < minimum_open_width:
+                return
         self.last_gripper_closed = self.pending_gripper_closed; self.gripper_busy = False
+        self.gripper_verification = None
         self.pending_gripper_closed = None
+        if unconfirmed_close:
+            self.log("gripper_close_completed", grasp_confirmed=False, measured_width=width,
+                     remaining_actions=len(self.queue))
+            self.get_logger().info(
+                "gripper CLOSE command completed; grasp-success check disabled; "
+                f"continuing {len(self.queue)} remaining actions in current chunk")
+            return
         self.get_logger().warning(
-            f"gripper {'CLOSED' if self.last_gripper_closed else 'OPENED'} successfully; "
+            f"gripper {'CLOSE' if self.last_gripper_closed else 'OPEN'} command completed; "
+            f"measured width={width:.4f}m; "
+            f"open_width_check={'enabled' if self.args.gripper_verify_open_width else 'disabled'}; "
             f"continuing {len(self.queue)} remaining actions in current chunk")
 
     def stop_command(self) -> None:
-        if self.publisher is None: return
-        command = JointJog(); command.header.stamp = self.get_clock().now().to_msg()
-        command.joint_names = list(JOINT_NAMES); command.velocities = [0.0] * 7; command.duration = 1 / self.args.action_hz
-        self.publisher.publish(command)
+        if self.publisher is None or not self.context.ok(): return
+        try:
+            command = JointJog(); command.header.stamp = self.get_clock().now().to_msg()
+            command.joint_names = list(JOINT_NAMES); command.velocities = [0.0] * 7; command.duration = 1 / self.args.action_hz
+            self.publisher.publish(command)
+        except RCLError:
+            # SIGINT can invalidate the context between the check and publish.
+            # An error while ROS is still alive must remain visible.
+            if self.context.ok(): raise
 
     def latch(self, reason: str) -> None:
         if self.fault: return
@@ -326,11 +451,19 @@ class DirectAdapter(Node):
             self.log_file.write(json.dumps({"monotonic_s": time.monotonic(), "event": event, **fields}) + "\n")
 
     def destroy_node(self):
-        if self.args.execute:
-            for _ in range(4): self.stop_command(); time.sleep(.01)
-        self.pool.shutdown(wait=False, cancel_futures=True); self.policy.close()
-        if self.log_file: self.log_file.close()
-        return super().destroy_node()
+        try:
+            if self.args.execute and self.context.ok():
+                for _ in range(4):
+                    if not self.context.ok(): break
+                    self.stop_command(); time.sleep(.01)
+        finally:
+            self.pool.shutdown(wait=False, cancel_futures=True)
+            try:
+                self.policy.close()
+            finally:
+                if self.log_file: self.log_file.close()
+                destroyed = super().destroy_node()
+        return destroyed
 
 
 def parse_args() -> argparse.Namespace:
@@ -340,39 +473,78 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--left-image-topic", default="/camera_left/image_rect")
     parser.add_argument("--wrist-image-topic", default="/camera/camera_front/color/image_raw")
     parser.add_argument("--action-hz", type=float, default=15.0); parser.add_argument("--execute-horizon", type=int, default=4)
-    parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=2.0)
-    parser.add_argument("--max-observation-age", type=float, default=.2); parser.add_argument("--max-camera-skew", type=float, default=.05)
-    parser.add_argument("--max-state-image-skew", type=float, default=.05); parser.add_argument("--enable-gripper", action="store_true")
-    parser.add_argument("--gripper-open-width", type=float, default=.08)
+    parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=10.0)
+    parser.add_argument("--max-observation-age", type=float, default=.5); parser.add_argument("--max-camera-skew", type=float, default=.15)
+    parser.add_argument("--max-state-image-skew", type=float, default=.15); parser.add_argument("--enable-gripper", action="store_true")
+    parser.add_argument("--max-observation-wait", type=float, default=0,
+                        help="stop after this many seconds without usable observations (0 disables)")
+    parser.add_argument("--gripper-open-width", type=float, default=.07)
     parser.add_argument("--gripper-closed-width", type=float, default=0.0)
+    parser.add_argument("--gripper-feedback-open-width", type=float, default=None,
+                        help="measured total finger width at full opening; defaults to command open width")
+    parser.add_argument("--gripper-feedback-closed-width", type=float, default=None,
+                        help="measured total finger width when closed; defaults to command closed width")
     parser.add_argument("--gripper-epsilon-inner", type=float, default=.01)
     parser.add_argument("--gripper-epsilon-outer", type=float, default=.01)
+    parser.add_argument("--gripper-open-tolerance", type=float, default=.005)
+    parser.add_argument("--gripper-verify-open-width", type=int, choices=(0, 1), default=1,
+                        help="0: accept successful Move after fresh feedback without checking its width")
+    parser.add_argument("--gripper-max-plausible-width", type=float, default=.085)
+    parser.add_argument("--gripper-require-grasp-success", type=int, choices=(0, 1), default=1,
+                        help="0: continue the current chunk after an unsuccessful Grasp with no hardware error")
+    parser.add_argument("--gripper-verify-timeout", type=float, default=2.0)
     parser.add_argument("--gripper-open-threshold", type=float, default=.4); parser.add_argument("--gripper-close-threshold", type=float, default=.6)
     parser.add_argument("--gripper-speed", type=float, default=.04); parser.add_argument("--gripper-force", type=float, default=10.)
     parser.add_argument("--jsonl-log", default=""); parser.add_argument("--execute", action="store_true")
     parser.add_argument("--confirm-real-robot", default="")
     args = parser.parse_args()
+    # Sensor endpoints and motion targets can use different width scales.
+    if args.gripper_feedback_open_width is None:
+        args.gripper_feedback_open_width = args.gripper_open_width
+    if args.gripper_feedback_closed_width is None:
+        args.gripper_feedback_closed_width = args.gripper_closed_width
+    if (not np.isfinite(args.gripper_feedback_open_width)
+            or not np.isfinite(args.gripper_feedback_closed_width)
+            or args.gripper_feedback_open_width <= args.gripper_feedback_closed_width):
+        parser.error("gripper feedback widths must be finite with closed < open")
     if not 1 <= args.execute_horizon <= ACTION_SHAPE[0]:
         parser.error(f"execute-horizon must be in [1, {ACTION_SHAPE[0]}]")
     if not 1 <= args.max_actions <= 2000: parser.error("max-actions must be in [1, 2000]")
+    if not np.isfinite(args.max_observation_wait) or args.max_observation_wait < 0:
+        parser.error("max-observation-wait must be finite and >= 0")
     if not 0 < args.gripper_speed <= .05: parser.error("gripper-speed must be in (0, 0.05]")
     if not 1 <= args.gripper_force <= 30: parser.error("gripper-force must be in [1, 30] N")
-    if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .2:
-        parser.error("gripper widths must satisfy 0 <= closed < open <= 0.2 m")
+    if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .08:
+        parser.error("gripper widths must satisfy 0 <= closed < open <= 0.08 m after homing")
     if not 0 <= args.gripper_epsilon_inner <= .2 or not 0 <= args.gripper_epsilon_outer <= .2:
         parser.error("gripper epsilon values must be in [0, 0.2] m")
+    if not 0 <= args.gripper_open_tolerance < args.gripper_open_width - args.gripper_closed_width:
+        parser.error("gripper open tolerance must keep accepted open width above closed width")
+    if not args.gripper_open_width <= args.gripper_max_plausible_width <= .1:
+        parser.error("gripper max plausible width must cover open width and be <= 0.1 m")
+    if not 0.2 < args.gripper_verify_timeout <= 10:
+        parser.error("gripper verify timeout must be in (0.2, 10] seconds")
     if args.execute and args.confirm_real_robot != "DIRECT_JOINT_VELOCITY_PI05": parser.error("execute requires exact direct-flow confirmation token")
     return args
 
 
 def main() -> None:
-    args = parse_args(); rclpy.init(); node = DirectAdapter(args)
+    args = parse_args(); rclpy.init(); node = None; interrupted = False
     try:
+        node = DirectAdapter(args)
         node.arm()
         while rclpy.ok() and not node.finished and not node.fault: rclpy.spin_once(node, timeout_sec=.1)
-    finally: node.destroy_node(); rclpy.shutdown()
-    if node.fault:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        interrupted = True
+    finally:
+        try:
+            if node is not None: node.destroy_node()
+        finally:
+            rclpy.try_shutdown()
+    if node is not None and node.fault:
         raise SystemExit(1)
+    if interrupted:
+        raise SystemExit(130)
 
 
 if __name__ == "__main__": main()

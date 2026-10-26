@@ -1,0 +1,10 @@
+# World-frame fr3_link8 target bounds for the EEF pose policies (run_eef_pose.sh,
+# run_eef_direct.sh). Checked before every target; leaving them latches a fault.
+#
+# Task0 training positions (29 episodes) span x 0.520..0.763, y -0.256..0.120,
+# z 0.257..0.402; the shared vla_calibration.yaml bounds (y +-0.20, x <= 0.75)
+# cut off the tube grasp (mean y -0.2045). y is doubled to +-0.40 and x extended
+# to 0.85; z keeps the conservative floor above the table.
+workspace_bounds_world:
+  min: [0.383737, -0.400, 0.182611]
+  max: [0.850000, 0.400, 0.786648]

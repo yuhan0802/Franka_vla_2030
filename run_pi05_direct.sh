@@ -2,10 +2,20 @@
 # Explicit entry point for the parallel pi0.5 direct joint velocity workflow.
 set -euo pipefail
 
+# Optional end-effector pose control (15x7 EEF policies). The default keeps the
+# joint velocity workflow below unchanged; eef_pose hands off to a separate
+# launcher with its own Servo stack, sessions and logs.
+case "${PI05_CONTROL_MODE:-joint_velocity}" in
+  joint_velocity) ;;
+  eef_pose) exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run_eef_pose.sh" "$@";;
+  *) echo "PI05_CONTROL_MODE must be joint_velocity or eef_pose" >&2; exit 2;;
+esac
+
 mode="${1:-dry-run}"
 case "$mode" in server|probe|dry-run|fake-execute|fake-commission|commission|execute|full-execute|status|stop) ;; *)
   echo "Usage: $0 {server|probe|dry-run|fake-execute|fake-commission|commission|execute|full-execute|status|stop}" >&2; exit 2;; esac
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 robot_session=franka_vr_pi05_direct_robot
 camera_session=franka_vr_pi05_direct_cameras
 server_session=pi05-droid-66-8094
@@ -32,7 +42,7 @@ if [[ "$mode" == full-execute ]]; then default_camera_mode=raw; else default_cam
 camera_mode="${VLA_CAMERA_MODE:-$default_camera_mode}"
 case "$camera_mode" in raw) suffix=image_raw;; calibrated) suffix=image_rect;;
   *) echo "VLA_CAMERA_MODE must be raw or calibrated" >&2; exit 2;; esac
-run_stamp="$(date +%Y%m%d_%H%M%S)_$$"; log_dir="${PI05_DIRECT_LOG_DIR:-$root_dir/logs/pi05_direct_$run_stamp}"
+run_stamp="$(date +%Y%m%d_%H%M%S)_$$"; log_dir="${PI05_DIRECT_LOG_DIR:-$FRANKA_LOG_ROOT/pi05_direct_$run_stamp}"
 if [[ "$mode" == full-execute ]]; then
   [[ "${PI05_DIRECT_ENABLE_FULL_TASK:-}" == I_UNDERSTAND_FULL_DIRECT_TASK ]] || {
     echo "REFUSED: full-execute requires PI05_DIRECT_ENABLE_FULL_TASK=I_UNDERSTAND_FULL_DIRECT_TASK." >&2; exit 3; }
@@ -93,6 +103,33 @@ stop_direct_containers() {
     docker kill --signal=SIGINT "$id" >/dev/null || true
   done < <(docker ps -q --filter "label=com.docker.compose.project.working_dir=$root_dir")
 }
+stop_direct_adapter_containers() {
+  local id command
+  while read -r id; do
+    [[ -n "$id" ]] || continue
+    command="$(docker inspect "$id" --format '{{json .Config.Cmd}}' 2>/dev/null || true)"
+    [[ "$command" == *pi05_direct_policy_adapter.py* ]] || continue
+    echo "Stopping direct policy adapter: $id"
+    docker kill --signal=SIGINT "$id" >/dev/null || true
+  done < <(docker ps -q --filter "label=com.docker.compose.project.working_dir=$root_dir")
+}
+wait_direct_shutdown() {
+  local attempt id command running
+  for attempt in $(seq 1 100); do
+    running=false
+    while read -r id; do
+      [[ -n "$id" ]] || continue
+      command="$(docker inspect "$id" --format '{{json .Config.Cmd}}' 2>/dev/null || true)"
+      case "$command" in
+        *franka_pi05_direct_velocity.launch.py*|*pi05_direct_policy_adapter.py*) running=true ;;
+      esac
+    done < <(docker ps -q --filter "label=com.docker.compose.project.working_dir=$root_dir")
+    [[ "$running" == false ]] && return 0
+    sleep .2
+  done
+  echo "Direct robot/adapter containers have not exited; automatic reinit/reset must not start." >&2
+  return 1
+}
 full_cleanup_done=false
 cleanup_full_task() {
   [[ ( "$mode" == full-execute || "$mode" == commission || "$mode" == fake-commission ) && "$full_cleanup_done" == false ]] || return 0
@@ -109,11 +146,13 @@ case "$mode" in
   status)
     status_session "$robot_session"; status_session "$camera_session"
     "$root_dir/run_vla_pi05_droid_66.sh" status || true
-    echo "Expected server tmux: $server_session"; echo "Latest logs:"; ls -dt "$root_dir"/logs/pi05_direct_* 2>/dev/null | head -3 || true
+    echo "Expected server tmux: $server_session"; echo "Latest logs:"; ls -dt "$FRANKA_LOG_ROOT"/pi05_direct_* 2>/dev/null | head -3 || true
     exit 0;;
   stop)
-    failed=0; request_restricted_stop; stop_session "$camera_session" || failed=1; stop_session "$robot_session" || failed=1
+    failed=0; request_restricted_stop; stop_direct_adapter_containers
+    stop_session "$camera_session" || failed=1; stop_session "$robot_session" || failed=1
     stop_direct_containers
+    wait_direct_shutdown || failed=1
     "$root_dir/run_vla_pi05_droid_66.sh" stop || failed=1; exit "$failed";;
 esac
 
@@ -164,15 +203,20 @@ else
   # discards the late-chunk grasp transition and leaves the policy in approach.
   adapter_flags=(--execute --confirm-real-robot DIRECT_JOINT_VELOCITY_PI05 --execute-horizon 16
     --max-actions "$full_actions" --enable-gripper --gripper-speed 0.02 --gripper-force "$full_gripper_force"
-    --gripper-open-width "${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.08}"
+    --gripper-open-width "${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.07}"
     --gripper-closed-width "${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}"
+    --gripper-feedback-open-width "${PI05_DIRECT_GRIPPER_FEEDBACK_OPEN_WIDTH:-${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.07}}"
+    --gripper-feedback-closed-width "${PI05_DIRECT_GRIPPER_FEEDBACK_CLOSED_WIDTH:-${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}}"
     --gripper-epsilon-inner "${PI05_DIRECT_GRIPPER_EPSILON_INNER:-0.01}"
-    --gripper-epsilon-outer "${PI05_DIRECT_GRIPPER_EPSILON_OUTER:-0.01}")
+    --gripper-epsilon-outer "${PI05_DIRECT_GRIPPER_EPSILON_OUTER:-0.01}"
+    --gripper-open-tolerance "${PI05_DIRECT_GRIPPER_OPEN_TOLERANCE:-0.005}"
+    --gripper-verify-open-width "${PI05_DIRECT_GRIPPER_VERIFY_OPEN_WIDTH:-1}"
+    --gripper-max-plausible-width "${PI05_DIRECT_GRIPPER_MAX_PLAUSIBLE_WIDTH:-0.085}")
 fi
 
-echo "Waiting for the direct robot stack to become ready (up to 120 seconds)..."
+echo "Waiting for the direct robot stack to become ready (up to 180 seconds)..."
 ready=false
-for attempt in $(seq 1 120); do
+for attempt in $(seq 1 180); do
   if ! tmux has-session -t "$robot_session" 2>/dev/null; then
     echo "Direct robot stack exited; inspect $log_dir/robot.log" >&2
     exit 1
@@ -215,7 +259,10 @@ if [[ "$mode" == full-execute ]]; then
       set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
       exec python3 src/franka_vr/franka_vr/scripts/pi05_direct_policy_adapter.py \
         --server-host "'"$host"'" --server-port "'"$port"'" --instruction "'"$instruction"'" \
-        --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 --max-policy-latency 5 \
+        --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 --max-policy-latency 10 \
+        --enable-gripper \
+        --gripper-feedback-open-width '"${PI05_DIRECT_GRIPPER_FEEDBACK_OPEN_WIDTH:-${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.07}}"' \
+        --gripper-feedback-closed-width '"${PI05_DIRECT_GRIPPER_FEEDBACK_CLOSED_WIDTH:-${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}}"' \
         --jsonl-log /pi05_logs/full_dry_run_policy.jsonl
     ' 2>&1 | tee "$log_dir/full_dry_run.log"
   grep -q '"robot_command_sent": false' "$log_dir/full_dry_run_policy.jsonl" || {

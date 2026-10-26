@@ -3,8 +3,9 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 cd "$root_dir"
-log_dir="${PI05_LOG_DIR:-$root_dir/logs/pi05_robot_$(date +%Y%m%d_%H%M%S)_$$}"
+log_dir="${PI05_LOG_DIR:-$FRANKA_LOG_ROOT/pi05_robot_$(date +%Y%m%d_%H%M%S)_$$}"
 mkdir -p "$log_dir"
 log_dir="$(cd "$log_dir" && pwd)"
 exec > >(tee -a "$log_dir/robot.log") 2>&1

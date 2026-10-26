@@ -2,6 +2,7 @@
 # Reproduce the successful 2026-10-15 20k trial. Default mode moves real hardware.
 set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 cd "$root_dir"
 mode="${1:-execute}"
 case "$mode" in
@@ -44,7 +45,7 @@ if [[ "$mode" == stop || "$mode" == status ]]; then
   exec ./run_pi05.sh "$mode"
 fi
 
-run_dir="$root_dir/logs/pi05_20k_relaxed_$(date +%Y%m%d_%H%M%S)_$$"
+run_dir="$FRANKA_LOG_ROOT/pi05_20k_relaxed_$(date +%Y%m%d_%H%M%S)_$$"
 mkdir -p "$run_dir"
 export PI05_LOG_DIR="$run_dir/robot"
 exec > >(tee -a "$run_dir/run.log") 2>&1

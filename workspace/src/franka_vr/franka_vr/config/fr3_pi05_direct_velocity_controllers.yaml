@@ -20,7 +20,7 @@ fr3_direct_velocity_controller:
     # 控制器接收执行器已经检查过的速度目标，再做 1 kHz 的平滑后写入接口。
     # 为避免 100 Hz 目标在 1 kHz FCI 周期里形成加速度/jerk 阶跃，在此按
     # task2 加速度包络和 Franka 关节 jerk 配置做连续过渡；不会降低稳态目标速度。
-    command_timeout_s: 0.05
+    command_timeout_s: 0.10
     max_velocity_rad_s: 0.6
     max_acceleration_rad_s2: 2.0
     max_jerk_rad_s3: 300.0

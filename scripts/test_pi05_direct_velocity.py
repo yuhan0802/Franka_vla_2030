@@ -51,13 +51,17 @@ class DirectVelocityTests(unittest.TestCase):
         core = DirectVelocitySafetyCore(max_velocity=.6, max_acceleration=2.0)
         core.reset(self.home)
         previous_v = np.zeros(7)
+        actual = self.home.copy()
         for _ in range(30):
-            result = core.step(np.ones(7) * .253, self.home, .01)
+            result = core.step(np.ones(7) * .253, actual, .01)
             self.assertLessEqual(np.max(np.abs(result.velocity)), .6 + 1e-12)
             self.assertLessEqual(np.max(np.abs(result.velocity - previous_v)), 2.0 * .01 + 1e-12)
             self.assertFalse(result.velocity_clipped)
             self.assertFalse(result.jerk_clipped)
             previous_v = result.velocity
+            # Track the preceding command here. Frozen feedback would exercise
+            # the separate tracking-error slowdown instead of this envelope.
+            actual = result.position.copy()
         np.testing.assert_allclose(result.velocity, np.ones(7) * .253, atol=1e-12)
 
     def test_tracking_and_joint_limits(self):
@@ -76,8 +80,10 @@ class DirectVelocityTests(unittest.TestCase):
         policy_dt = 1 / 15
         steps = [0.01] * 6 + [policy_dt - .06]
         self.assertAlmostEqual(sum(velocity * dt for dt in steps), velocity * policy_dt, places=12)
-        # 120 ms watchdog corresponds to no more than 12 nominal 100 Hz cycles.
-        self.assertEqual(round(.12 / .01), 12)
+        # A 300 ms watchdog tolerates several delayed 15 Hz callbacks while
+        # still stopping within 30 nominal 100 Hz control cycles.
+        self.assertGreater(.30, 4 / 15)
+        self.assertEqual(round(.30 / .01), 30)
 
 
 if __name__ == "__main__":
