@@ -166,6 +166,16 @@ class EefAdapter(Node):
             # A server that is already listening is reused as is; the checkpoint alone
             # does not prove it preprocesses images or decodes actions like this run expects.
             stale = []
+            if (args.expected_action_normalization
+                    and self.metadata.get("action_normalization") != args.expected_action_normalization):
+                stale.append(f"action_normalization={self.metadata.get('action_normalization')!r}, "
+                             f"expected {args.expected_action_normalization!r}")
+            if args.expected_action_mulaw_mu > 0:
+                served_mu = self.metadata.get("action_mulaw_mu")
+                if (not isinstance(served_mu, (int, float)) or not np.isfinite(served_mu)
+                        or not np.isclose(served_mu, args.expected_action_mulaw_mu, rtol=0, atol=1e-9)
+                        or self.metadata.get("action_denormalization") != "inverse_mulaw_then_scale"):
+                    stale.append("mu-law inverse decoding metadata missing or mismatched")
             if (args.expected_model_image_size
                     and self.metadata.get("model_image_size") != [args.expected_model_image_size] * 2):
                 stale.append(f"model_image_size={self.metadata.get('model_image_size')!r}, "
@@ -403,11 +413,11 @@ class EefAdapter(Node):
             if now >= self.need_fresh_after:
                 pose = self.checked_pose()
                 if pose is None: return
-                try: chunk = goto_chunk(pose[0], pose[1], TASK0_START_POSITION, TASK0_START_QUATERNION,
+                try: chunk = goto_chunk(pose[0], pose[1], self.args.home_position, self.args.home_quaternion,
                                         self.integrator.rotation_frame, 1.0 if self.commanded_gripper_open else 0.0)
                 except ValueError as error: self.latch(f"home: {error}"); return
                 self.get_logger().warning(f"home: {len(chunk)} steps from {np.round(pose[0], 4).tolist()} "
-                                          f"to the Task0 start {list(TASK0_START_POSITION)}")
+                                          f"to the configured training start {list(self.args.home_position)}")
                 self.start_chunk(chunk, policy_latency=0.0)
             return
         if self.args.test_axis:
@@ -732,6 +742,10 @@ def parse_args() -> argparse.Namespace:
     add("--exterior-image-topic", default="/camera_left/image_rect")
     add("--wrist-image-topic", default="/camera/camera_front/color/image_raw")
     add("--bounds-config", required=True, help="YAML with workspace_bounds_world.min/max")
+    add("--home-position", type=float, nargs=3, default=TASK0_START_POSITION,
+        help="configured training-start position in world coordinates (m)")
+    add("--home-quaternion", type=float, nargs=4, default=TASK0_START_QUATERNION,
+        help="configured training-start quaternion, xyzw")
     add("--rotation-frame", choices=("world", "tool"), default=None,
         help="optional cross-check of the server's rotation_execution; required for --test-axis")
     add("--chunk-start", choices=("measured", "last_target"), default="measured",
@@ -761,6 +775,9 @@ def parse_args() -> argparse.Namespace:
     add("--expected-model-image-size", type=int, default=0, help="refuse a server not resizing images to NxN (0: no check)")
     add("--expected-actioncodec", default="", help="refuse a server whose metadata names another ActionCodec")
     add("--expected-state-stats", default="", help="refuse a server whose metadata names other state stats")
+    add("--expected-action-normalization", default="", help="cross-check the model action transform")
+    add("--expected-action-mulaw-mu", type=float, default=0,
+        help="require this mu-law parameter and inverse decoding on the server (0 disables)")
     add("--gripper-state-closed-width", type=float, default=0.01)
     add("--gripper-state-open-width", type=float, default=0.08)
     add("--enable-gripper", action="store_true")
@@ -792,6 +809,11 @@ def parse_args() -> argparse.Namespace:
     add("--save-observation-dir", default="", help="save every image pair sent to the policy here")
     add("--jsonl-log", default=""); add("--execute", action="store_true"); add("--confirm-real-robot", default="")
     args = parser.parse_args(rclpy.utilities.remove_ros_args()[1:])
+    if (not np.isfinite(args.home_position).all() or not np.isfinite(args.home_quaternion).all()
+            or not .5 <= np.linalg.norm(args.home_quaternion) <= 1.5):
+        parser.error("home pose must be finite with a valid quaternion")
+    if not np.isfinite(args.expected_action_mulaw_mu) or args.expected_action_mulaw_mu < 0:
+        parser.error("expected-action-mulaw-mu must be finite and nonnegative")
     if not 1 <= args.execute_horizon <= ACTION_SHAPE[0]: parser.error(f"execute-horizon must be in [1, {ACTION_SHAPE[0]}]")
     if not 1 <= args.max_actions <= 2000 or not 1 <= args.max_chunks <= 200: parser.error("action/chunk budget out of range")
     if args.action_hz != 15.0: parser.error("the EEF protocol is 15 Hz; do not execute it at another rate")

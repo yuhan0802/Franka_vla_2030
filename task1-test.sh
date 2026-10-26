@@ -14,7 +14,7 @@ source "$script_dir/scripts/runtime_log_root.sh"
 #
 # 选模型：EEF_TEST_MODEL=maxabs（默认，v5_maxabs save_8000，63 服务器，task1-act-v2.sh 的配置）
 #         EEF_TEST_MODEL=x3     （v5_x3 save_8000，20 服务器，task1-act.sh 的配置）
-# 权重、服务器、端口等仍可用 EEF_CHECKPOINT / EEF_REMOTE_SSH / EEF_SERVER_PORT 等环境变量覆盖。
+# 权重、服务器、端口等固定从 config/eef_tasks.json 读取，与通用入口保持一致。
 #
 #   ./task1-test.sh server           只检查/部署模型服务，不动机械臂（测试前先跑一次，省掉每次的等待）
 #   ./task1-test.sh status           模型服务是否在跑、跑的是哪个权重
@@ -31,15 +31,21 @@ source "$script_dir/scripts/runtime_log_root.sh"
 # 模型服务已在跑但权重和当前配置不一致时默认拒绝（可能有人在用）；确认要换：EEF_TEST_REDEPLOY=1。
 model="${EEF_TEST_MODEL:-maxabs}"
 case "$model" in
-  maxabs) base="$script_dir/task1-act-v2.sh";;
-  x3)     base="$script_dir/task1-act.sh";;
+  maxabs) model_key=act-v2; base="$script_dir/task1-act-v2.sh";;
+  x3)     model_key=act;    base="$script_dir/task1-act.sh";;
   *) echo "EEF_TEST_MODEL must be maxabs or x3" >&2; exit 2;;
 esac
 base="${EEF_TEST_BASE_SCRIPT:-$base}"   # 仅供离线测试替换
 [[ -f "$base" ]] || { echo "missing $base" >&2; exit 2; }
 
-# 读取基础脚本里的 export EEF_*（都是 ${VAR:-默认值} 形式，环境变量里已设的优先）。
-eval "$(grep -E '^export EEF_[A-Z_]+=' "$base")"
+# 与 run_eef_task.sh 使用同一个固定模型配置，避免包装脚本改动后参数漂移。
+profile_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eef_test_profile.XXXXXXXX")"
+python3 "$script_dir/scripts/eef_task_config.py" resolve \
+  --config "${EEF_TASK_CONFIG:-$script_dir/config/eef_tasks.json}" \
+  --task task1 --model "$model_key" \
+  --output "$profile_tmp/profile.json" --env-file "$profile_tmp/env"
+while IFS= read -r -d '' key && IFS= read -r -d '' value; do export "$key=$value"; done < "$profile_tmp/env"
+rm -rf -- "$profile_tmp"
 : "${EEF_REMOTE_SSH:?}" "${EEF_SERVER_PORT:?}" "${EEF_CHECKPOINT:?}"
 runner="$script_dir/run_eef_direct.sh"
 stamp() { date +%Y%m%d_%H%M%S; }

@@ -61,6 +61,28 @@ IMAGE_SHAPE = (480, 640, 3)  # Camera/request shape before training-compatible p
 MODEL_IMAGE_SIZE = 256
 
 
+def denormalize_actions(normalized, scale, method, mu=0.0):
+    """Invert the checkpoint's action transform once, after codec decoding."""
+    action = np.asarray(normalized, dtype=np.float32).copy()
+    scale = np.asarray(scale, dtype=np.float32)
+    if action.shape[-1] != 7 or not np.isfinite(action).all():
+        raise ValueError("decoded action must have seven finite dimensions")
+    if scale.shape != (6,) or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError("action scale must have six positive finite dimensions")
+    if method == "franka_mulaw":
+        if not np.isfinite(mu) or mu <= 0:
+            raise ValueError("franka_mulaw requires a finite positive mu")
+        # Training: divide by scale, clip, then apply mu-law to the arm only.
+        action = np.clip(action, -1.0, 1.0)
+        arm = action[..., :6]
+        action[..., :6] = np.sign(arm) * np.expm1(np.abs(arm) * np.log1p(mu)) / mu
+    action[..., :6] *= scale
+    action[..., 6] = (action[..., 6] + 1.0) / 2.0
+    if not np.isfinite(action).all():
+        raise ValueError("denormalized action contains NaN/Inf")
+    return action
+
+
 class Task0EefPolicy:
     def __init__(self, args: argparse.Namespace):
         self.device = torch.device(args.device)
@@ -131,6 +153,12 @@ class Task0EefPolicy:
         self.span = np.maximum(self.q99 - self.q01, 1e-8)
         configured_scale = self.training.get("action_arm_scale")
         if configured_scale is None:
+            configured_scale = self.training.get("action_normalization_stats", {}).get("arm_scale")
+        if configured_scale is None:
+            norm_path = self.training.get("action_norm_stats_path")
+            if norm_path and Path(norm_path).is_file():
+                configured_scale = json.loads(Path(norm_path).read_text()).get("arm_scale")
+        if configured_scale is None:
             self.scale = np.maximum(np.abs(DROID_Q01), np.abs(DROID_Q99))[:6]
             self.action_normalization = "legacy_droid_symmetric_scale"
         else:
@@ -138,6 +166,12 @@ class Task0EefPolicy:
             if self.scale.shape != (6,) or not np.isfinite(self.scale).all() or np.any(self.scale <= 0):
                 raise RuntimeError(f"action_arm_scale must contain six positive finite values, got {configured_scale!r}")
             self.action_normalization = str(self.training.get("action_normalization", "checkpoint_action_arm_scale"))
+        self.action_mulaw_mu = float(self.training.get("action_mulaw_mu", 0.0))
+        if self.action_normalization == "franka_mulaw":
+            if not np.isfinite(self.action_mulaw_mu) or self.action_mulaw_mu <= 0:
+                raise RuntimeError("franka_mulaw checkpoint requires a finite positive action_mulaw_mu")
+        elif self.action_mulaw_mu != 0:
+            raise RuntimeError("action_mulaw_mu is only valid for franka_mulaw")
         self.dummy_action = "<|action_0|>" * BAR_ACTION_TOKENS
         self.checkpoint = checkpoint
 
@@ -201,12 +235,7 @@ class Task0EefPolicy:
         normalized = np.asarray(decoded, dtype=np.float32)[0, :15, :7]
         if normalized.shape != (15, 7) or not np.all(np.asarray(padding_mask)[0, :15]):
             raise RuntimeError(f"unexpected ActionCodec decode shape {normalized.shape}")
-        action = normalized.copy()
-        action[:, :6] *= self.scale          # inverse of ActionTokenizer.normalize, applied once
-        action[:, 6] = (action[:, 6] + 1.0) / 2.0
-        if not np.isfinite(action).all():
-            raise RuntimeError("decoded action contains NaN/Inf")
-        return action
+        return denormalize_actions(normalized, self.scale, self.action_normalization, self.action_mulaw_mu)
 
     def act(self, observation) -> torch.Tensor:
         return torch.from_numpy(self.predict(observation).astype(np.float32))
@@ -225,6 +254,9 @@ class Task0EefPolicy:
             "action_shape": [15, 7], "action_hz": 15,
             "action_normalization": self.action_normalization,
             "action_arm_scale": self.scale.tolist(),
+            "action_mulaw_mu": self.action_mulaw_mu,
+            "action_denormalization": ("inverse_mulaw_then_scale" if self.action_normalization == "franka_mulaw"
+                                       else "linear_scale"),
             "gripper_convention": "0_closed_1_open",
             "gripper_state_source": "measured",
             "rotation_execution": self.rotation_execution,

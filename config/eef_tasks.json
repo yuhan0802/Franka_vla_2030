@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "defaults": {
+    "control": "direct",
+    "adapter": {
+      "gripper_state_source": "measured",
+      "exterior_camera": "left",
+      "model_image_size": 256,
+      "rotation_frame": "world",
+      "rotation_execution": "relative_rotvec_left_multiply",
+      "camera_mode": "calibrated",
+      "max_tf_age_s": 0.3
+    },
+    "runtime": {
+      "execute_horizon": 15,
+      "max_chunks": 60,
+      "max_actions": 900,
+      "chunk_start": "last_target",
+      "max_translation": 0,
+      "max_rotation": 0.035,
+      "auto_home": true
+    }
+  },
+  "tasks": {
+    "task1": {
+      "instruction": "place the red test tube in the red basket",
+      "models": [
+        "act-v2",
+        "act",
+        "act-1k",
+        "act2",
+        "droid",
+        "universal-mulaw9",
+        "universal-maxabs-x2"
+      ],
+      "start_pose": {
+        "position": [
+          0.5577,
+          -0.0015,
+          0.3205
+        ],
+        "quaternion_xyzw": [
+          0.92537,
+          -0.37885,
+          -0.01236,
+          0.00364
+        ],
+        "position_tolerance_m": 0.005,
+        "rotation_tolerance_rad": 0.02
+      }
+    },
+    "task2": {
+      "instruction": "place the test tube rack in the black tray",
+      "models": [],
+      "start_pose": null
+    },
+    "task6": {
+      "instruction": "open the lid",
+      "models": [],
+      "start_pose": null
+    }
+  },
+  "models": {
+    "act-v2": {
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8095,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task0_droid_bar_v5_maxabs/Qwen3VL2B+Franka-Task0+lr0.0001+v5_maxabs_first15_all29_no_crop_10k_8gpu_b256/save_8000_chkpt",
+        "actioncodec": "/data2/lyh/vla/assets/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "task0_maxabs",
+        "params_path": "/data2/lyh/vla/runs/franka_task0_droid_bar_v5_maxabs/Qwen3VL2B+Franka-Task0+lr0.0001+v5_maxabs_first15_all29_no_crop_10k_8gpu_b256/save_8000_chkpt/training_config.json",
+        "params_key": "action_arm_scale"
+      }
+    },
+    "act": {
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8095,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task0_droid_bar_v5_x3/Qwen3VL2B+Franka-Task0+lr0.0001+v5_droid_x3_first15_all29_no_crop_10k_8gpu_b256/save_8000_chkpt",
+        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "droid_gain",
+        "params_path": "/data2/lyh/vla/runs/franka_task0_droid_bar_v5_x3/Qwen3VL2B+Franka-Task0+lr0.0001+v5_droid_x3_first15_all29_no_crop_10k_8gpu_b256/save_8000_chkpt/training_config.json",
+        "params_key": "action_arm_scale"
+      }
+    },
+    "act-1k": {
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8095,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task0_droid_bar_v4/Qwen3VL2B+Franka-Task0+lr0.0001+v4_measured_world_left_aug_10k_8gpu_b256/save_1000_chkpt",
+        "actioncodec": "/data2/lyh/vla/assets/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "legacy_droid_symmetric_scale",
+        "params_path": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA/train/franka_task0_qwen_actioncodec_droid_pretrained_bar.py",
+        "params_key": "max(abs(DROID_Q01), abs(DROID_Q99))[:6]"
+      }
+    },
+    "act2": {
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8096,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+from8k_side50_primaryrrc_bothcolornoise_5k_8gpu_b256/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "unverified",
+        "params_path": "/data2/lyh/vla/runs/franka_task0_droid_bar/Qwen3VL2B+Franka-Task0+lr1e-05+from8k_side50_primaryrrc_bothcolornoise_5k_8gpu_b256/save_4000_chkpt/training_config.json",
+        "params_key": "action_arm_scale",
+        "note": "Configured checkpoint not found on mac_20 during verification; method not inferred."
+      }
+    },
+    "droid": {
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8097,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/droid_state_first/Qwen3VL2B+DROID+lr1e-05+droid_eef_bar16_so3_continue_b256-20261019_161048_edb4cec7/save_20000_chkpt",
+        "actioncodec": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA/actioncodec_libero/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA/droid_qwen3vl_actioncodec/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_droid_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "legacy_droid_symmetric_scale",
+        "params_path": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA/franka_vr_3view_overfit/franka_vr_qwen_actioncodec.py",
+        "params_key": "max(abs(DROID_Q01), abs(DROID_Q99))[:6]"
+      }
+    },
+    "universal-mulaw9": {
+      "scope": "multi_task",
+      "training_tasks": [
+        "Task0",
+        "Task1",
+        "Task2",
+        "Task4",
+        "Task5",
+        "Task6",
+        "Task40",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_v5_joint_20261025/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8098,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_joint_v5_mulaw9/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_mulaw9_first15_all_gripper2x_no_crop_10k_b256/save_10000_chkpt",
+        "actioncodec": "/data2/lyh/vla/assets/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_mulaw",
+        "mu": 9.0,
+        "params_path": "/data2/lyh/vla/runs/franka_joint_v5_mulaw9/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_mulaw9_first15_all_gripper2x_no_crop_10k_b256/save_10000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "mu_key": "companding.mu",
+        "training_config_path": "/data2/lyh/vla/runs/franka_joint_v5_mulaw9/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_mulaw9_first15_all_gripper2x_no_crop_10k_b256/save_10000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/config/franka_joint_v5_maxabs_clean_20261025.json",
+        "decode_order": "clip_codec_output_then_inverse_mulaw_then_multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0",
+        "task2": "Task2",
+        "task6": "Task40"
+      }
+    },
+    "universal-maxabs-x2": {
+      "scope": "multi_task",
+      "training_tasks": [
+        "Task0",
+        "Task1",
+        "Task2",
+        "Task4",
+        "Task5",
+        "Task6",
+        "Task40",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_v5_joint_20261025/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8099,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_joint_v5_maxabs_droid_x2_20/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_maxabs_droid_x2_first15_all_episodes_no_crop_10k_b256/save_10000_chkpt",
+        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_maxabs",
+        "params_path": "/data2/lyh/vla/runs/franka_joint_v5_maxabs_droid_x2_20/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_maxabs_droid_x2_first15_all_episodes_no_crop_10k_b256/save_10000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "source_params_path": "/data2/lyh/vla/config/franka_joint_v5_maxabs_clean_x2_20261025.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0",
+        "task2": "Task2",
+        "task6": "Task40"
+      }
+    }
+  }
+}

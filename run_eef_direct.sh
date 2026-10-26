@@ -167,7 +167,17 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --max-joint-velocity "${EEF_DIRECT_MAX_JOINT_VELOCITY:-0.5}"
   --max-joint-acceleration "${EEF_DIRECT_MAX_JOINT_ACCELERATION:-1.8}")
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
+if [[ -n "${EEF_HOME_POSITION:-}" ]]; then
+  read -r -a home_position <<< "$EEF_HOME_POSITION"
+  adapter_flags+=(--home-position "${home_position[@]}")
+fi
+if [[ -n "${EEF_HOME_QUATERNION:-}" ]]; then
+  read -r -a home_quaternion <<< "$EEF_HOME_QUATERNION"
+  adapter_flags+=(--home-quaternion "${home_quaternion[@]}")
+fi
 if [[ "$mode" != axis-test ]]; then
+  [[ -n "${EEF_EXPECTED_ACTION_NORMALIZATION:-}" ]] && adapter_flags+=(--expected-action-normalization "$EEF_EXPECTED_ACTION_NORMALIZATION")
+  [[ "${EEF_EXPECTED_ACTION_MULAW_MU:-0}" != 0 ]] && adapter_flags+=(--expected-action-mulaw-mu "$EEF_EXPECTED_ACTION_MULAW_MU")
   [[ -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
   [[ -n "$actioncodec" ]] && adapter_flags+=(--expected-actioncodec "$actioncodec")
   [[ -n "$state_stats" ]] && adapter_flags+=(--expected-state-stats "$state_stats")
