@@ -43,15 +43,17 @@ def setup(context: LaunchContext, robot_ip, arm_id, use_fake_hardware, fake_sens
     controller_config = PathJoinSubstitution([FindPackageShare("franka_vr"), "config", "fr3_pi05_direct_velocity_controllers.yaml"])
     state_config = PathJoinSubstitution([FindPackageShare("franka_vr"), "config", "pi05_state_publisher.yaml"])
     safety_config = PathJoinSubstitution([FindPackageShare("franka_vr"), "config", "pi05_direct_velocity.yaml"])
-    # Loading another controller while the real arm controller owns the FCI
-    # loop has caused communication_constraints_violation on this host. Spawn
-    # every state broadcaster first, then activate the arm controller only
-    # after that spawner has exited successfully.
+    # Load the velocity plugin before activating the state broadcasters. Dynamic
+    # plugin loading has stalled after the broadcasters were active on this
+    # host. --load-only never configures or claims the arm interfaces. Activate
+    # all state broadcasters before configuring/activating the velocity plugin,
+    # so no controller is loaded while the velocity controller owns FCI.
     state_controllers = ["joint_state_broadcaster"]
     if fake_v.lower() != "true":
         state_controllers.append("franka_robot_state_broadcaster")
     state_spawner = Node(
-        package="controller_manager", executable="spawner", arguments=state_controllers,
+        package="controller_manager", executable="spawner",
+        arguments=state_controllers + ["--service-call-timeout", "20"],
         parameters=[{"arm_id": arm_id_v}], output="screen")
 
     nodes = [
@@ -65,7 +67,6 @@ def setup(context: LaunchContext, robot_ip, arm_id, use_fake_hardware, fake_sens
         Node(package="controller_manager", executable="ros2_control_node", prefix=["taskset -c 4"],
              parameters=[controller_config, state_config, robot_description, {"arm_id": arm_id_v, "load_gripper": gripper_v}],
              remappings=[("joint_states", "franka/joint_states")], output="screen", on_exit=Shutdown()),
-        state_spawner,
         Node(package="franka_vr", executable="pi05_collision_monitor", name="pi05_collision_monitor",
              parameters=[safety_config, moveit.robot_description, moveit.robot_description_semantic,
                          moveit.robot_description_kinematics], output="screen"),
@@ -84,9 +85,18 @@ def setup(context: LaunchContext, robot_ip, arm_id, use_fake_hardware, fake_sens
              parameters=[moveit.robot_description, moveit.robot_description_semantic], condition=IfCondition(use_rviz), output="log"),
     ]
     if value(armed).lower() == "true":
+        arm_preloader = Node(
+            package="controller_manager", executable="spawner",
+            arguments=["fr3_direct_velocity_controller", "--load-only", "--service-call-timeout", "20"],
+            output="screen")
         arm_spawner = Node(
             package="controller_manager", executable="spawner",
-            arguments=["fr3_direct_velocity_controller"], output="screen")
+            arguments=["fr3_direct_velocity_controller", "--service-call-timeout", "20"], output="screen")
+
+        def start_state_after_preload(event, _context):
+            if event.returncode != 0:
+                return [Shutdown(reason="velocity plugin preload failed; controllers will not be activated")]
+            return [state_spawner]
 
         def start_arm_after_state_spawners(event, _context):
             if event.returncode != 0:
@@ -95,6 +105,11 @@ def setup(context: LaunchContext, robot_ip, arm_id, use_fake_hardware, fake_sens
 
         nodes.append(RegisterEventHandler(
             OnProcessExit(target_action=state_spawner, on_exit=start_arm_after_state_spawners)))
+        nodes.append(RegisterEventHandler(
+            OnProcessExit(target_action=arm_preloader, on_exit=start_state_after_preload)))
+        nodes.append(arm_preloader)
+    else:
+        nodes.append(state_spawner)
     return nodes
 
 

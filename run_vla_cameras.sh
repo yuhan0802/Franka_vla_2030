@@ -4,6 +4,8 @@ set -euo pipefail
 # Three VLA image streams only: left/right C922 external cameras and the
 # RealSense D435i wrist camera. This never creates a robot controller or
 # records an episode.
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 camera_mode="${VLA_CAMERA_MODE:-calibrated}"
 case "$camera_mode" in
   raw|calibrated) ;;

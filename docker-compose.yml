@@ -8,6 +8,12 @@ services:
     network_mode: host
     ipc: host
     privileged: true
+    # Bound Docker's internal console log even if a disconnected camera loops.
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Keep the FCI real-time pair (4,5) exclusively for franka_robot.  The
     # generic service is also used by camera, VR and build containers; without
     # this exclusion those workloads may be scheduled on the control pair and
@@ -25,10 +31,13 @@ services:
       QT_X11_NO_MITSHM: "1"
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
       ROBOT_IP: ${ROBOT_IP:-172.16.0.2}
+      ROS_LOG_DIR: /runtime_logs/ros
+      COLCON_LOG_PATH: /runtime_logs/colcon
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /dev:/dev
       - ./workspace/src:/ws_franka_vr/src:rw
+      - ${FRANKA_LOG_ROOT:-/media/mac/Elements1/franka_vr_docker/logs}:/runtime_logs:rw
       #- ./datasets:/datasets:rw
       - /media/mac/Elements:/datasets:rw
       # Keep one ADB key across disposable containers so Quest authorization

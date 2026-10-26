@@ -2,6 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/scripts/runtime_log_root.sh"
 
 # 批量测试：模型服务只部署一次，反复测试不再重新部署，stop 也不会关掉模型。
 #
@@ -116,7 +117,7 @@ PY
 summarize() {
   local csv_path="${1:-}"
   if [[ -z "$csv_path" ]]; then
-    csv_path="$(ls -td "$script_dir"/logs/eef_task1_test_*/ 2>/dev/null | head -1 || true)"results.csv
+    csv_path="$(ls -td "$FRANKA_LOG_ROOT"/eef_task1_test_*/ 2>/dev/null | head -1 || true)"results.csv
   elif [[ -d "$csv_path" ]]; then csv_path="${csv_path%/}/results.csv"; fi
   [[ -f "$csv_path" ]] || { echo "没有找到 results.csv：$csv_path" >&2; return 1; }
   python3 - "$csv_path" <<'PY'
@@ -159,7 +160,7 @@ case "$mode" in
   run)
     trials="${2:-${EEF_TEST_TRIALS:-1}}"
     [[ "$trials" =~ ^[1-9][0-9]*$ ]] || { echo "Usage: $0 run [次数]" >&2; exit 2; }
-    batch_dir="$script_dir/logs/eef_task1_test_${model}_$(stamp)"; mkdir -p "$batch_dir"
+    batch_dir="$FRANKA_LOG_ROOT/eef_task1_test_${model}_$(stamp)"; mkdir -p "$batch_dir"
     results="$batch_dir/results.csv"
     interactive=false; [[ -t 0 && "${EEF_TEST_PAUSE:-1}" != 0 ]] && interactive=true
     echo "[batch] 模型=$model  次数=$trials  记录目录=$batch_dir"

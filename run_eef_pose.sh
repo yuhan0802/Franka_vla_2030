@@ -21,6 +21,7 @@ case "$mode" in dry-run|axis-test|home|execute|probe|status|stop|server|server-s
 # home is an axis-test whose single chunk goes to the training start pose.
 [[ "$mode" == home ]] && { mode=axis-test; export EEF_TEST_AXIS=home EEF_ROTATION_FRAME=tool; }
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 cd "$root_dir"
 robot_session=franka_vr_eef_robot
 camera_session=franka_vr_eef_cameras
@@ -113,7 +114,7 @@ case "$mode" in
     exit 0;;
   status)
     status_session "$robot_session"; status_session "$camera_session"
-    echo "Latest logs:"; ls -dt "$root_dir"/logs/eef_pose_* 2>/dev/null | head -3 || true
+    echo "Latest logs:"; ls -dt "$FRANKA_LOG_ROOT"/eef_pose_* 2>/dev/null | head -3 || true
     exit 0;;
   stop)
     failed=0; stop_session "$camera_session" || failed=1; stop_session "$robot_session" || failed=1
@@ -126,7 +127,7 @@ if [[ "$commands" == *franka_pi05_direct_velocity.launch.py* || "$commands" == *
   exit 1
 fi
 
-run_stamp="$(date +%Y%m%d_%H%M%S)_$$"; log_dir="${EEF_LOG_DIR:-$root_dir/logs/eef_pose_$run_stamp}"
+run_stamp="$(date +%Y%m%d_%H%M%S)_$$"; log_dir="${EEF_LOG_DIR:-$FRANKA_LOG_ROOT/eef_pose_$run_stamp}"
 mkdir -p "$log_dir"; log_dir="$(cd "$log_dir" && pwd)"
 
 if [[ "$commands" == *franka_twist.launch.py* ]]; then

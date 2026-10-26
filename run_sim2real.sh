@@ -2,6 +2,7 @@
 # Run the pi0.5 simulation-trained pink-tube-to-blue-basket checkpoint on FR3.
 set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 cd "$root_dir"
 mode="${1:-probe}"
 case "$mode" in
@@ -29,7 +30,7 @@ if [[ "$mode" == server || "$mode" == probe || "$mode" == stop || "$mode" == sta
   exec ./run_pi05.sh "$mode"
 fi
 
-run_dir="$root_dir/logs/pi05_sim2real_$(date +%Y%m%d_%H%M%S)_$$"
+run_dir="$FRANKA_LOG_ROOT/pi05_sim2real_$(date +%Y%m%d_%H%M%S)_$$"
 mkdir -p "$run_dir"
 export PI05_LOG_DIR="$run_dir/robot"
 exec > >(tee -a "$run_dir/run.log") 2>&1

@@ -51,13 +51,17 @@ class DirectVelocityTests(unittest.TestCase):
         core = DirectVelocitySafetyCore(max_velocity=.6, max_acceleration=2.0)
         core.reset(self.home)
         previous_v = np.zeros(7)
+        actual = self.home.copy()
         for _ in range(30):
-            result = core.step(np.ones(7) * .253, self.home, .01)
+            result = core.step(np.ones(7) * .253, actual, .01)
             self.assertLessEqual(np.max(np.abs(result.velocity)), .6 + 1e-12)
             self.assertLessEqual(np.max(np.abs(result.velocity - previous_v)), 2.0 * .01 + 1e-12)
             self.assertFalse(result.velocity_clipped)
             self.assertFalse(result.jerk_clipped)
             previous_v = result.velocity
+            # Track the preceding command here. Frozen feedback would exercise
+            # the separate tracking-error slowdown instead of this envelope.
+            actual = result.position.copy()
         np.testing.assert_allclose(result.velocity, np.ones(7) * .253, atol=1e-12)
 
     def test_tracking_and_joint_limits(self):

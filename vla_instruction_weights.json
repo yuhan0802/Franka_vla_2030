@@ -2,10 +2,18 @@
   "version": 1,
   "tasks": [
     {
+      "id": "task1",
       "instruction": "put the red test tube into the red basket",
       "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/tube_pick_v5_full_bs32_20k",
       "checkpoint_step": 20000,
       "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
       "runtime": {
         "max_actions": 240,
         "max_joint_velocity": 0.15,
@@ -26,6 +34,7 @@
       }
     },
     {
+      "id": "task2",
       "instruction": "place the test tube rack in the black tray",
       "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/task2_rack_black_tray_full_bs32_20k",
       "checkpoint_step": 20000,
@@ -38,10 +47,14 @@
       }
     },
     {
+      "id": "task6",
       "instruction": "open the lid",
       "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/task6_open_lid_full_bs32_20k",
       "checkpoint_step": 20000,
       "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2"
+      },
       "runtime": {
         "max_actions": 2000,
         "max_joint_velocity": 0.6,

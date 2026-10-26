@@ -5,7 +5,8 @@
 set -Eeuo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-LOG_DIR=${DETECT_LOG_DIR:-$ROOT_DIR/logs}
+source "$ROOT_DIR/scripts/runtime_log_root.sh"
+LOG_DIR=${DETECT_LOG_DIR:-$FRANKA_LOG_ROOT}
 mkdir -p "$LOG_DIR"
 LOG_FILE=${DETECT_LOG_FILE:-$LOG_DIR/detect_$(date +%Y%m%d_%H%M%S).log}
 exec > >(tee "$LOG_FILE") 2>&1

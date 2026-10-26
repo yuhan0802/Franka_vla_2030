@@ -5,8 +5,9 @@ set -euo pipefail
 mode="${1:-disarmed}"
 case "$mode" in disarmed|armed|fake) ;; *) echo "Usage: $0 {disarmed|armed|fake}" >&2; exit 2;; esac
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 cd "$root_dir"
-log_dir="${PI05_DIRECT_LOG_DIR:-$root_dir/logs/pi05_direct_$(date +%Y%m%d_%H%M%S)_$$}"
+log_dir="${PI05_DIRECT_LOG_DIR:-$FRANKA_LOG_ROOT/pi05_direct_$(date +%Y%m%d_%H%M%S)_$$}"
 mkdir -p "$log_dir"; log_dir="$(cd "$log_dir" && pwd)"
 exec > >(tee -a "$log_dir/robot.log") 2>&1
 echo "Direct robot logs: $log_dir"

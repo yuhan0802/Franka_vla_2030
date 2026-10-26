@@ -20,13 +20,14 @@ mode="${1:-dry-run}"
 case "$mode" in dry-run|axis-test|home|execute|status|stop|server|server-status|server-stop) ;; *)
   echo "Usage: $0 {dry-run|axis-test|home|execute|status|stop|server|server-status|server-stop}" >&2; exit 2;; esac
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$root_dir/scripts/runtime_log_root.sh"
 cd "$root_dir"
 case "$mode" in server|server-status|server-stop) exec "$root_dir/run_eef_pose.sh" "$mode";; esac
 [[ "$mode" == home ]] && { mode=axis-test; export EEF_TEST_AXIS=home EEF_ROTATION_FRAME=tool; }
 
 robot_session=franka_vr_eef_direct_robot
 camera_session=franka_vr_eef_direct_cameras
-stack_record="$root_dir/logs/.eef_direct_stack_log_dir"
+stack_record="$FRANKA_LOG_ROOT/.eef_direct_stack_log_dir"
 host="${EEF_SERVER_HOST:-10.24.116.20}"; port="${EEF_SERVER_PORT:-8095}"
 checkpoint="${EEF_CHECKPOINT:-}"
 actioncodec="${EEF_ACTIONCODEC:-}"
@@ -80,7 +81,7 @@ case "$mode" in
   status)
     status_session "$robot_session"; status_session "$camera_session"
     [[ -f "$stack_record" ]] && echo "Robot stack log: $(cat "$stack_record")/robot.log"
-    echo "Latest logs:"; ls -dt "$root_dir"/logs/eef_direct_* 2>/dev/null | head -3 || true
+    echo "Latest logs:"; ls -dt "$FRANKA_LOG_ROOT"/eef_direct_* 2>/dev/null | head -3 || true
     exit 0;;
   stop)
     failed=0; request_zero_velocity
@@ -106,7 +107,7 @@ if [[ "$stack_mode" == armed && "${EEF_DIRECT_ENABLE_REAL_ROBOT:-}" != I_UNDERST
   exit 3
 fi
 
-run_stamp="$(date +%Y%m%d_%H%M%S)_$$"; log_dir="${EEF_LOG_DIR:-$root_dir/logs/eef_direct_$run_stamp}"
+run_stamp="$(date +%Y%m%d_%H%M%S)_$$"; log_dir="${EEF_LOG_DIR:-$FRANKA_LOG_ROOT/eef_direct_$run_stamp}"
 mkdir -p "$log_dir"; log_dir="$(cd "$log_dir" && pwd)"
 
 if tmux has-session -t "$robot_session" 2>/dev/null; then

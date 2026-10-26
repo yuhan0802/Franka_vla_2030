@@ -2,6 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/scripts/runtime_log_root.sh"
 
 # Task0 EEF 模型（Qwen3-VL-2B + DROID BAR，末端位姿控制）。
 # 默认绕过 MoveIt Servo：run_eef_direct.sh（pi0.5 direct 关节速度栈 + 进程内与 VR 采集时
@@ -44,7 +45,7 @@ case "$control" in
   servo)  runner="$script_dir/run_eef_pose.sh";   enable_var=EEF_ENABLE_REAL_ROBOT;        enable_token=I_UNDERSTAND_EEF_POSE;;
   *) echo "EEF_CONTROL must be direct or servo" >&2; exit 2;;
 esac
-commissioned="$script_dir/logs/.eef_direct_commissioned"
+commissioned="$FRANKA_LOG_ROOT/.eef_direct_commissioned"
 log_prefix="${EEF_LOG_PREFIX:-eef_task1_act}"
 stamp() { date +%Y%m%d_%H%M%S; }
 
@@ -55,7 +56,7 @@ case "$mode" in
     axis="${2:-}"
     case "$axis" in +x|-x|+y|-y|+z|-z|+rx|-rx|+ry|-ry|+rz|-rz) ;; *)
       echo "Usage: $0 axis-test {+x|-x|+y|-y|+z|-z|+rx|-rx|+ry|-ry|+rz|-rz}" >&2; exit 2;; esac
-    log="$script_dir/logs/${log_prefix}_axis_${axis}_$(stamp)_$$"
+    log="$FRANKA_LOG_ROOT/${log_prefix}_axis_${axis}_$(stamp)_$$"
     env EEF_LOG_DIR="$log" "$enable_var=$enable_token" EEF_TEST_AXIS="$axis" \
       EEF_ROTATION_FRAME="${EEF_ROTATION_FRAME:-tool}" "$runner" axis-test
     grep -q '"event": "complete"' "$log/policy.jsonl" && ! grep -q '"event": "fault"' "$log/policy.jsonl" || {
@@ -65,7 +66,7 @@ case "$mode" in
     fi
     echo "axis-test $axis ($control) passed. Logs: $log"; exit 0 ;;
   home)
-    exec env EEF_LOG_DIR="$script_dir/logs/${log_prefix}_home_$(stamp)_$$" "$enable_var=$enable_token" "$runner" home ;;
+    exec env EEF_LOG_DIR="$FRANKA_LOG_ROOT/${log_prefix}_home_$(stamp)_$$" "$enable_var=$enable_token" "$runner" home ;;
   # 只观测：保存图像与各来源的夹爪/机械臂状态，不发机械臂命令（走 Servo 栈，见 run_eef_pose.sh 说明）。
   probe) exec "$script_dir/run_eef_pose.sh" probe ;;
   stop|STOP)
@@ -83,12 +84,12 @@ if [[ "$control" == direct && "$mode" == run && ! -s "$commissioned" && "${EEF_D
 fi
 
 "$runner" server
-run_dir="${EEF_RUN_DIR:-$script_dir/logs/${log_prefix}_$(stamp)_$$}"
+run_dir="${EEF_RUN_DIR:-$FRANKA_LOG_ROOT/${log_prefix}_$(stamp)_$$}"
 
 dry_env=()
 if [[ "$control" == direct ]]; then
   # A dry-run-only invocation leaves a DISARMED direct stack; a full run needs it armed.
-  stack_record="$script_dir/logs/.eef_direct_stack_log_dir"
+  stack_record="$FRANKA_LOG_ROOT/.eef_direct_stack_log_dir"
   if [[ "$mode" == run ]] && tmux has-session -t franka_vr_eef_direct_robot 2>/dev/null &&
       ! grep -q 'direct executor is ARMED' "$(cat "$stack_record" 2>/dev/null)/robot.log" 2>/dev/null; then
     echo "Restarting the disarmed direct stack armed."; "$runner" stop
