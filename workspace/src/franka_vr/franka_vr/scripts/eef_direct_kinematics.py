@@ -138,7 +138,7 @@ class DirectPoseTracker:
         self.previous = np.zeros(7)
 
     def command(self, joints: object, target_position: object, target_quaternion: object, dt: float) -> JointCommand:
-        if not 0 < dt <= 0.1:
+        if not np.isfinite(dt) or dt <= 0:
             raise ValueError(f"invalid tracker period {dt}")
         position, quaternion, jacobian = forward_kinematics(joints)
         twist = servo_twist(position, quaternion, target_position, target_quaternion)

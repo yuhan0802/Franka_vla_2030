@@ -33,8 +33,8 @@
 五个快捷脚本都转发到通用入口。例如 `./task1-act-v2.sh stop` 等同于
 `./run_eef_task.sh task1 act-v2 stop`。
 
-task2、task6 已留任务配置入口；通用权重的训练集合覆盖它们，但对应 EEF 训练起始位姿与
-执行关联尚未登记，因此 `models` 暂为空，补齐后可关联 `universal-mulaw9`。
+task2 已留任务配置入口，但尚未登记 EEF 训练起始位姿与执行关联。开盖任务使用 `task40`，
+其初始位姿与 task1 一致，并已关联 `universal-mulaw9` 和 `universal-maxabs-x2`。
 选取这些未配置组合时会在启动任何服务前报错。原 `vla_instruction_weights.json` 中的
 pi0.5 关节速度权重是另一种动作协议，不能直接当作这里的 15×7 EEF 权重使用。
 
@@ -56,8 +56,8 @@ pi0.5 关节速度权重是另一种动作协议，不能直接当作这里的 1
 
 `universal-mulaw9` 的 checkpoint 已在服务器核对：虽然目录含有 `joint8`，实际是 8 个任务
 联合训练的 EEF 模型，协议仍为 15×7；任务为 Task0、Task1、Task2、Task4、Task5、Task6、Task40、Task41。
-`task_key_to_training_task` 明确记录当前入口映射：task1→Task0、task2→Task2、task6→Task40，
-避免把入口 task6（开盖）与训练目录 Task6（按绿色按钮）混淆。
+`task_key_to_training_task` 明确记录当前入口映射：task1→Task0、task2→Task2、task40→Task40；
+训练目录 Task6 是按绿色按钮，不是开盖任务。
 
 该模型采用 `franka_mulaw`，μ=9。归一化文件优先记录 checkpoint 内随权重保存的
 `action_norm_stats.json`；其中 `arm_scale` 是六维缩放，`companding.mu` 是 μ。
@@ -83,12 +83,14 @@ pi0.5 关节速度权重是另一种动作协议，不能直接当作这里的 1
 模型身份信息以 JSON 为准，不采用残留的 `EEF_CHECKPOINT`、`EEF_SERVER_HOST`、
 `EEF_INSTRUCTION` 等环境值。可用 `EEF_TASK_CONFIG=/path/to/config.json` 选择另一份配置。
 保留 `EEF_CONTROL=servo` 切换控制后端，以及 `EEF_MAX_CHUNKS`、`EEF_MAX_ACTIONS`、
-`EEF_RUN_DIR` 等明确的运行预算/日志覆盖方式。`show` 显示生效配置。
+`EEF_RUN_DIR` 等明确的运行预算/日志覆盖方式。action/chunk 预算默认均为 `0`，表示正式执行
+不设数量上限；仍可用正整数临时设置上限。`show` 显示生效配置。
 
 ## 启动和停止顺序
 
 `run`：逐轴测试记录检查 → 模型服务 → 真实观测 dry-run → 检查训练起始位姿 →
-必要时 home → 完整执行动作块，默认每块 15 步、最多 60 块/900 步。
+必要时 home → 执行动作块，默认不设 action/chunk 数量上限。`dry-run` 始终只运行一个 chunk；
+正式任务仍可由释放后空闲判定正常结束，也可用 `stop`/Ctrl-C 人工停止。
 
 ```bash
 ./run_eef_task.sh task1 act-v2 stop       # 停服务后，夹爪 homing + 机械臂回公共初始姿态

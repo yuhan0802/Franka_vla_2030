@@ -62,12 +62,19 @@ def resolve(config, task_key, model_key, control=None):
         raise ValueError("rotation frame/execution mismatch")
     if runtime["chunk_start"] not in ("measured", "last_target") or not isinstance(runtime["auto_home"], bool):
         raise ValueError("invalid chunk_start/auto_home")
-    for key, upper in (("execute_horizon", 15), ("max_chunks", 200), ("max_actions", 2000)):
-        if not isinstance(runtime[key], int) or not 1 <= runtime[key] <= upper:
-            raise ValueError(f"runtime.{key} out of range")
+    if not isinstance(runtime["execute_horizon"], int) or not 1 <= runtime["execute_horizon"] <= 15:
+        raise ValueError("runtime.execute_horizon out of range")
+    for key, upper in (("max_chunks", 200), ("max_actions", 2000)):
+        if not isinstance(runtime[key], int) or runtime[key] < 0 or runtime[key] > upper:
+            raise ValueError(f"runtime.{key} out of range (0 means unlimited)")
     if (not math.isfinite(runtime["max_translation"]) or not 0 <= runtime["max_translation"] <= .02
             or not math.isfinite(runtime["max_rotation"]) or not 0 < runtime["max_rotation"] <= .15):
         raise ValueError("translation/rotation limits out of range")
+    gain = runtime.get("action_gain", [1.0] * 6)
+    finite_vector(gain, 6)
+    if any(not 0 < value <= 1.0 for value in gain):
+        raise ValueError("runtime.action_gain values must be in (0, 1]")
+    runtime["action_gain"] = gain
     pose = copy.deepcopy(task["start_pose"])
     finite_vector(pose["position"], 3)
     quaternion(pose["quaternion_xyzw"])
@@ -126,6 +133,7 @@ def environment(profile):
             "EEF_MAX_TF_AGE": str(a["max_tf_age_s"]),
             "EEF_ROTATION_FRAME": a["rotation_frame"], "EEF_ROTATION_EXECUTION": a["rotation_execution"],
             "EEF_MAX_TRANSLATION": str(r["max_translation"]), "EEF_MAX_ROTATION": str(r["max_rotation"]),
+            "EEF_ACTION_GAIN": " ".join(map(str, r["action_gain"])),
             "EEF_CHUNK_START": r["chunk_start"], "EEF_EXECUTE_HORIZON": str(r["execute_horizon"]),
             "EEF_MAX_CHUNKS": str(r["max_chunks"]), "EEF_MAX_ACTIONS": str(r["max_actions"]),
             "EEF_AUTO_HOME": str(r["auto_home"]).lower(),

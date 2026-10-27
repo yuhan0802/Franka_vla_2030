@@ -275,6 +275,16 @@ class AdapterStartupTests(unittest.TestCase):
         self.assertFalse(node.fault)
         self.assertEqual(node.executed, 1)
 
+    def test_zero_action_and_chunk_budgets_mean_unlimited(self):
+        World.reset(tf_after=2, real_after=5)
+        node = self.make_node("--max-chunks", "0", "--max-actions", "0", *self.EXECUTE)
+        node.arm()
+        node.executed = 5000; node.chunks_done = 500
+        chunk = np.zeros((15, 7), dtype=float); chunk[:, 6] = 1.0
+        node.start_chunk(chunk, policy_latency=0.0)
+        self.assertFalse(node.finished)
+        self.assertEqual(len(node.chunk), 15)
+
     def test_pose_jump_latches_before_next_target(self):
         World.reset(tf_after=2, real_after=5)
         node = self.make_node(*self.EXECUTE, steps="5", magnitude="0.04")
@@ -415,6 +425,21 @@ class AdapterStartupTests(unittest.TestCase):
         complete = [e for e in events if e["event"] == "complete"][0]
         self.assertIn("task complete", complete["reason"])
         self.assertEqual(node.chunks_done, 5)    # 4 scripted + 1 idle; the 2nd idle chunk is never executed
+
+    def test_action_gain_scales_arm_axis_but_not_gripper(self):
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        chunk = np.zeros((15, 7), dtype=float); chunk[:, 1] = .04; chunk[:, 6] = 1.0
+        FakePolicy.chunks = [chunk]
+        node = self.policy_node("--action-gain", "1", ".8", "1", "1", "1", "1")
+        node.arm()
+        for _ in range(1000):
+            if node.chunks_done >= 1 or node.fault: break
+            spin_once(node)
+        self.assertFalse(node.fault)
+        first_motion = target_xyz(World.targets[1])
+        self.assertAlmostEqual(first_motion[1] - REAL_POSE[0][1], .04 * .8 * .075, places=7)
+        event = next(e for e in self.events(self.log_path) if e["event"] == "action")
+        self.assertEqual(event["action"][6], event["effective_action"][6])
 
     def test_close_success_without_finger_motion_latches(self):
         World.reset(tf_after=2, real_after=5, follow_after=1)

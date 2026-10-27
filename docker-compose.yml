@@ -39,7 +39,7 @@ services:
       - ./workspace/src:/ws_franka_vr/src:rw
       - ${FRANKA_LOG_ROOT:-/media/mac/Elements1/franka_vr_docker/logs}:/runtime_logs:rw
       #- ./datasets:/datasets:rw
-      - /media/mac/Elements:/datasets:rw
+      - /media/mac/Elements1:/datasets:rw
       # Keep one ADB key across disposable containers so Quest authorization
       # remains valid after `docker compose run --rm` exits.
       - quest_adb_keys:/root/.android

@@ -407,7 +407,8 @@ class EefAdapter(Node):
             if now >= self.next_action_at: self.execute_step(now)
             return
         if self.settling and not self.settled(now): return
-        if self.executed >= self.args.max_actions or self.chunks_done >= self.args.max_chunks:
+        if ((self.args.max_actions > 0 and self.executed >= self.args.max_actions)
+                or (self.args.max_chunks > 0 and self.chunks_done >= self.args.max_chunks)):
             self.finish("budget reached"); return
         if self.args.test_axis == "home":
             if now >= self.need_fresh_after:
@@ -447,14 +448,17 @@ class EefAdapter(Node):
                 and rotation_angle_between(self.integrator.quaternion, start_quaternion) <= self.args.max_target_lead_rotation):
             start_position, start_quaternion = self.integrator.position, self.integrator.quaternion
         if self.released and not self.args.test_axis and self.args.finish_idle_chunks > 0:
-            moved = float(np.linalg.norm(np.asarray(chunk)[:, :3].sum(axis=0))) * LINEAR_SCALE_M
+            gain = np.ones(3) if self.args.test_axis else np.asarray(self.args.action_gain[:3])
+            moved = float(np.linalg.norm((np.asarray(chunk)[:, :3] * gain).sum(axis=0))) * LINEAR_SCALE_M
             self.idle_chunks = self.idle_chunks + 1 if moved < self.args.idle_translation else 0
             if self.idle_chunks >= self.args.finish_idle_chunks:
                 self.finish(f"task complete: gripper released and the policy idles "
                             f"({self.idle_chunks} chunks under {self.args.idle_translation * 1000:.0f} mm)"); return
         self.integrator.start(start_position, start_quaternion)
-        budget = self.args.max_actions - self.executed
-        self.chunk = [row.copy() for row in chunk[:min(self.args.execute_horizon, budget)]]
+        horizon = self.args.execute_horizon
+        if self.args.max_actions > 0:
+            horizon = min(horizon, self.args.max_actions - self.executed)
+        self.chunk = [row.copy() for row in chunk[:horizon]]
         self.chunk_index = 0; self.next_action_at = time.monotonic()
         self.log("chunk", chunk=np.asarray(chunk).tolist(), policy_latency=policy_latency,
                  start_position=start_position.tolist(), start_quaternion_xyzw=start_quaternion.tolist(),
@@ -464,10 +468,14 @@ class EefAdapter(Node):
 
     def execute_step(self, now: float) -> None:
         action = self.chunk.pop(0); self.chunk_index += 1
-        try: step = physical_step(action, self.args.max_translation, self.args.max_rotation)
+        effective_action = np.asarray(action, dtype=float).copy()
+        if not self.args.test_axis:
+            effective_action[:6] *= np.asarray(self.args.action_gain)
+        try: step = physical_step(effective_action, self.args.max_translation, self.args.max_rotation)
         except ValueError as error: self.latch(f"invalid action: {error}"); return
         target_position, target_quaternion = self.integrator.step(step.delta_position, step.delta_rotvec)
         record = dict(chunk_step=self.chunk_index, action=np.asarray(action).tolist(),
+                      effective_action=effective_action.tolist(), action_gain=list(self.args.action_gain),
                       delta_position=step.delta_position.tolist(), delta_rotvec=step.delta_rotvec.tolist(),
                       translation_clipped=step.translation_clipped, rotation_clipped=step.rotation_clipped,
                       target_position=target_position.tolist(), target_quaternion_xyzw=target_quaternion.tolist(),
@@ -707,7 +715,7 @@ class EefAdapter(Node):
         if width is None or not minimum_open_width <= width <= self.args.gripper_max_plausible_width:
             raise RuntimeError(f"gripper width {width} m after homing and opening to "
                                f"{self.args.gripper_open_width} m is outside the accepted "
-                               f"[{minimum_open_width}, {self.args.gripper_max_plausible_width}] m range")
+                               f"[{minimum_open_width}, {self.args.gripper_max_plausible_width}] m")
         self.get_logger().warning(f"gripper homed and opened: width={width:.4f} m")
         return width
 
@@ -755,6 +763,8 @@ def parse_args() -> argparse.Namespace:
     add("--max-translation", type=float, default=0.006,
         help="per-step translation norm limit in m; 0 disables translation clipping")
     add("--max-rotation", type=float, default=0.035, help="per-step rotation norm limit (rad)")
+    add("--action-gain", type=float, nargs=6, default=[1.0] * 6,
+        help="execution gain for xyz and rotation-vector axes; gripper is unchanged")
     add("--max-target-lead", type=float, default=0.06, help="abort if target leads measured pose by more (m)")
     add("--max-target-lead-rotation", type=float, default=0.35, help="same for rotation (rad)")
     add("--max-policy-latency", type=float, default=5.0); add("--max-observation-age", type=float, default=.2)
@@ -815,10 +825,13 @@ def parse_args() -> argparse.Namespace:
     if not np.isfinite(args.expected_action_mulaw_mu) or args.expected_action_mulaw_mu < 0:
         parser.error("expected-action-mulaw-mu must be finite and nonnegative")
     if not 1 <= args.execute_horizon <= ACTION_SHAPE[0]: parser.error(f"execute-horizon must be in [1, {ACTION_SHAPE[0]}]")
-    if not 1 <= args.max_actions <= 2000 or not 1 <= args.max_chunks <= 200: parser.error("action/chunk budget out of range")
+    if not 0 <= args.max_actions <= 2000 or not 0 <= args.max_chunks <= 200:
+        parser.error("action/chunk budget out of range (0 means unlimited)")
     if args.action_hz != 15.0: parser.error("the EEF protocol is 15 Hz; do not execute it at another rate")
     if not 0 <= args.max_translation <= 0.02 or not 0 < args.max_rotation <= 0.15:
         parser.error("max-translation must be in [0, 0.02] m (0 disables it) and max-rotation in (0, 0.15] rad")
+    if not np.isfinite(args.action_gain).all() or any(not 0 < value <= 1.0 for value in args.action_gain):
+        parser.error("action-gain values must be finite and in (0, 1]")
     if not 0 < args.gripper_speed <= .1 or not 1 <= args.gripper_force <= 40: parser.error("gripper speed/force out of range")
     if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .08: parser.error("gripper widths must satisfy 0 <= closed < open <= 0.08")
     if args.gripper_close_hold < 0: parser.error("gripper-close-hold must be >= 0")

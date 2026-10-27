@@ -32,7 +32,7 @@ class EefTaskRunnerTests(unittest.TestCase):
 import json, os, pathlib, sys
 kind='direct' if 'direct' in pathlib.Path(sys.argv[0]).name else 'servo'
 mode=sys.argv[1]
-keys=('EEF_CHECKPOINT','EEF_SERVER_HOST','EEF_SERVER_PORT','EEF_SERVER_GPU','EEF_SERVER_SCRIPT','EEF_HOME_POSITION','EEF_HOME_QUATERNION','VLA_INSTRUCTION','EEF_EXECUTE_HORIZON','EEF_MAX_CHUNKS','EEF_MAX_ACTIONS','EEF_MAX_TF_AGE','EEF_ENABLE_GRIPPER')
+keys=('EEF_CHECKPOINT','EEF_SERVER_HOST','EEF_SERVER_PORT','EEF_SERVER_GPU','EEF_SERVER_SCRIPT','EEF_HOME_POSITION','EEF_HOME_QUATERNION','VLA_INSTRUCTION','EEF_EXECUTE_HORIZON','EEF_MAX_CHUNKS','EEF_MAX_ACTIONS','EEF_MAX_TF_AGE','EEF_ACTION_GAIN','EEF_ENABLE_GRIPPER')
 with open(os.environ['EEF_TEST_TRACE'],'a') as f:f.write(json.dumps({'kind':kind,'mode':mode,'env':{k:os.environ.get(k) for k in keys}})+'\\n')
 if mode in ('stop','server-stop') and os.environ.get('EEF_TEST_STOP_FAIL')==kind:sys.exit(9)
 if mode in ('dry-run','axis-test'):
@@ -113,6 +113,7 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
         n = profile["action_normalization"]
         self.assertEqual((n["method"], n["mu"]), ("franka_mulaw", 9))
         self.assertEqual(n["params_path"], profile["server"]["checkpoint"] + "/action_norm_stats.json")
+        self.assertEqual(profile["runtime"]["execute_horizon"], 10)
         self.assertEqual(environment(profile)["EEF_EXPECTED_ACTION_NORMALIZATION"], "franka_mulaw")
         self.assertEqual(environment(profile)["EEF_EXPECTED_ACTION_MULAW_MU"], "9.0")
 
@@ -124,8 +125,21 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
         self.assertEqual(n["method"], "franka_maxabs")
         self.assertEqual(n["params_path"], profile["server"]["checkpoint"] + "/action_norm_stats.json")
         self.assertEqual(profile["server"]["port"], 8099)
+        self.assertEqual(profile["server"]["actioncodec"], "/data2/lyh/vla/assets/ActionCodec-Base-RVQft")
+        self.assertEqual(profile["runtime"]["execute_horizon"], 5)
         self.assertEqual(environment(profile)["EEF_EXPECTED_ACTION_NORMALIZATION"], "franka_maxabs")
         self.assertEqual(environment(profile)["EEF_EXPECTED_ACTION_MULAW_MU"], "0")
+
+    def test_task40_uses_shared_start_pose_and_training_task40(self):
+        task1 = resolve(self.config, "task1", "universal-mulaw9")
+        task40 = resolve(self.config, "task40", "universal-mulaw9")
+        self.assertEqual(task40["instruction"], "open the lid")
+        self.assertEqual(task40["start_pose"], task1["start_pose"])
+        self.assertEqual(task40["runtime"]["action_gain"], [1.0, .8, 1.0, 1.0, 1.0, 1.0])
+        self.assertEqual(environment(task40)["EEF_ACTION_GAIN"], "1.0 0.8 1.0 1.0 1.0 1.0")
+        self.assertEqual(task40["model_info"]["task_key_to_training_task"]["task40"], "Task40")
+        with self.assertRaises(ValueError):
+            resolve(self.config, "task6", "universal-mulaw9")
 
     def test_direct_run_requires_successful_axis_record(self):
         result = self.run_task()
@@ -149,7 +163,8 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
         calls = [r for r in self.calls() if r["kind"] == "direct"]
         self.assertEqual([r["mode"] for r in calls], ["server", "dry-run", "execute"])
         self.assertEqual(calls[-1]["env"]["EEF_EXECUTE_HORIZON"], "15")
-        self.assertEqual(calls[-1]["env"]["EEF_MAX_ACTIONS"], "900")
+        self.assertEqual(calls[-1]["env"]["EEF_MAX_ACTIONS"], "0")
+        self.assertEqual(calls[-1]["env"]["EEF_MAX_CHUNKS"], "0")
         self.assertEqual(calls[-1]["env"]["EEF_MAX_TF_AGE"], "0.3")
         self.assertEqual(calls[-1]["env"]["EEF_ENABLE_GRIPPER"], "true")
         self.assertFalse(any(r["kind"] == "init" for r in self.calls()))

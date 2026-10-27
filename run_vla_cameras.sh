@@ -11,8 +11,13 @@ case "$camera_mode" in
   raw|calibrated) ;;
   *) echo "VLA_CAMERA_MODE must be raw or calibrated" >&2; exit 2 ;;
 esac
-echo "Camera mode: $camera_mode"
-docker compose run --rm -e "VLA_CAMERA_MODE=$camera_mode" franka_vr bash -lc '
+exterior_camera="${VLA_EXTERIOR_CAMERA:-all}"
+case "$exterior_camera" in
+  all|left|right) ;;
+  *) echo "VLA_EXTERIOR_CAMERA must be all, left or right" >&2; exit 2 ;;
+esac
+echo "Camera mode: $camera_mode; exterior camera: $exterior_camera"
+docker compose run --rm -e "VLA_CAMERA_MODE=$camera_mode" -e "VLA_EXTERIOR_CAMERA=$exterior_camera" franka_vr bash -lc '
   set -eo pipefail
   source /opt/ros/humble/setup.bash
   cd /ws_franka_vr

@@ -127,7 +127,7 @@ if [[ "$mode" != axis-test ]]; then
   if [[ "$commands" == *vla_cameras.launch.py* ]]; then
     echo "Reusing running VLA cameras; make sure they publish $camera_mode images."
   else
-    start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh"
+    start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' VLA_EXTERIOR_CAMERA='$exterior_camera' ./run_vla_cameras.sh"
   fi
 fi
 
@@ -174,6 +174,10 @@ fi
 if [[ -n "${EEF_HOME_QUATERNION:-}" ]]; then
   read -r -a home_quaternion <<< "$EEF_HOME_QUATERNION"
   adapter_flags+=(--home-quaternion "${home_quaternion[@]}")
+fi
+if [[ -n "${EEF_ACTION_GAIN:-}" ]]; then
+  read -r -a action_gain <<< "$EEF_ACTION_GAIN"
+  adapter_flags+=(--action-gain "${action_gain[@]}")
 fi
 if [[ "$mode" != axis-test ]]; then
   [[ -n "${EEF_EXPECTED_ACTION_NORMALIZATION:-}" ]] && adapter_flags+=(--expected-action-normalization "$EEF_EXPECTED_ACTION_NORMALIZATION")

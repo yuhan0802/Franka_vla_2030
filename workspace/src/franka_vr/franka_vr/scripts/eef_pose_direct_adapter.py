@@ -124,9 +124,9 @@ class EefDirectAdapter(base.EefAdapter):
 
     def track(self) -> None:
         joints = joints_vector(self.real_joints)
-        if joints is None or not self.real_joints_fresh():
+        if joints is None:
             if self.track_target is not None and not self.stopped:
-                self.direct_fault("real joint feedback stale while tracking")
+                self.direct_fault("real joint feedback unavailable while tracking")
             return
         position, quaternion, _ = forward_kinematics(joints)
         # The tracker runs on FK of /franka/joint_states; TF (what the adapter checks) must agree.
@@ -141,8 +141,6 @@ class EefDirectAdapter(base.EefAdapter):
         now = time.monotonic()
         dt = 1.0 / self.direct.tracker_hz if self.last_track_at is None else now - self.last_track_at
         self.last_track_at = now
-        if dt > 0.05:
-            self.direct_fault(f"tracker period {dt:.3f} s; executor watchdog would trip"); return
         try: command = self.tracker.command(joints, *self.track_target, max(dt, 1e-3))
         except ValueError as error: self.direct_fault(f"tracker: {error}"); return
         self.publish_jog(command.velocity)

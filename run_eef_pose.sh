@@ -139,7 +139,7 @@ if [[ "$mode" != axis-test ]]; then
   if [[ "$commands" == *vla_cameras.launch.py* ]]; then
     echo "Reusing running VLA cameras; make sure they publish $camera_mode images."
   else
-    start_session "$camera_session" "set -o pipefail; VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh 2>&1 | tee -a '$log_dir/cameras_live.log'; status=\${PIPESTATUS[0]}; echo CAMERA_RUNNER_EXIT=\$status | tee -a '$log_dir/cameras_live.log'; exit \$status"
+    start_session "$camera_session" "set -o pipefail; VLA_CAMERA_MODE='$camera_mode' VLA_EXTERIOR_CAMERA='$exterior_camera' ./run_vla_cameras.sh 2>&1 | tee -a '$log_dir/cameras_live.log'; status=\${PIPESTATUS[0]}; echo CAMERA_RUNNER_EXIT=\$status | tee -a '$log_dir/cameras_live.log'; exit \$status"
   fi
 fi
 
@@ -188,6 +188,10 @@ fi
 if [[ -n "${EEF_HOME_QUATERNION:-}" ]]; then
   read -r -a home_quaternion <<< "$EEF_HOME_QUATERNION"
   adapter_flags+=(--home-quaternion "${home_quaternion[@]}")
+fi
+if [[ -n "${EEF_ACTION_GAIN:-}" ]]; then
+  read -r -a action_gain <<< "$EEF_ACTION_GAIN"
+  adapter_flags+=(--action-gain "${action_gain[@]}")
 fi
 [[ "$mode" != axis-test && -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
 [[ "$mode" != axis-test && -n "${EEF_EXPECTED_ACTION_NORMALIZATION:-}" ]] && adapter_flags+=(--expected-action-normalization "$EEF_EXPECTED_ACTION_NORMALIZATION")

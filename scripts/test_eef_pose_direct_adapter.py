@@ -188,15 +188,32 @@ class DirectAdapterTests(unittest.TestCase):
         for _ in range(20): sim_spin(node)
         self.assertTrue(all(np.allclose(c, 0.0) for c in Sim.commands[count:]))
 
-    def test_stale_joint_feedback_stops_tracking(self):
+    def test_stale_joint_feedback_is_left_to_executor_watchdog(self):
         harness.FakePolicy.chunks = [harness.idle_chunk(1.0, dx=0.04)] * 2
         node = self.node()
         node.arm()
         for _ in range(40): sim_spin(node)
+        position, quaternion, _ = self.fk()
+        node.set_tracking_target(position, quaternion)
+        Sim.velocity = np.zeros(7)
         Sim.feedback = False
-        for _ in range(30): sim_spin(node)
-        self.assertTrue(node.fault)
-        self.assertTrue(np.allclose(Sim.commands[-1], 0.0))
+        for _ in range(30):
+            Sim.now_ns += 10_000_000
+            harness.World.now_ns = Sim.now_ns
+            node.track()
+        self.assertFalse(node.fault)
+
+    def test_single_delayed_tracker_callback_does_not_latch(self):
+        node = self.node()
+        node.arm()
+        position, quaternion, _ = self.fk()
+        target = position.copy(); target[0] += 0.002
+        node.set_tracking_target(target, quaternion)
+        node.last_track_at = Sim.now_ns * 1e-9 - 0.2
+        sim_spin(node)
+        self.assertFalse(node.fault)
+        self.assertFalse(np.allclose(Sim.commands[-1], 0.0))
+        node.destroy_node()
 
     def test_executor_not_armed_refuses_to_start(self):
         Sim.executor_level, Sim.executor_message = 1, "disarmed_no_velocity_publisher"

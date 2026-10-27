@@ -13,8 +13,8 @@
     },
     "runtime": {
       "execute_horizon": 15,
-      "max_chunks": 60,
-      "max_actions": 900,
+      "max_chunks": 0,
+      "max_actions": 0,
       "chunk_start": "last_target",
       "max_translation": 0,
       "max_rotation": 0.035,
@@ -30,6 +30,7 @@
         "act-1k",
         "act2",
         "droid",
+        "task01-mulaw9-5k",
         "universal-mulaw9",
         "universal-maxabs-x2"
       ],
@@ -54,10 +55,30 @@
       "models": [],
       "start_pose": null
     },
-    "task6": {
+    "task40": {
       "instruction": "open the lid",
-      "models": [],
-      "start_pose": null
+      "runtime": {
+        "action_gain": [1.0, 0.8, 1.0, 1.0, 1.0, 1.0]
+      },
+      "models": [
+        "universal-mulaw9",
+        "universal-maxabs-x2"
+      ],
+      "start_pose": {
+        "position": [
+          0.5577,
+          -0.0015,
+          0.3205
+        ],
+        "quaternion_xyzw": [
+          0.92537,
+          -0.37885,
+          -0.01236,
+          0.00364
+        ],
+        "position_tolerance_m": 0.005,
+        "rotation_tolerance_rad": 0.02
+      }
     }
   },
   "models": {
@@ -152,8 +173,52 @@
         "params_key": "max(abs(DROID_Q01), abs(DROID_Q99))[:6]"
       }
     },
+    "task01-mulaw9-5k": {
+      "scope": "multi_task",
+      "runtime": {
+        "execute_horizon": 3,
+        "action_gain": [0.8, 1.0, 1.0, 1.0, 1.0, 1.0]
+      },
+      "training_tasks": [
+        "Task0",
+        "Task1"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_v5_joint_20261025/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8098,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task01_v5_mulaw9_finetune_20/Qwen3VL2B+Franka-Joint+lr1e-05+task01_v5_mulaw9_from_joint10k_lr1e-5_5k_b256/save_5000_chkpt",
+        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_mulaw",
+        "mu": 9.0,
+        "params_path": "/data2/lyh/vla/runs/franka_task01_v5_mulaw9_finetune_20/Qwen3VL2B+Franka-Joint+lr1e-05+task01_v5_mulaw9_from_joint10k_lr1e-5_5k_b256/save_5000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "mu_key": "companding.mu",
+        "training_config_path": "/data2/lyh/vla/runs/franka_task01_v5_mulaw9_finetune_20/Qwen3VL2B+Franka-Joint+lr1e-05+task01_v5_mulaw9_from_joint10k_lr1e-5_5k_b256/save_5000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/franka_task1_v5_mulaw9_finetune_20/init_checkpoint_compat/action_norm_stats.json",
+        "decode_order": "clip_codec_output_then_inverse_mulaw_then_multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0"
+      }
+    },
     "universal-mulaw9": {
       "scope": "multi_task",
+      "runtime": {
+        "execute_horizon": 10
+      },
       "training_tasks": [
         "Task0",
         "Task1",
@@ -194,11 +259,14 @@
       "task_key_to_training_task": {
         "task1": "Task0",
         "task2": "Task2",
-        "task6": "Task40"
+        "task40": "Task40"
       }
     },
     "universal-maxabs-x2": {
       "scope": "multi_task",
+      "runtime": {
+        "execute_horizon": 5
+      },
       "training_tasks": [
         "Task0",
         "Task1",
@@ -221,7 +289,7 @@
         "port": 8099,
         "gpu": 1,
         "checkpoint": "/data2/lyh/vla/runs/franka_joint_v5_maxabs_droid_x2_20/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_maxabs_droid_x2_first15_all_episodes_no_crop_10k_b256/save_10000_chkpt",
-        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "actioncodec": "/data2/lyh/vla/assets/ActionCodec-Base-RVQft",
         "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
         "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
         "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
@@ -236,7 +304,7 @@
       "task_key_to_training_task": {
         "task1": "Task0",
         "task2": "Task2",
-        "task6": "Task40"
+        "task40": "Task40"
       }
     }
   }
