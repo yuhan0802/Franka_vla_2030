@@ -31,6 +31,7 @@
         "act2",
         "droid",
         "task01-mulaw9-5k",
+        "task01-maxabs1x-9k",
         "universal-mulaw9",
         "universal-maxabs-x2"
       ],
@@ -176,7 +177,7 @@
     "task01-mulaw9-5k": {
       "scope": "multi_task",
       "runtime": {
-        "execute_horizon": 3,
+        "execute_horizon": 15,
         "action_gain": [0.8, 1.0, 1.0, 1.0, 1.0, 1.0]
       },
       "training_tasks": [
@@ -209,6 +210,44 @@
         "training_config_path": "/data2/lyh/vla/runs/franka_task01_v5_mulaw9_finetune_20/Qwen3VL2B+Franka-Joint+lr1e-05+task01_v5_mulaw9_from_joint10k_lr1e-5_5k_b256/save_5000_chkpt/training_config.json",
         "source_params_path": "/data2/lyh/vla/runs/franka_task1_v5_mulaw9_finetune_20/init_checkpoint_compat/action_norm_stats.json",
         "decode_order": "clip_codec_output_then_inverse_mulaw_then_multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0"
+      }
+    },
+    "task01-maxabs1x-9k": {
+      "scope": "multi_task",
+      "runtime": {
+        "execute_horizon": 6
+      },
+      "training_tasks": [
+        "Task0",
+        "Task1"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_task01_first5_clean_20261027/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8099,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task01_v5_maxabs_first5_resume_20261027/Qwen3VL2B+Franka-Joint+lr6e-05+task01_v5_maxabs1x_first5_resume3k_total10k_lr6e-5_b256/save_9000_chkpt",
+        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_maxabs",
+        "params_path": "/data2/lyh/vla/runs/franka_task01_v5_maxabs_first5_resume_20261027/Qwen3VL2B+Franka-Joint+lr6e-05+task01_v5_maxabs1x_first5_resume3k_total10k_lr6e-5_b256/save_9000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_task01_v5_maxabs_first5_resume_20261027/Qwen3VL2B+Franka-Joint+lr6e-05+task01_v5_maxabs1x_first5_resume3k_total10k_lr6e-5_b256/save_9000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/config/franka_task01_v5_maxabs_clean_80episodes_20261027.json",
+        "decode_order": "multiply_arm_scale"
       },
       "task_key_to_training_task": {
         "task1": "Task0"

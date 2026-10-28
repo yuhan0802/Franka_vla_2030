@@ -128,8 +128,8 @@ class DirectPoseTracker:
 
     def __init__(self, max_joint_velocity: float = 0.5, max_joint_acceleration: float = 1.8,
                  damping: float = 0.02, min_singular_value: float = 0.02) -> None:
-        if not 0 < max_joint_velocity <= 0.6 or not 0 < max_joint_acceleration <= 2.0:
-            raise ValueError("tracker envelope must stay inside the direct executor's 0.6 rad/s / 2.0 rad/s^2")
+        if not 0 < max_joint_velocity <= 0.6 or not 0 < max_joint_acceleration <= 3.75:
+            raise ValueError("tracker envelope must stay inside the configured 0.6 rad/s / 3.75 rad/s^2 safety envelope")
         self.max_joint_velocity, self.max_joint_acceleration = max_joint_velocity, max_joint_acceleration
         self.damping, self.min_singular_value = damping, min_singular_value
         self.previous = np.zeros(7)

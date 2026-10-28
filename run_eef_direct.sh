@@ -121,7 +121,7 @@ else
   mkdir -p "$(dirname "$stack_record")"; echo "$log_dir" > "$stack_record"; stack_log="$log_dir/robot.log"
   start_session "$robot_session" "PI05_DIRECT_LOG_DIR='$log_dir' PI05_DIRECT_LOAD_GRIPPER=true \
 PI05_DIRECT_MAX_VELOCITY='${EEF_DIRECT_EXECUTOR_MAX_VELOCITY:-0.6}' \
-PI05_DIRECT_MAX_ACCELERATION='${EEF_DIRECT_EXECUTOR_MAX_ACCELERATION:-2.0}' ./run_robot_pi05_direct.sh '$stack_mode'"
+PI05_DIRECT_MAX_ACCELERATION='${EEF_DIRECT_EXECUTOR_MAX_ACCELERATION:-3.75}' ./run_robot_pi05_direct.sh '$stack_mode'"
 fi
 if [[ "$mode" != axis-test ]]; then
   if [[ "$commands" == *vla_cameras.launch.py* ]]; then
@@ -165,7 +165,7 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --max-tf-age "${EEF_MAX_TF_AGE:-0.15}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl
   --max-joint-velocity "${EEF_DIRECT_MAX_JOINT_VELOCITY:-0.5}"
-  --max-joint-acceleration "${EEF_DIRECT_MAX_JOINT_ACCELERATION:-1.8}")
+  --max-joint-acceleration "${EEF_DIRECT_MAX_JOINT_ACCELERATION:-3.75}")
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
 if [[ -n "${EEF_HOME_POSITION:-}" ]]; then
   read -r -a home_position <<< "$EEF_HOME_POSITION"
