@@ -53,6 +53,13 @@ def resolve(config, task_key, model_key, control=None):
         raise ValueError("invalid camera configuration")
     if not isinstance(adapter["model_image_size"], int) or adapter["model_image_size"] <= 0:
         raise ValueError("model_image_size must be positive")
+    for key in ("gripper_width_offset", "gripper_open_width"):
+        if not isinstance(adapter.get(key), (int, float)) or not math.isfinite(adapter[key]):
+            raise ValueError(f"adapter.{key} must be finite")
+    if (not 0 <= adapter["gripper_width_offset"] <= .1
+            or not 0 < adapter["gripper_open_width"] <= .08
+            or adapter["gripper_width_offset"] + adapter["gripper_open_width"] > .15):
+        raise ValueError("invalid gripper firmware offset/open width")
     if (not isinstance(adapter["max_tf_age_s"], (int, float))
             or not math.isfinite(adapter["max_tf_age_s"])
             or not 0 < adapter["max_tf_age_s"] <= 1.0):
@@ -101,7 +108,7 @@ def resolve(config, task_key, model_key, control=None):
         raise ValueError("server script must be a Python basename")
     normalization = copy.deepcopy(model.get("action_normalization", {}))
     if normalization:
-        if normalization.get("method") not in ("task0_maxabs", "droid_gain", "legacy_droid_symmetric_scale", "franka_maxabs", "franka_mulaw", "unverified"):
+        if normalization.get("method") not in ("task0_maxabs", "droid_gain", "legacy_droid_symmetric_scale", "franka_maxabs", "franka_mulaw", "franka_quantile", "unverified"):
             raise ValueError("unsupported action normalization method")
         path = normalization.get("params_path", "")
         if not isinstance(path, str) or not path.startswith("/") or any(c in path for c in "\0\n\r"):
@@ -129,6 +136,8 @@ def environment(profile):
             "EEF_CHECKPOINT": s["checkpoint"], "EEF_ACTIONCODEC": s["actioncodec"],
             "EEF_STATE_STATS": s["state_stats"], "EEF_SERVER_SCRIPT": s["script"], "EEF_SERVER_ARGS": "",
             "EEF_GRIPPER_STATE_SOURCE": a["gripper_state_source"], "EEF_EXTERIOR_CAMERA": a["exterior_camera"],
+            "EEF_GRIPPER_WIDTH_OFFSET": str(a["gripper_width_offset"]),
+            "EEF_GRIPPER_OPEN_WIDTH": str(a["gripper_open_width"]),
             "EEF_MODEL_IMAGE_SIZE": str(a["model_image_size"]), "VLA_CAMERA_MODE": a["camera_mode"],
             "EEF_MAX_TF_AGE": str(a["max_tf_age_s"]),
             "EEF_ROTATION_FRAME": a["rotation_frame"], "EEF_ROTATION_EXECUTION": a["rotation_execution"],
@@ -137,7 +146,7 @@ def environment(profile):
             "EEF_CHUNK_START": r["chunk_start"], "EEF_EXECUTE_HORIZON": str(r["execute_horizon"]),
             "EEF_MAX_CHUNKS": str(r["max_chunks"]), "EEF_MAX_ACTIONS": str(r["max_actions"]),
             "EEF_AUTO_HOME": str(r["auto_home"]).lower(),
-            "EEF_EXPECTED_ACTION_NORMALIZATION": n.get("method", "") if n.get("method") in ("franka_maxabs", "franka_mulaw") else "",
+            "EEF_EXPECTED_ACTION_NORMALIZATION": n.get("method", "") if n.get("method") in ("franka_maxabs", "franka_mulaw", "franka_quantile") else "",
             "EEF_EXPECTED_ACTION_MULAW_MU": str(n["mu"]) if n.get("method") == "franka_mulaw" else "0",
             "EEF_HOME_POSITION": " ".join(map(str, p["position"])),
             "EEF_HOME_QUATERNION": " ".join(map(str, p["quaternion_xyzw"]))}

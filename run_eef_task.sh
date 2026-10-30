@@ -28,11 +28,21 @@ temporary="$(mktemp -d "${TMPDIR:-/tmp}/eef_task.XXXXXXXX")"
 trap 'rm -rf -- "$temporary"' EXIT
 control_flags=()
 [[ -n "${EEF_CONTROL:-}" ]] && control_flags=(--control "$EEF_CONTROL")
+# Keep an explicit per-run horizon override.  The resolved profile supplies the
+# default, but callers must be able to run 15-predict/N-execute experiments
+# without editing the shared task registry.
+requested_execute_horizon="${EEF_EXECUTE_HORIZON:-}"
 python3 "$root_dir/scripts/eef_task_config.py" resolve --config "$config" \
   --task "$task_key" --model "$model_key" "${control_flags[@]}" \
   --output "$temporary/profile.json" --env-file "$temporary/env"
 if [[ "$mode" == show ]]; then cat "$temporary/profile.json"; exit 0; fi
 while IFS= read -r -d '' key && IFS= read -r -d '' value; do export "$key=$value"; done < "$temporary/env"
+if [[ -n "$requested_execute_horizon" ]]; then
+  [[ "$requested_execute_horizon" =~ ^[0-9]+$ ]] &&
+    (( requested_execute_horizon >= 1 && requested_execute_horizon <= 15 )) || {
+      echo "EEF_EXECUTE_HORIZON must be an integer in [1, 15]." >&2; exit 2; }
+  export EEF_EXECUTE_HORIZON="$requested_execute_horizon"
+fi
 source "$root_dir/scripts/runtime_log_root.sh" "$mode"
 
 case "$EEF_CONTROL" in

@@ -9,7 +9,9 @@
       "rotation_frame": "world",
       "rotation_execution": "relative_rotvec_left_multiply",
       "camera_mode": "calibrated",
-      "max_tf_age_s": 0.3
+      "max_tf_age_s": 0.3,
+      "gripper_width_offset": 0.07,
+      "gripper_open_width": 0.07
     },
     "runtime": {
       "execute_horizon": 15,
@@ -32,6 +34,8 @@
         "droid",
         "task01-mulaw9-5k",
         "task01-maxabs1x-9k",
+        "joint8-newcodec-20k",
+        "task01-newcodec-10k",
         "universal-mulaw9",
         "universal-maxabs-x2"
       ],
@@ -248,6 +252,85 @@
         "training_config_path": "/data2/lyh/vla/runs/franka_task01_v5_maxabs_first5_resume_20261027/Qwen3VL2B+Franka-Joint+lr6e-05+task01_v5_maxabs1x_first5_resume3k_total10k_lr6e-5_b256/save_9000_chkpt/training_config.json",
         "source_params_path": "/data2/lyh/vla/config/franka_task01_v5_maxabs_clean_80episodes_20261027.json",
         "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0"
+      }
+    },
+    "joint8-newcodec-20k": {
+      "scope": "multi_task",
+      "training_tasks": [
+        "Task0",
+        "Task1",
+        "Task2",
+        "Task4",
+        "Task5",
+        "Task6",
+        "Task40",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_all_real_actioncodec_clean_20261028/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8100,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0",
+        "task2": "Task2",
+        "task40": "Task40"
+      }
+    },
+    "task01-newcodec-10k": {
+      "scope": "multi_task_finetune",
+      "training_tasks": [
+        "Task0",
+        "Task1"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_all_real_actioncodec_clean_20261028/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8101,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task01_newcodec_from_joint8_11k_10k_20261029/Qwen3VL2B+Franka-Joint+lr0.0001+task01_newcodec_ownstate_from_joint8step11k_10k_b256/save_10000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_task01_newcodec_from_joint8_11k_10k_20261029/Qwen3VL2B+Franka-Joint+lr0.0001+task01_newcodec_ownstate_from_joint8step11k_10k_b256/save_10000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_task01_newcodec_from_joint8_11k_10k_20261029/Qwen3VL2B+Franka-Joint+lr0.0001+task01_newcodec_ownstate_from_joint8step11k_10k_b256/save_10000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_11000_chkpt"
       },
       "task_key_to_training_task": {
         "task1": "Task0"

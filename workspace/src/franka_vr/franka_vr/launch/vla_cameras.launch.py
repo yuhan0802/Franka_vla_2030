@@ -43,8 +43,16 @@ def raw_camera_nodes():
     nodes = [Node(
         package="realsense2_camera", executable="realsense2_camera_node",
         name="camera_front",
-        parameters=[{"camera_name": "camera_front", "enable_color": True,
-                     "enable_depth": False, "rgb_camera.color_profile": "640x480x30"}],
+        parameters=[{
+            "camera_name": "camera_front",
+            "enable_color": True,
+            "enable_depth": False,
+            "enable_infra1": False,
+            "enable_infra2": False,
+            "enable_gyro": False,
+            "enable_accel": False,
+            "rgb_camera.color_profile": "640x480x30",
+        }],
         output="screen",
     )]
     for side, serial in (("right", "CD7DCA6F"), ("left", "43DDCA6F")):

@@ -27,6 +27,8 @@ cd "$root_dir"
 robot_ip_override="${ROBOT_IP:-}"
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 robot_ip="${robot_ip_override:-${ROBOT_IP:-172.16.0.2}}"
+gripper_width_offset="${FCI_GRIPPER_WIDTH_OFFSET:-0.07}"
+gripper_open_width="${FCI_GRIPPER_OPEN_WIDTH:-0.07}"
 source "$root_dir/scripts/runtime_log_root.sh"
 log_dir="$(mktemp -d "$FRANKA_LOG_ROOT/fci_init_$(date +%Y%m%d_%H%M%S)_XXXXXX")"
 container_name="franka-fci-gripper-init-$$"
@@ -60,6 +62,7 @@ set +e
 docker run --rm --init --network host --name "$container_name" \
   -v "$root_dir/scripts:/probe:ro" \
   -e "ROBOT_IP=$robot_ip" -e "FCI_REINIT_CHECK_ONLY=$check_only" \
+  -e "FCI_GRIPPER_WIDTH_OFFSET=$gripper_width_offset" -e "FCI_GRIPPER_OPEN_WIDTH=$gripper_open_width" \
   "${FCI_REINIT_IMAGE:-franka-vr:humble}" bash -lc '
     set -euo pipefail
     g++ -std=c++17 -pthread /probe/probe_franka_gripper_motion.cpp \
@@ -80,10 +83,12 @@ if (( run_status != 0 )); then
 fi
 if (( check_only )); then exec "$root_dir/scripts/fci_arm_reset.sh" check; fi
 
-python3 - "$log_dir/homing.jsonl" <<'PY'
+python3 - "$log_dir/homing.jsonl" "$gripper_width_offset" "$gripper_open_width" <<'PY'
 import json
 import math
 import sys
+
+offset, expected_open = map(float, sys.argv[2:4])
 
 records = []
 with open(sys.argv[1], encoding="utf-8") as stream:
@@ -91,16 +96,25 @@ with open(sys.argv[1], encoding="utf-8") as stream:
         if line.startswith("{"):
             records.append(json.loads(line))
 results = [r for r in records if r.get("event") == "move_result" and r.get("phase") == "HOMING"]
-states = [r for r in records if r.get("event") == "state" and r.get("phase") == "HOMING_SETTLED"]
-if not results or not results[-1]["success"] or results[-1]["timed_out"] or not states:
+open_results = [r for r in records if r.get("event") == "move_result" and r.get("phase") == "OPEN_AFTER_HOMING"]
+states = [r for r in records if r.get("event") == "state" and r.get("phase") == "OPEN_AFTER_HOMING_SETTLED"]
+if (not results or not results[-1]["success"] or results[-1]["timed_out"]
+        or not open_results or not open_results[-1]["success"] or open_results[-1]["timed_out"] or not states):
     raise SystemExit("FCI homing did not complete with settled feedback; inspect the log.")
 state = states[-1]
 print(f"FCI homing completed in {results[-1]['elapsed_s']:.2f}s.")
+print(f"Opened after homing in {open_results[-1]['elapsed_s']:.2f}s.")
 print(f"Current width: {state['width_m']:.9f} m; maximum width: {state['max_width_m']:.9f} m")
+effective_width = state['width_m'] - offset
+effective_max = state['max_width_m'] - offset
+print(f"Effective width after {offset:.6f} m firmware offset: {effective_width:.9f} m; "
+      f"effective maximum: {effective_max:.9f} m")
 if (not math.isfinite(state['width_m']) or not math.isfinite(state['max_width_m'])
-        or state['width_m'] < 0 or state['max_width_m'] <= 0
+        or not 0.05 <= effective_max <= 0.085
+        or effective_width < expected_open - 0.005
         or state['width_m'] > state['max_width_m'] + 0.001):
-    print("WARNING: homing reported success, but feedback remains inconsistent; calibration is not confirmed.")
+    raise SystemExit("FCI homing/open feedback is inconsistent; calibration is not confirmed.")
+print("FCI gripper calibration and open feedback confirmed.")
 PY
 if (( reset_arm )); then
   exec "$root_dir/scripts/fci_arm_reset.sh" reset

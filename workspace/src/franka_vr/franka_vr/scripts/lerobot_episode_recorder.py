@@ -442,6 +442,20 @@ class EpisodeRecorder(Node):
             and self.actual_eef_pose() is not None
         )
 
+    def missing_inputs(self):
+        """Name unavailable prerequisites so startup failures are actionable."""
+        missing = []
+        missing.extend(f"camera:{name}" for name in CAMERAS if name not in self.images)
+        arm_joints = [name for name in JOINTS if name not in self.joints]
+        if arm_joints:
+            missing.append("arm_joint_state")
+        gripper_joints = [name for name in GRIPPER_JOINTS if name not in self.joints]
+        if gripper_joints:
+            missing.append("gripper_joint_state")
+        if self.actual_eef_pose() is None:
+            missing.append("tf:world->fr3_link8")
+        return missing
+
     def actual_eef_pose(self):
         """Look up the composed world->EEF feedback transform, not a target."""
         try:
@@ -489,7 +503,7 @@ class EpisodeRecorder(Node):
             return
         if not self.ready():
             self.get_logger().info(
-                "Waiting for three RGB streams, FR3 arm state, and measured gripper state",
+                "Waiting for required inputs; missing: " + ", ".join(self.missing_inputs()),
                 throttle_duration_sec=2.0,
             )
             return

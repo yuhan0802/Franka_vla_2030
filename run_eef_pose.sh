@@ -177,8 +177,11 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --bounds-config "${EEF_BOUNDS_CONFIG:-/ws_franka_vr/src/franka_vr/franka_vr/config/eef_workspace_bounds.yaml}"
   --chunk-start "${EEF_CHUNK_START:-measured}"
   --gripper-state-source "${EEF_GRIPPER_STATE_SOURCE:-measured}"
+  --gripper-width-offset "${EEF_GRIPPER_WIDTH_OFFSET:-0}"
+  --gripper-open-width "${EEF_GRIPPER_OPEN_WIDTH:-0.08}"
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
   --max-tf-age "${EEF_MAX_TF_AGE:-0.15}"
+  --max-policy-latency "${EEF_MAX_POLICY_LATENCY:-5.0}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl)
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
 if [[ -n "${EEF_HOME_POSITION:-}" ]]; then

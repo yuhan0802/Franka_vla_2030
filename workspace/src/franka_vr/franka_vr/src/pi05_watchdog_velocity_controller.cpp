@@ -99,9 +99,13 @@ public:
   {
     const double dt = period.seconds();
     if (!(dt > 0.0 && dt <= 0.01)) {
-      for (auto & joint : command_interfaces_) joint.set_value(0.0);
-      velocity_.fill(0.0);
-      acceleration_.fill(0.0);
+      // A delayed ros2_control update must not create a one-sample velocity
+      // discontinuity.  Holding the last generated sample is the only output
+      // that is continuous without knowing how many 1 kHz periods were
+      // skipped.  On the next valid update, command freshness is evaluated and
+      // a stale/invalid target is driven to zero through the normal
+      // acceleration and jerk limits below.
+      for (size_t i = 0; i < 7; ++i) command_interfaces_[i].set_value(velocity_[i]);
       return controller_interface::return_type::OK;
     }
     const Command * command = commands_.readFromRT();

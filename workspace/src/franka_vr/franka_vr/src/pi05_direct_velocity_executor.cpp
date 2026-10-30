@@ -196,7 +196,13 @@ private:
     const auto now = steady_clock_.now();
     double dt = (now - last_tick_).seconds();
     last_tick_ = now;
-    if (dt <= 0 || dt > 0.25) { latch("invalid control period"); dt = 1.0 / rate_; }
+    if (dt <= 0 || dt > 0.25) {
+      // Do not clear guarded_ here: doing so publishes a velocity step.  Latch
+      // the scheduling fault and publish a zero *target*; the real-time 1 kHz
+      // controller turns that target into a continuously limited stop.
+      latch("invalid control period");
+      dt = 1.0 / rate_;
+    }
     if (dt > 2.5 / rate_) {
       if (++deadline_misses_ >= max_deadline_misses_) latch("consecutive control deadline misses");
     } else deadline_misses_ = 0;

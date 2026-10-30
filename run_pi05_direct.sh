@@ -18,9 +18,9 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$root_dir/scripts/runtime_log_root.sh"
 robot_session=franka_vr_pi05_direct_robot
 camera_session=franka_vr_pi05_direct_cameras
-server_session=pi05-droid-66-8094
 instruction="${VLA_INSTRUCTION:-place the test tube rack in the black tray}"
 host="${VLA_REMOTE_HOST:-10.24.116.66}"; port="${VLA_SERVER_PORT:-8094}"
+server_session="${PI05_DROID_TMUX_SESSION:-pi05-droid-66-${port}}"
 task_config="${VLA_TASK_CONFIG:-$root_dir/vla_instruction_weights.json}"
 mapfile -t selected_task < <(
   python3 "$root_dir/scripts/select_vla_task.py" --config "$task_config" --instruction "$instruction"
@@ -180,7 +180,11 @@ fi
 # before acquiring live observations so runtime latency is measured warm.
 if [[ "$mode" != commission && "$mode" != fake-commission ]]; then
   "$root_dir/run_vla_pi05_droid_66.sh" probe
-  start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh"
+  # The policy consumes only the left exterior stream and the wrist stream.
+  # Starting the unused right C922 as well can exhaust the shared USB 2.x bus
+  # and starve the RealSense RGB stream.
+  exterior_camera="${VLA_EXTERIOR_CAMERA:-left}"
+  start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' VLA_EXTERIOR_CAMERA='$exterior_camera' ./run_vla_cameras.sh"
 fi
 if [[ "$mode" == dry-run ]]; then
   start_session "$robot_session" "PI05_DIRECT_LOG_DIR='$log_dir' ./run_robot_pi05_direct.sh disarmed"

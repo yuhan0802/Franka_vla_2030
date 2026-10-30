@@ -43,7 +43,7 @@ from eef_pose_safety import (  # noqa: E402
     ACTION_REPRESENTATION, ACTION_SHAPE, LINEAR_SCALE_M, ROTATION_EXECUTION, ROTVEC_FLIP_WARNING_RAD, STATE_PROTOCOL,
     TASK0_START_POSITION, TASK0_START_QUATERNION, goto_chunk,
     ChunkTargetIntegrator, GripperHysteresis, PoseJumpMonitor, PoseStabilityWindow, axis_test_chunk, build_state,
-    gripper_open_from_width, inside_workspace, joints_consistent, physical_step, rotation_angle_between,
+    advance_action_deadline, gripper_open_from_width, inside_workspace, joints_consistent, physical_step, rotation_angle_between,
     validate_action_chunk,
 )
 
@@ -134,7 +134,9 @@ class EefAdapter(Node):
         self.args = args
         self.bridge = CvBridge()
         self.images: Dict[str, np.ndarray] = {}; self.image_times: Dict[str, float] = {}
+        self.last_pose_stamp_ros_ns = 0
         self.fingers: Dict[str, float] = {}; self.gripper_time = 0.0
+        self.gripper_width_offset = args.gripper_width_offset
         # Diagnostics: finger values per topic (both topics feed self.fingers).
         self.finger_sources: Dict[str, Dict[str, Any]] = {}
         self.observation_count = 0
@@ -279,7 +281,11 @@ class EefAdapter(Node):
     def gripper_width(self) -> Optional[float]:
         if any(name not in self.fingers for name in FINGERS): return None
         # Same total-opening definition as lerobot_episode_recorder.gripper_width().
-        return sum(abs(self.fingers[name]) for name in FINGERS)
+        return sum(abs(self.fingers[name]) for name in FINGERS) - self.gripper_width_offset
+
+    def gripper_hardware_width(self, effective_width: float) -> float:
+        """Map the training/physical width into the gripper firmware coordinate."""
+        return effective_width + self.gripper_width_offset
 
     def pose(self) -> Optional[tuple]:
         try:
@@ -288,6 +294,7 @@ class EefAdapter(Node):
         except Exception as error:
             self.get_logger().info(f"waiting for world -> fr3_link8: {error}", throttle_duration_sec=2.0); return None
         stamp = Time.from_msg(transform.header.stamp)
+        self.last_pose_stamp_ros_ns = stamp.nanoseconds
         age = (self.get_clock().now() - stamp).nanoseconds * 1e-9
         if age > self.args.max_tf_age:
             self.get_logger().warning(f"world -> fr3_link8 is {age:.3f}s old", throttle_duration_sec=2.0); return None
@@ -396,7 +403,11 @@ class EefAdapter(Node):
                            "or the finger feedback is wrong"); return
         if self.future is not None:
             if not self.future.done():
-                if now - self.inference_started > self.args.max_policy_latency: self.latch("policy latency timeout")
+                # A non-positive limit disables only the policy-latency watchdog.
+                # The robot holds its current target while inference is pending.
+                if (self.args.max_policy_latency > 0
+                        and now - self.inference_started > self.args.max_policy_latency):
+                    self.latch("policy latency timeout")
                 return
             future, self.future = self.future, None
             try: chunk = future.result()
@@ -515,9 +526,9 @@ class EefAdapter(Node):
             # Dry-run: track the virtual gripper so later decisions are meaningful.
             if desired_open is not None: self.commanded_gripper_open = desired_open
         self.log("action", robot_command_sent=bool(self.args.execute), **record)
-        self.next_action_at += 1.0 / self.args.action_hz
-        # Never burst several targets to catch up after scheduling jitter.
-        self.next_action_at = max(self.next_action_at, now)
+        # Preserve continuous 15 Hz execution inside a chunk; settling begins
+        # only after the final action and missed periods are never burst.
+        self.next_action_at = advance_action_deadline(self.next_action_at, now, self.args.action_hz)
         if not self.chunk:
             self.chunks_done += 1
             # The next observation must follow the final action's full interval.
@@ -568,10 +579,12 @@ class EefAdapter(Node):
         if self.pending_gripper_open is not None: return
         self.pending_gripper_open = open_; self.commanded_gripper_open = open_
         if open_:
-            goal = Move.Goal(); goal.width = self.args.gripper_open_width; goal.speed = self.args.gripper_speed
+            goal = Move.Goal(); goal.width = self.gripper_hardware_width(self.args.gripper_open_width)
+            goal.speed = self.args.gripper_speed
             future = self.move_client.send_goal_async(goal)
         else:
-            goal = Grasp.Goal(); goal.width = self.args.gripper_closed_width; goal.speed = self.args.gripper_speed
+            goal = Grasp.Goal(); goal.width = self.gripper_hardware_width(self.args.gripper_closed_width)
+            goal.speed = self.args.gripper_speed
             goal.force = self.args.gripper_force
             goal.epsilon.inner = self.args.gripper_epsilon_inner; goal.epsilon.outer = self.args.gripper_epsilon_outer
             future = self.grasp_client.send_goal_async(goal)
@@ -633,6 +646,18 @@ class EefAdapter(Node):
             while time.monotonic() < deadline and self.gripper_width() is None:
                 rclpy.spin_once(self, timeout_sec=.1)
             if self.gripper_width() is None: raise RuntimeError("gripper finger feedback unavailable")
+            reported_width = sum(abs(self.fingers[name]) for name in FINGERS)
+            # This robot's gripper firmware can expose either the standard
+            # 0..~0.071 m coordinate after homing or a raw coordinate shifted
+            # by ~0.07 m (open near 0.14 m).  Select the configured offset only
+            # for the raw domain, before interpreting state or sending goals.
+            if self.args.gripper_width_offset > 0 and reported_width <= self.args.gripper_max_plausible_width:
+                self.gripper_width_offset = 0.0
+            self.log("gripper_coordinate", reported_width=reported_width,
+                     configured_offset=self.args.gripper_width_offset,
+                     selected_offset=self.gripper_width_offset)
+            self.get_logger().info(
+                f"gripper coordinate: reported={reported_width:.4f}m, offset={self.gripper_width_offset:.4f}m")
             width = self.gripper_width()
             negative_finger = any(self.fingers[name] < -1e-4 for name in FINGERS)
             if width > self.args.gripper_max_plausible_width or negative_finger:
@@ -701,7 +726,8 @@ class EefAdapter(Node):
         self.run_gripper_action(self.homing_client, Homing.Goal(), "homing", until)
         # On this FR3 homing ends with the fingers closed (0.0003 m on 2026-10-23); open explicitly.
         self.log("gripper_homed", measured_width=self.gripper_width())
-        goal = Move.Goal(); goal.width = self.args.gripper_open_width; goal.speed = self.args.gripper_speed
+        goal = Move.Goal(); goal.width = self.gripper_hardware_width(self.args.gripper_open_width)
+        goal.speed = self.args.gripper_speed
         self.run_gripper_action(self.move_client, goal, "open after homing", until)
         # Judge only feedback that arrived after the move finished; earlier samples are pre-homing.
         opened_at = time.monotonic(); settle_until = opened_at + 2.0; width = None
@@ -742,7 +768,7 @@ class EefAdapter(Node):
         return super().destroy_node()
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(settle_timeout_default: float = 1.5) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     add = parser.add_argument
     add("--server-host", default="10.24.116.66"); add("--server-port", type=int, default=8095)
@@ -777,7 +803,8 @@ def parse_args() -> argparse.Namespace:
     add("--settle-position", type=float, default=0.003, help="execute: observe only once the arm is this close "
         "to the previous chunk's final target (m)")
     add("--settle-rotation", type=float, default=0.02, help="same for rotation (rad)")
-    add("--settle-timeout", type=float, default=1.5, help="observe anyway after this wait (s); 0 disables settling")
+    add("--settle-timeout", type=float, default=settle_timeout_default,
+        help="maximum wait for settling (s); the EEF direct adapter treats expiry as a latched fault")
     add("--gripper-state-source", choices=("measured", "binary", "command"), default="measured",
         help="state[6]: measured width mapped linearly, measured width thresholded at the "
              "closed/open midpoint (Task0 training), or the last commanded open/close")
@@ -793,6 +820,8 @@ def parse_args() -> argparse.Namespace:
     add("--enable-gripper", action="store_true")
     add("--gripper-open-threshold", type=float, default=.6); add("--gripper-close-threshold", type=float, default=.4)
     add("--gripper-open-width", type=float, default=.08); add("--gripper-closed-width", type=float, default=.01)
+    add("--gripper-width-offset", type=float, default=0.0,
+        help="firmware-coordinate offset: effective width = reported total width - offset")
     # Close at the VR collection speed (start_franka_vr.py Grasp 0.10 m/s); 0.05 took 1.5 s on the robot.
     add("--gripper-speed", type=float, default=.10); add("--gripper-force", type=float, default=20.)
     add("--gripper-epsilon-inner", type=float, default=.1); add("--gripper-epsilon-outer", type=float, default=.2)
@@ -834,6 +863,9 @@ def parse_args() -> argparse.Namespace:
         parser.error("action-gain values must be finite and in (0, 1]")
     if not 0 < args.gripper_speed <= .1 or not 1 <= args.gripper_force <= 40: parser.error("gripper speed/force out of range")
     if not 0 <= args.gripper_closed_width < args.gripper_open_width <= .08: parser.error("gripper widths must satisfy 0 <= closed < open <= 0.08")
+    if (not np.isfinite(args.gripper_width_offset) or not 0 <= args.gripper_width_offset <= .1
+            or args.gripper_width_offset + args.gripper_open_width > .15):
+        parser.error("gripper width offset/command exceeds the supported hardware coordinate")
     if args.gripper_close_hold < 0: parser.error("gripper-close-hold must be >= 0")
     if not 0 <= args.gripper_open_tolerance < args.gripper_open_width - args.gripper_closed_width:
         parser.error("gripper-open-tolerance must keep the accepted open width above the closed width")
