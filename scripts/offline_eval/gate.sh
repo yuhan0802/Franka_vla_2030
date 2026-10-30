@@ -13,7 +13,9 @@ deploy="$here/deploy_franka_task0_qwen_actioncodec_eef.py"
 [[ -f "$deploy" ]] || deploy="$here/../../deploy_franka_task0_qwen_actioncodec_eef.py"
 deploy_dir="$(cd "$(dirname "$deploy")" && pwd)"
 P=/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA
-PY=/home/xmu/anaconda3/envs/qwenvla/bin/python
+# Use the env the checkpoint was trained with: act-v2 era checkpoints need transformers 5.3
+# (GATE_PYTHON=$P/.conda/qwenvla/bin/python); the anaconda env has 4.57.
+PY="${GATE_PYTHON:-/home/xmu/anaconda3/envs/qwenvla/bin/python}"
 mkdir -p "$out"
 session="offline_gate_$port"
 tmux kill-session -t "$session" 2>/dev/null || true
