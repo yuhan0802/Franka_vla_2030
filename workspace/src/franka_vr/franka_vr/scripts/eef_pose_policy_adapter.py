@@ -49,6 +49,7 @@ from eef_pose_safety import (  # noqa: E402
 
 CONFIRM_TOKEN = "EEF_POSE_TARGET"
 FINGERS = ("fr3_finger_joint1", "fr3_finger_joint2")
+GRIPPER_PHYSICAL_OPEN_WIDTH = 0.07  # measured open width after homing with the custom fingers
 ARM_JOINTS = tuple(f"fr3_joint{index}" for index in range(1, 8))
 
 
@@ -679,8 +680,15 @@ class EefAdapter(Node):
             self.get_logger().info(f"gripper feedback width={width:.4f}m -> open={self.commanded_gripper_open}")
             if (self.args.execute and self.args.enable_gripper and not self.args.test_axis
                     and self.args.require_open_start and not self.commanded_gripper_open):
-                raise RuntimeError(f"gripper is closed (width {width:.4f} m); training episodes start open, "
-                                   "open the gripper before execute")
+                # A previous run ends with the fingers closed on the released object; open them here
+                # instead of refusing, then require the settled width like after homing.
+                if not self.args.open_gripper_at_start:
+                    raise RuntimeError(f"gripper is closed (width {width:.4f} m); training episodes start open, "
+                                       "open the gripper before execute")
+                self.get_logger().warning(f"gripper is closed (width {width:.4f} m): opening it before execute")
+                if not self.move_client.wait_for_server(timeout_sec=10): raise RuntimeError("gripper move server unavailable")
+                width = self.open_gripper(min(deadline, time.monotonic() + 20.0), "open at start")
+                self.commanded_gripper_open = True
         if self.args.execute:
             if not self.target_client.wait_for_service(timeout_sec=max(1.0, deadline - time.monotonic())):
                 raise RuntimeError("/set_target_pose unavailable; run_robot.sh (Servo stack) must be running")
@@ -726,23 +734,32 @@ class EefAdapter(Node):
         self.run_gripper_action(self.homing_client, Homing.Goal(), "homing", until)
         # On this FR3 homing ends with the fingers closed (0.0003 m on 2026-10-23); open explicitly.
         self.log("gripper_homed", measured_width=self.gripper_width())
+        width = self.open_gripper(until, "open after homing")
+        self.get_logger().warning(f"gripper homed and opened: width={width:.4f} m")
+        return width
+
+    def open_gripper(self, until: float, name: str) -> float:
+        """Open the gripper to --gripper-open-width and return the settled width (raises otherwise)."""
         goal = Move.Goal(); goal.width = self.gripper_hardware_width(self.args.gripper_open_width)
         goal.speed = self.args.gripper_speed
-        self.run_gripper_action(self.move_client, goal, "open after homing", until)
+        self.run_gripper_action(self.move_client, goal, name, until)
         # Judge only feedback that arrived after the move finished; earlier samples are pre-homing.
         opened_at = time.monotonic(); settle_until = opened_at + 2.0; width = None
-        minimum_open_width = self.args.gripper_open_width - self.args.gripper_open_tolerance
+        # The fingers on this robot stop at 0.0700-0.0711 m after homing (2026-10-30), below the
+        # 0.08 m open command, so measure the shortfall from the physical maximum.
+        minimum_open_width = min(self.args.gripper_open_width, GRIPPER_PHYSICAL_OPEN_WIDTH) - self.args.gripper_open_tolerance
         # Judge the value the fingers settle at, not the first in-range sample: a width passing through the
         # accepted range while the fingers still travel was accepted on 2026-10-25, then 0.1425 m (unhomed) held.
         while time.monotonic() < settle_until:
             rclpy.spin_once(self, timeout_sec=.05)
             if self.gripper_time > opened_at: width = self.gripper_width()
-        self.log("gripper_opened_after_homing", measured_width=width)
+        self.log("gripper_opened_after_homing" if name == "open after homing" else "gripper_opened_at_start",
+                 measured_width=width)
         if width is None or not minimum_open_width <= width <= self.args.gripper_max_plausible_width:
-            raise RuntimeError(f"gripper width {width} m after homing and opening to "
+            action = "homing and opening" if name == "open after homing" else "opening at start"
+            raise RuntimeError(f"gripper width {width} m after {action} to "
                                f"{self.args.gripper_open_width} m is outside the accepted "
                                f"[{minimum_open_width}, {self.args.gripper_max_plausible_width}] m")
-        self.get_logger().warning(f"gripper homed and opened: width={width:.4f} m")
         return width
 
     def finish(self, reason: str) -> None:
@@ -838,6 +855,8 @@ def parse_args(settle_timeout_default: float = 1.5) -> argparse.Namespace:
     add("--home-gripper-if-needed", type=int, choices=(0, 1), default=1,
         help="execute with gripper: home it when the width is implausible, otherwise refuse")
     add("--require-open-start", type=int, choices=(0, 1), default=1, help="execute: refuse to start with a closed gripper")
+    add("--open-gripper-at-start", type=int, choices=(0, 1), default=1,
+        help="execute with --require-open-start: open a closed gripper instead of refusing")
     add("--finish-idle-chunks", type=int, default=2,
         help="finish after the release once this many consecutive chunks barely move; 0 disables")
     add("--idle-translation", type=float, default=0.005, help="chunk translation (m) counted as idle")

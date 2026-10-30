@@ -394,9 +394,19 @@ class AdapterStartupTests(unittest.TestCase):
     def test_execute_refuses_to_start_with_closed_gripper(self):
         World.reset(tf_after=2, real_after=5, finger=0.00003)        # first failed full run: width 5e-5
         FakePolicy.chunks = []
-        node = self.policy_node()
+        node = self.policy_node("--open-gripper-at-start", "0")
         with self.assertRaisesRegex(RuntimeError, "gripper is closed"): node.arm()
         self.assertEqual(World.targets, [])
+
+    def test_execute_opens_closed_gripper_at_start(self):
+        World.reset(tf_after=2, real_after=5, finger=0.0008)         # 2026-10-30: previous run ended closed
+        FakePolicy.chunks = []
+        node = self.policy_node()
+        node.arm()
+        self.assertEqual(World.gripper_goals, ["move"])
+        self.assertAlmostEqual(node.gripper_width(), 0.08)
+        self.assertTrue(node.commanded_gripper_open)
+        self.assertTrue(node.armed)
 
     def test_open_success_without_finger_motion_latches(self):
         World.reset(tf_after=2, real_after=5, follow_after=1)
