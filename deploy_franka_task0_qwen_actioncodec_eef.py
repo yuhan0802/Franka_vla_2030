@@ -137,8 +137,13 @@ class Task0EefPolicy:
         self.model = VLAWithState(
             vla, tokenizer.convert_tokens_to_ids(STATE_TOKENS), tokenizer.convert_tokens_to_ids(FUTURE_STATE_TOKENS),
         ).to(device=self.device, dtype=torch.bfloat16)
-        self.model.state_encoder.load_state_dict(
-            torch.load(checkpoint / "franka_state_encoder.pth", map_location="cpu", weights_only=True))
+        # Training added a learned missing-state embedding (state dropout); checkpoints saved
+        # before it lack only that key, which inference never uses.
+        incompatible = self.model.state_encoder.load_state_dict(
+            torch.load(checkpoint / "franka_state_encoder.pth", map_location="cpu", weights_only=True), strict=False)
+        if set(incompatible.missing_keys) - {"missing_state_embedding"} or incompatible.unexpected_keys:
+            raise RuntimeError(f"incompatible state encoder: missing={incompatible.missing_keys}, "
+                               f"unexpected={incompatible.unexpected_keys}")
         self.model.future_state_predictor.load_state_dict(
             torch.load(checkpoint / "franka_future_state_predictor.pth", map_location="cpu", weights_only=True))
         self.model.eval()
@@ -148,6 +153,13 @@ class Task0EefPolicy:
         stats = json.loads(stats_path.read_text())["norm_stats"]["state"]
         self.q01 = np.asarray(stats["q01"], dtype=np.float32)
         self.q99 = np.asarray(stats["q99"], dtype=np.float32)
+        # Checkpoints trained with FRANKA_STATE_AUG=mask carry state_input.json; their
+        # EEF pose input must be zeroed exactly as in training.
+        marker = checkpoint / "state_input.json"
+        self.state_input = (json.loads(marker.read_text())["state_input"] if marker.is_file()
+                            else "eef_pose_and_gripper")
+        if self.state_input not in ("eef_pose_and_gripper", "gripper_only"):
+            raise RuntimeError(f"unknown state_input {self.state_input!r} in {marker}")
         if self.q01.shape != (7,) or self.q99.shape != (7,):
             raise RuntimeError(f"DROID EEF state stats must be 7D: {stats_path}")
         self.span = np.maximum(self.q99 - self.q01, 1e-8)
@@ -193,6 +205,8 @@ class Task0EefPolicy:
             )
         instruction = str(raw.get("instruction", "")).strip().lower() or self.default_instruction
         normalized = np.clip(2.0 * (state - self.q01) / self.span - 1.0, -1.0, 1.0).astype(np.float32)
+        if self.state_input == "gripper_only":
+            normalized[:6] = 0.0
         # Identical to FrankaTask0Dataset.transform with predict_future_state=True.
         user = [
             {"type": "text", "text": "Main camera:"}, {"type": "image", "image": images[0]},
@@ -250,6 +264,7 @@ class Task0EefPolicy:
             # Declared so the adapter can refuse a reused server started with other assets.
             "actioncodec": str(self.codec_path), "state_stats": str(self.stats_path),
             "state_protocol": STATE_PROTOCOL,
+            "state_input": self.state_input,
             "action_representation": ACTION_REPRESENTATION,
             "action_shape": [15, 7], "action_hz": 15,
             "action_normalization": self.action_normalization,
