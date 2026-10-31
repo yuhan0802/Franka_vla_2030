@@ -28,9 +28,9 @@ for pair in args.pairs.split(","):
     for a, b in ((episodes[first], episodes[second]), (episodes[second], episodes[first])):
         for fraction in np.linspace(0.2, 1.0, 9):
             ta, tb = int(a.close_index * fraction), int(b.close_index * fraction)
-            own = policy.infer(a.states[ta], a.left[ta], a.wrist[ta])
-            swap = policy.infer(a.states[ta], b.left[tb], b.wrist[tb])
-            other = policy.infer(b.states[tb], b.left[tb], b.wrist[tb])
+            own = policy.infer(a.states[ta], a.left[ta], a.wrist[ta], a.instruction)
+            swap = policy.infer(a.states[ta], b.left[tb], b.wrist[tb], b.instruction)
+            other = policy.infer(b.states[tb], b.left[tb], b.wrist[tb], b.instruction)
             p_own, p_swap, p_other = map(chunk_displacement, (own, swap, other))
             rows.append(dict(A=a.name, B=b.name, fraction=float(fraction), p_own=p_own.tolist(),
                              p_swap=p_swap.tolist(), p_other=p_other.tolist(),

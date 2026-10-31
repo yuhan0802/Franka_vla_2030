@@ -16,6 +16,9 @@ P=/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA
 # Use the env the checkpoint was trained with: act-v2 era checkpoints need transformers 5.3
 # (GATE_PYTHON=$P/.conda/qwenvla/bin/python); the anaconda env has 4.57.
 PY="${GATE_PYTHON:-/home/xmu/anaconda3/envs/qwenvla/bin/python}"
+# Target-conditioned runs keep their tube/basket targets next to the run (the launcher copies them).
+run_targets="$(dirname "$(dirname "$checkpoint")")/targets.json"
+[[ -f "$run_targets" ]] && export EVAL_TARGETS_JSON="$run_targets" && echo "targets: $run_targets"
 mkdir -p "$out"
 session="offline_gate_$port"
 tmux kill-session -t "$session" 2>/dev/null || true

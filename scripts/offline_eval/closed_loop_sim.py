@@ -38,7 +38,7 @@ for name in args.episodes.split(","):
     for _ in range(args.max_chunks):
         frame = min(2 * steps, len(episode.left) - 1)
         state = np.concatenate([position, rotation.as_rotvec(), [gripper]])
-        chunk = policy.infer(state, episode.left[frame], episode.wrist[frame])
+        chunk = policy.infer(state, episode.left[frame], episode.wrist[frame], episode.instruction)
         for row in chunk[:args.horizon]:
             position = position + row[:3] * LINEAR_SCALE_M
             rotation = Rotation.from_rotvec(row[3:6] * ANGULAR_SCALE_RAD) * rotation

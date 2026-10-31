@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import functools
+import json
+import os
 from pathlib import Path
 
 import cv2
@@ -14,6 +16,15 @@ INSTRUCTION = "place the red test tube in the red basket"
 LINEAR_SCALE_M, ANGULAR_SCALE_RAD = 0.075, 0.15
 # Gripper commands below this value close, matching the adapter's hysteresis close threshold.
 CLOSE_THRESHOLD = 0.4
+# Target-conditioned checkpoints (FRANKA_TARGETS_JSON in training): gate.sh sets EVAL_TARGETS_JSON
+# from the run's targets.json and each episode's instruction carries its detected tube/basket xy.
+TARGETS = json.load(open(os.environ["EVAL_TARGETS_JSON"])) if os.environ.get("EVAL_TARGETS_JSON") else None
+
+
+def target_instruction(instruction: str, tube, basket) -> str:
+    """Must match target_instruction in the training script."""
+    return (f"{instruction} (tube x={1000 * tube[0]:.0f} y={1000 * tube[1]:.0f}, "
+            f"basket x={1000 * basket[0]:.0f} y={1000 * basket[1]:.0f}, mm)")
 
 
 def _pack(value):
@@ -37,9 +48,9 @@ class Policy:
         self.ws = wsc.connect(f"ws://{host}:{port}", max_size=None, proxy=None, open_timeout=10)
         self.metadata = UNPACK(self.ws.recv(timeout=10))
 
-    def infer(self, state, exterior, wrist) -> np.ndarray:
+    def infer(self, state, exterior, wrist, instruction: str = INSTRUCTION) -> np.ndarray:
         self.ws.send(PACK({"eef_state": np.asarray(state, dtype=np.float32), "exterior_image": exterior,
-                           "wrist_image": wrist, "instruction": INSTRUCTION}))
+                           "wrist_image": wrist, "instruction": instruction}))
         return np.asarray(UNPACK(self.ws.recv(timeout=60))["action"], dtype=np.float64)
 
 
@@ -63,6 +74,12 @@ class Episode:
             if not ok:
                 return frames
             frames.append(np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+
+    @property
+    def instruction(self) -> str:
+        if TARGETS is None:
+            return INSTRUCTION
+        return target_instruction(INSTRUCTION, TARGETS[self.name]["tube"], TARGETS[self.name]["basket"])
 
     @property
     def grasp_position(self) -> np.ndarray:

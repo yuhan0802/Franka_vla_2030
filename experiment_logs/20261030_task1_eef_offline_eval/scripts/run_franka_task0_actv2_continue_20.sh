@@ -59,6 +59,8 @@ echo "Episodes: $(ls -d "$DATA_ROOT"/*/data/franka_measured_eef_base_15hz_v5.npz
 START_ARGS=(--init_checkpoint_path "$INIT_CHECKPOINT")
 [[ -z "${RESUME_PATH:-}" ]] || START_ARGS=(--resume true --resume_path "$RESUME_PATH")
 mkdir -p "$RUN_ROOT/logs" "$HF_HOME"
+# FRANKA_TARGETS_JSON (tube/basket xy in the instruction) is copied next to the run for gate.sh.
+[[ -z "${FRANKA_TARGETS_JSON:-}" ]] || { cp "$FRANKA_TARGETS_JSON" "$RUN_ROOT/targets.json"; export FRANKA_TARGETS_JSON; echo "Targets: $FRANKA_TARGETS_JSON"; }
 LOG="$RUN_ROOT/logs/task0_actv2_continue_${TAG}_$(date +%Y%m%d_%H%M%S).log"
 echo "Init: $INIT_CHECKPOINT; state_aug=$STATE_AUG; $NUM_PROCESSES GPUs x 16 x accum $GRAD_ACCUM; lr $LEARNING_RATE; steps $MAX_STEPS"
 echo "Log: $LOG"
