@@ -463,6 +463,20 @@ class AdapterStartupTests(unittest.TestCase):
         self.assertTrue(node.fault)
         self.assertIn("did not close", [e for e in self.events(self.log_path) if e["event"] == "fault"][0]["reason"])
 
+    def test_close_above_max_z_is_suppressed(self):
+        # 2026-10-31 offline: state-noise policies closed at the start pose in 2/10 scenes.
+        World.reset(tf_after=2, real_after=5, follow_after=1)
+        FakePolicy.chunks = [idle_chunk(0.0, dx=0.02), idle_chunk(0.0, dx=0.02)]
+        node = self.policy_node("--gripper-close-max-z", f"{REAL_POSE[0][2] - 0.05:.3f}")
+        node.arm()
+        for _ in range(6000):
+            if node.finished or node.fault or node.chunks_done >= 2: break
+            spin_once(node)
+        self.assertFalse(node.fault)
+        self.assertEqual(World.gripper_goals, [])
+        events = self.events(self.log_path)
+        self.assertTrue(any(e.get("gripper_suppressed") == "close_above_max_z" for e in events if e["event"] == "action"))
+
     def test_reopen_soon_after_close_is_held(self):
         # 2026-10-25: the policy re-opened 1.3 s after its own close; demonstrations hold the grasp >= 7.5 s.
         World.reset(tf_after=2, real_after=5, follow_after=1)

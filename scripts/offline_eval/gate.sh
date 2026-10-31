@@ -19,6 +19,9 @@ PY="${GATE_PYTHON:-/home/xmu/anaconda3/envs/qwenvla/bin/python}"
 mkdir -p "$out"
 session="offline_gate_$port"
 tmux kill-session -t "$session" 2>/dev/null || true
+# A previous server on this port may still be exiting; its socket would pass the readiness check below.
+for _ in $(seq 1 60); do ss -ltn | grep -q ":$port " || break; sleep 2; done
+ss -ltn | grep -q ":$port " && { echo "port $port still in use"; exit 1; }
 tmux new-session -d -s "$session" "cd '$deploy_dir' && CUDA_VISIBLE_DEVICES='$gpu' PYTHONPATH='$P/third_party/python:$P' \
   VLA_PROJECT_ROOT='$P' HF_HOME='$P/actioncodec_libero/.cache/huggingface' USE_TF=0 TRANSFORMERS_NO_TF=1 \
   TOKENIZERS_PARALLELISM=false '$PY' -u deploy_franka_task0_qwen_actioncodec_eef.py --checkpoint '$checkpoint' \
@@ -32,12 +35,13 @@ done
 ss -ltn | grep -q ":$port " || { echo "server did not start"; exit 1; }
 grep -o "'state_input': '[a-z_]*'" "$out/server.log" || true
 cd "$here"
-"$PY" swap_test.py --port "$port" --output "$out/swap.json" | tail -1
-"$PY" closed_loop_sim.py --port "$port" --output "$out/closed_loop.json" | tail -11
+# SIM_ONLY=1 skips the swap test (reuses swap.json if present); SIM_ARGS go to closed_loop_sim.py.
+[[ "${SIM_ONLY:-0}" == 1 ]] || "$PY" swap_test.py --port "$port" --output "$out/swap.json" | tail -1
+"$PY" closed_loop_sim.py --port "$port" --output "$out/closed_loop.json" ${SIM_ARGS:-} | tail -11
 "$PY" - "$out" <<'PY'
-import json, sys
+import json, os, sys
 out = sys.argv[1]
-swap = json.load(open(f"{out}/swap.json"))["summary"]; loop = json.load(open(f"{out}/closed_loop.json"))["summary"]
+swap = json.load(open(f"{out}/swap.json"))["summary"] if os.path.exists(f"{out}/swap.json") else {"image_reliance": None}; loop = json.load(open(f"{out}/closed_loop.json"))["summary"]
 passed = (swap["image_reliance"] or 0) >= 0.5 and loop["over_30mm"] == 0 and loop["within_20mm"] >= 8
 json.dump(dict(swap=swap, closed_loop=loop, passed=passed), open(f"{out}/summary.json", "w"), indent=1)
 print("GATE", "PASS" if passed else "FAIL", json.dumps(dict(swap=swap, closed_loop=loop)))

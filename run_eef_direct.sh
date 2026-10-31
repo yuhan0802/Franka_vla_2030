@@ -163,6 +163,7 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --gripper-state-source "${EEF_GRIPPER_STATE_SOURCE:-measured}"
   --gripper-width-offset "${EEF_GRIPPER_WIDTH_OFFSET:-0}"
   --gripper-open-width "${EEF_GRIPPER_OPEN_WIDTH:-0.08}"
+  --gripper-close-max-z "${EEF_GRIPPER_CLOSE_MAX_Z:-0}"
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
   --max-tf-age "${EEF_MAX_TF_AGE:-0.15}"
   --max-policy-latency "${EEF_MAX_POLICY_LATENCY:-5.0}"

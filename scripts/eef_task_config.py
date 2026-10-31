@@ -60,6 +60,9 @@ def resolve(config, task_key, model_key, control=None):
             or not 0 < adapter["gripper_open_width"] <= .08
             or adapter["gripper_width_offset"] + adapter["gripper_open_width"] > .15):
         raise ValueError("invalid gripper firmware offset/open width")
+    close_max_z = adapter.get("gripper_close_max_z", 0)
+    if not isinstance(close_max_z, (int, float)) or not (close_max_z == 0 or .05 <= close_max_z <= .9):
+        raise ValueError("adapter.gripper_close_max_z must be 0 (disabled) or in [0.05, 0.9] m")
     if (not isinstance(adapter["max_tf_age_s"], (int, float))
             or not math.isfinite(adapter["max_tf_age_s"])
             or not 0 < adapter["max_tf_age_s"] <= 1.0):
@@ -138,6 +141,7 @@ def environment(profile):
             "EEF_GRIPPER_STATE_SOURCE": a["gripper_state_source"], "EEF_EXTERIOR_CAMERA": a["exterior_camera"],
             "EEF_GRIPPER_WIDTH_OFFSET": str(a["gripper_width_offset"]),
             "EEF_GRIPPER_OPEN_WIDTH": str(a["gripper_open_width"]),
+            "EEF_GRIPPER_CLOSE_MAX_Z": str(a.get("gripper_close_max_z", 0)),
             "EEF_MODEL_IMAGE_SIZE": str(a["model_image_size"]), "VLA_CAMERA_MODE": a["camera_mode"],
             "EEF_MAX_TF_AGE": str(a["max_tf_age_s"]),
             "EEF_ROTATION_FRAME": a["rotation_frame"], "EEF_ROTATION_EXECUTION": a["rotation_execution"],

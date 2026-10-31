@@ -23,6 +23,8 @@ parser.add_argument("--port", type=int, required=True)
 parser.add_argument("--horizon", type=int, default=15)
 parser.add_argument("--episodes", default=DEFAULT_EPISODES)
 parser.add_argument("--max-chunks", type=int, default=40)
+parser.add_argument("--close-max-z", type=float, default=None,
+                    help="deployment guard under test: ignore close commands while the EEF is above this z (m)")
 parser.add_argument("--output", required=True)
 args = parser.parse_args()
 
@@ -42,7 +44,8 @@ for name in args.episodes.split(","):
             rotation = Rotation.from_rotvec(row[3:6] * ANGULAR_SCALE_RAD) * rotation
             steps += 1
             trajectory.append(position.tolist())
-            if closed_at is None and row[6] < CLOSE_THRESHOLD:
+            if (closed_at is None and row[6] < CLOSE_THRESHOLD
+                    and (args.close_max_z is None or position[2] <= args.close_max_z)):
                 closed_at, gripper = position.copy(), 0.0
         if closed_at is not None:
             break

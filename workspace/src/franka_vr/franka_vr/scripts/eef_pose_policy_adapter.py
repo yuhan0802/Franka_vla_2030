@@ -513,6 +513,10 @@ class EefAdapter(Node):
         if desired_open is not None and now - self.last_gripper_request_at < hold:
             # A reversal right after a request is the policy echoing a stale state, not a decision.
             record["gripper_suppressed"] = "open" if desired_open else "close"; desired_open = None
+        if desired_open is False and self.args.gripper_close_max_z > 0 and pose[0][2] > self.args.gripper_close_max_z:
+            # Task prior: no grasp above the object. State-noise-trained policies sometimes close at the start
+            # pose (offline 2026-10-31: 2/10 scenes at z 0.32 m; every demonstration grasps at z 0.255-0.268 m).
+            record["gripper_suppressed"] = "close_above_max_z"; desired_open = None
         record["gripper_request"] = None if desired_open is None else ("open" if desired_open else "close")
         if desired_open is not None:
             self.last_gripper_request_at = now
@@ -843,6 +847,8 @@ def parse_args(settle_timeout_default: float = 1.5) -> argparse.Namespace:
     add("--gripper-speed", type=float, default=.10); add("--gripper-force", type=float, default=20.)
     add("--gripper-epsilon-inner", type=float, default=.1); add("--gripper-epsilon-outer", type=float, default=.2)
     add("--gripper-min-dwell", type=float, default=1.0, help="ignore an open/close reversal within this time (s)")
+    add("--gripper-close-max-z", type=float, default=0.0,
+        help="ignore CLOSE requests while the measured EEF z is above this height (m); 0 disables")
     add("--gripper-close-hold", type=float, default=5.0,
         help="ignore an OPEN request within this time after a CLOSE request (s); demonstrations hold >= 7.5 s")
     add("--gripper-verify-timeout", type=float, default=0.5,
@@ -886,6 +892,8 @@ def parse_args(settle_timeout_default: float = 1.5) -> argparse.Namespace:
             or args.gripper_width_offset + args.gripper_open_width > .15):
         parser.error("gripper width offset/command exceeds the supported hardware coordinate")
     if args.gripper_close_hold < 0: parser.error("gripper-close-hold must be >= 0")
+    if not (args.gripper_close_max_z == 0 or 0.05 <= args.gripper_close_max_z <= 0.9):
+        parser.error("gripper-close-max-z must be 0 (disabled) or a world z in [0.05, 0.9] m")
     if not 0 <= args.gripper_open_tolerance < args.gripper_open_width - args.gripper_closed_width:
         parser.error("gripper-open-tolerance must keep the accepted open width above the closed width")
     if args.test_axis and not args.rotation_frame: parser.error("--test-axis requires an explicit --rotation-frame")
