@@ -44,10 +44,14 @@ done
 "$PYTHON" - "$INIT_CHECKPOINT" "$ACTION_NORM_STATS_PATH" <<'PY'
 import json, sys
 init, stats_path = sys.argv[1:]
-trained = json.load(open(f"{init}/training_config.json"))["action_normalization_stats"]
+trained = json.load(open(f"{init}/training_config.json")).get("action_normalization_stats")
 stats = json.load(open(stats_path))
-assert stats["arm_scale"] == trained["arm_scale"], "maxabs stats differ from the act-v2 checkpoint"
-print("maxabs stats match the initialization checkpoint")
+# A DROID-pretrained init (act-v2 recipe from scratch) has no Franka stats to compare against.
+if trained is None:
+    print("init has no action stats (DROID-pretrained); training fresh with", stats_path)
+else:
+    assert stats["arm_scale"] == trained["arm_scale"], "maxabs stats differ from the act-v2 checkpoint"
+    print("maxabs stats match the initialization checkpoint")
 PY
 echo "Episodes: $(ls -d "$DATA_ROOT"/*/data/franka_measured_eef_base_15hz_v5.npz | wc -l) in $DATA_ROOT"
 
