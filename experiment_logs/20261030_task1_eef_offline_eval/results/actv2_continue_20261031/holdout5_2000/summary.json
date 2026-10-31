@@ -1,0 +1,17 @@
+{
+ "swap": {
+  "samples": 54,
+  "mean_swap_shift_mm": 11.918018937971343,
+  "mean_other_gap_mm": 26.301310722660673,
+  "image_reliance": 0.5781747927611219,
+  "informative_samples": 46
+ },
+ "closed_loop": {
+  "episodes": 10,
+  "never_closed": 0,
+  "median_xy_error_mm": 27.53534921342838,
+  "within_20mm": 4,
+  "over_30mm": 4
+ },
+ "passed": false
+}
