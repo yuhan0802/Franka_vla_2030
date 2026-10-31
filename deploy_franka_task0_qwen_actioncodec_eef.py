@@ -39,7 +39,8 @@ from train.franka_task0_qwen_actioncodec_droid_pretrained_bar import (  # noqa: 
     FUTURE_STATE_START_TOKEN, FUTURE_STATE_TOKENS, STATE_TOKENS, ActionTokenizer, VLAWithState,
     restore_actioncodec_derived_buffers, restore_legacy_wrapped_embeddings,
 )
-from train.droid_qwen_actioncodec_state_first_bar import BAR_ACTION_TOKENS, generate_action_codes_bar  # noqa: E402
+from train.droid_qwen_actioncodec_state_first_bar import (  # noqa: E402
+    BAR_ACTION_TOKENS, build_bar_attention_mask, generate_action_codes_bar)
 
 try:  # the training module imports TensorFlow; keep it off the GPU
     import tensorflow as tf
@@ -189,9 +190,12 @@ class Task0EefPolicy:
         elif self.action_mulaw_mu != 0:
             raise RuntimeError("action_mulaw_mu is only valid for franka_mulaw")
         self.dummy_action = "<|action_0|>" * BAR_ACTION_TOKENS
+        # Point-first runs (marker written by the launcher) say "Target: (u, v)" before the action.
+        self.point_first = (checkpoint.parent.parent / "point_first").exists()
+        self.last_point = ""
         self.checkpoint = checkpoint
 
-    def _prompt(self, raw):
+    def _prompt(self, raw, point_text=""):
         state = np.asarray(raw["eef_state"], dtype=np.float32).reshape(-1)
         if state.shape != (7,) or not np.isfinite(state).all() or not 0.0 <= state[6] <= 1.0:
             raise ValueError(f"eef_state must be finite (7,) with gripper in [0, 1], got {state!r}")
@@ -222,7 +226,7 @@ class Task0EefPolicy:
                 f"Gripper state: {STATE_TOKENS[1]}\n"
                 "Based on the current observations and robot state, what is the next action?")},
         ]
-        assistant = (f"Next state:\n{FUTURE_STATE_START_TOKEN}{''.join(FUTURE_STATE_TOKENS)}"
+        assistant = (f"{point_text}Next state:\n{FUTURE_STATE_START_TOKEN}{''.join(FUTURE_STATE_TOKENS)}"
                      f"{FUTURE_STATE_END_TOKEN}\nAction:\n<|action_start|>{self.dummy_action}<|action_end|>")
         messages = [
             {"role": "system", "content": (
@@ -240,8 +244,42 @@ class Task0EefPolicy:
         return encoded, int(positions[0]) + 1, torch.from_numpy(normalized).unsqueeze(0), instruction
 
     @torch.inference_mode()
+    def _point(self, raw) -> str:
+        """Greedy-generate the Target line that point-first runs emit before the action."""
+        marker = "<|im_start|>assistant\n"
+        encoded, _, state, _ = self._prompt(raw)
+        ids = encoded.input_ids[0].tolist()
+        marker_ids = self.processor.tokenizer.encode(marker, add_special_tokens=False)
+        start = next(i for i in range(len(ids) - len(marker_ids), -1, -1)
+                     if ids[i:i + len(marker_ids)] == marker_ids) + len(marker_ids)
+        prefix = encoded.input_ids[:, :start].to(self.device)
+        # The forward needs the future-state token, so the template tail follows the generated text;
+        # under causal attention it cannot change the logits at the last generated position.
+        tail = encoded.input_ids[:, start:].to(self.device)
+        pixels = encoded.pixel_values.to(self.device, dtype=torch.bfloat16)
+        grid = encoded.image_grid_thw.to(self.device)
+        text = ""
+        for _ in range(20):
+            current = torch.cat((prefix, tail), dim=1)
+            ones = torch.ones_like(current)
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"):
+                logits = self.model(input_ids=current, states=state.to(self.device),
+                                    attention_mask=build_bar_attention_mask(ones, torch.zeros_like(ones, dtype=torch.bool)),
+                                    pixel_values=pixels, image_grid_thw=grid, use_cache=False).logits
+            token = logits[:, prefix.shape[1] - 1].argmax(dim=-1, keepdim=True)
+            prefix = torch.cat((prefix, token), dim=1)
+            text += self.processor.tokenizer.decode(token[0])
+            if "\n" in text:
+                break
+        text = text.split("\n")[0]
+        if not text.startswith("Target: ("):
+            raise RuntimeError(f"point-first checkpoint generated {text!r} instead of a Target line")
+        return text + "\n"
+
+    @torch.inference_mode()
     def predict(self, raw) -> np.ndarray:
-        encoded, end, state, _ = self._prompt(raw)
+        self.last_point = self._point(raw) if self.point_first else ""
+        encoded, end, state, _ = self._prompt(raw, self.last_point)
         prefix = encoded.input_ids[:, :end].to(self.device)
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"):
             token_ids = generate_action_codes_bar(

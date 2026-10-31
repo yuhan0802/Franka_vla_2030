@@ -493,3 +493,24 @@ holdout5-3k 和 holdout5noise-1k 也是同样的模式。原因推测：每条�
   三组用的是相同的有效 batch 和步数，差别只在数据量。
 - **stockvish5-1k 连见过的场景都没学会**（训练准确率 1000 步时 0.79，其他实验约 0.97）：语言模型还在适应原版视觉特征，1000 步不够。
   等 2000 步结果；同时在 1000 步权重上跑隐层探针，看位置信息在语言模型层是否已经比 act-v2 好。
+
+### 11-01 02:40 stockvish5-1k 探针：位置信息在图像 token 上保住了，但没进到决策位置
+
+| 特征（stockvish5-1k） | 留一场景中位数 | 留出平均 |
+|---|---|---|
+| 图像 token，语言模型第 8 层 | 14.3 | 31 |
+| 图像 token，第 20 层 | 14.4 | 36 |
+| `<|action_start|>`，第 20–28 层 | 33–35 | 66–71 |
+| 对照 holdout5-1k 图像 token 第 8 层 | 31.0 | 56 |
+
+- 换回原版视觉后，语言模型各层的图像 token 上都能读出约 14 mm 的位置（holdout5 只有 31 mm）。视觉这一环修好了。
+- 但到决策位置只有 33–35 mm，留出 66–71 mm：45 条示教下，动作还是更容易靠"认场景"去拟合，而不是去读图像 token 上的位置。
+
+**新实验 pointfirsth5（排在 stockvish5 之后，GPU 0–3）：先指认，再出动作。**
+- 训练时 assistant 输出改为 `Target: (u, v)` + 原来的 `Next state … Action …`（`FRANKA_POINT_FIRST=1`）：抓取前是试管盖，抓取后是篮子，坐标是主相机图像里的 0–1000 坐标。
+  动作 token 能直接看到模型自己给出的位置，定位成为动作的必经之路，而不是旁路的辅助损失（point384h5 是后者，没有用）。
+- 这仍然是纯 VLA：推理时只输入图像、状态和原来的指令，位置由模型自己从图像里读出来（类似 embodied CoT / 先指认后执行），不需要外部检测器，也不往指令里写坐标。
+- 起点：stockvish5 save_2000（视觉已换回原版并冻结），holdout5，256，2000 步。
+- 部署：`deploy_franka_task0_qwen_actioncodec_eef.py` 检测到运行目录下的 `point_first` 标记后，先贪心生成 Target 行，再生成动作；没有标记的权重行为不变。
+  在 point384h5 权重上测过生成流程（正确地生成出该权重的下一行 "Next state:"），每次推理多约 1 秒（未加 KV cache，后续可以优化）。
+- 补丁：`scripts/offline_eval/patch_point_first.py`、`patch_point_first2.py`。
