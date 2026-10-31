@@ -24,6 +24,9 @@ GRAD_ACCUM="${GRAD_ACCUM:-2}"
 MASTER_PORT="${MASTER_PORT:?set MASTER_PORT}"
 MAX_STEPS="${MAX_STEPS:-4000}"
 LEARNING_RATE="${LEARNING_RATE:-5e-5}"
+# IMAGE_SIZE > 256 (square) keeps the tube cap resolvable for Qwen-VL; deploy reads it from training_config.
+IMAGE_SIZE="${IMAGE_SIZE:-256}"
+[[ "$IMAGE_SIZE" == 256 ]] || export FRANKA_ALLOW_IMAGE_SIZE=1
 # JOINT_TASK_NAMES=Task0,Task1 co-trains sibling task dirs of DATA_ROOT (stats must list the tasks).
 JOINT_TASK_NAMES="${JOINT_TASK_NAMES:-}"
 DATA_ARGS=(--data_root_dir "$DATA_ROOT")
@@ -62,7 +65,7 @@ mkdir -p "$RUN_ROOT/logs" "$HF_HOME"
 # FRANKA_TARGETS_JSON (tube/basket xy in the instruction) is copied next to the run for gate.sh.
 [[ -z "${FRANKA_TARGETS_JSON:-}" ]] || { cp "$FRANKA_TARGETS_JSON" "$RUN_ROOT/targets.json"; export FRANKA_TARGETS_JSON; echo "Targets: $FRANKA_TARGETS_JSON"; }
 LOG="$RUN_ROOT/logs/task0_actv2_continue_${TAG}_$(date +%Y%m%d_%H%M%S).log"
-echo "Init: $INIT_CHECKPOINT; state_aug=$STATE_AUG; $NUM_PROCESSES GPUs x 16 x accum $GRAD_ACCUM; lr $LEARNING_RATE; steps $MAX_STEPS"
+echo "Init: $INIT_CHECKPOINT; image $IMAGE_SIZE; state_aug=$STATE_AUG; $NUM_PROCESSES GPUs x 16 x accum $GRAD_ACCUM; lr $LEARNING_RATE; steps $MAX_STEPS"
 echo "Log: $LOG"
 [[ "${PREFLIGHT_ONLY:-0}" != 1 ]] || exit 0
 
@@ -77,7 +80,7 @@ exec env CUDA_VISIBLE_DEVICES="$GPUS" "$PYTHON" -m torch.distributed.run \
   --action_normalization task0_maxabs --action_norm_stats_path "$ACTION_NORM_STATS_PATH" \
   --predict_future_state true --prediction_order state_then_action \
   "${START_ARGS[@]}" \
-  --image_size 256 --use_image_aug true \
+  --image_size "$IMAGE_SIZE" --use_image_aug true \
   --use_random_resized_crop false --primary_only_random_resized_crop true \
   --use_robust_image_aug true \
   --batch_size 16 --grad_accumulation_steps "$GRAD_ACCUM" --dataloader_num_workers 0 \

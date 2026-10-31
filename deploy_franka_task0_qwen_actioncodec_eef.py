@@ -58,7 +58,7 @@ STATE_PROTOCOL = "droid_eef_axis_angle6_gripper_open1_singleturn_v1"
 # were tool-frame right-multiply: pass --rotation-execution relative_rotvec_right_multiply.
 ROTATION_EXECUTION = "relative_rotvec_left_multiply"
 IMAGE_SHAPE = (480, 640, 3)  # Camera/request shape before training-compatible preprocessing.
-MODEL_IMAGE_SIZE = 256
+MODEL_IMAGE_SIZE = 256  # default; a checkpoint's training_config image_size overrides it
 
 
 def denormalize_actions(normalized, scale, method, mu=0.0):
@@ -96,11 +96,15 @@ class Task0EefPolicy:
             "action_representation": ACTION_REPRESENTATION, "action_horizon": 15,
             "action_frequency_hz": 15, "action_embodiment_id": 2, "action_prediction_mode": "block_ar_16",
             "predict_future_state": True, "prediction_order": "state_then_action",
-            "image_size": MODEL_IMAGE_SIZE,
         }
         mismatched = {key: self.training.get(key) for key, value in expected.items() if self.training.get(key) != value}
         if mismatched:
             raise RuntimeError(f"checkpoint is not the Task0 EEF BAR protocol: {mismatched}")
+        # Square resize to the training resolution (256 for DROID-compatible runs, higher for runs
+        # trained at a larger image_size so Qwen-VL can still localize the small tube cap).
+        self.image_size = int(self.training.get("image_size", MODEL_IMAGE_SIZE))
+        if self.image_size < 32 or self.image_size % 32:
+            raise RuntimeError(f"checkpoint image_size must be a positive multiple of 32: {self.image_size}")
         self.default_instruction = str(self.training.get("task_instruction", "")).strip().lower()
         if not self.default_instruction:
             # Task{x} runs take the prompt from tasks.json (FrankaTask0Dataset), not from training_config.
@@ -200,7 +204,7 @@ class Task0EefPolicy:
             # no augmentation or random crop, only a bilinear square resize.
             images.append(
                 Image.fromarray(image, "RGB").resize(
-                    (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE), Image.Resampling.BILINEAR
+                    (self.image_size, self.image_size), Image.Resampling.BILINEAR
                 )
             )
         instruction = str(raw.get("instruction", "")).strip().lower() or self.default_instruction
@@ -276,7 +280,7 @@ class Task0EefPolicy:
             "gripper_state_source": "measured",
             "rotation_execution": self.rotation_execution,
             "observation_format": "franka_task0_main_wrist_640x480_eef7_v1",
-            "model_image_size": [MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE],
+            "model_image_size": [self.image_size, self.image_size],
             "training_instruction": self.default_instruction,
             "port": port,
         }

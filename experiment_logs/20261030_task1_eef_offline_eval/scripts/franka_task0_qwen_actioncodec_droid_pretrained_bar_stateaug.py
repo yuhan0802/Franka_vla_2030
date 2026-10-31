@@ -1198,7 +1198,10 @@ class FrankaTask0Dataset(LiberoRLDSDataset):
         self.primary_only_random_resized_crop = bool(
             primary_only_random_resized_crop
         )
-        if self.image_size != 256:
+        # DROID pretraining used 256. Larger sizes (FRANKA_ALLOW_IMAGE_SIZE=1) keep the tube cap
+        # large enough for Qwen-VL to localize: stock Qwen3-VL-2B points at it within ~6 px at
+        # 640x480 and ~10 px at 384x384, but ~33 px at 256x256.
+        if self.image_size != 256 and os.environ.get("FRANKA_ALLOW_IMAGE_SIZE") != "1":
             raise ValueError(
                 f"DROID-compatible Task{{x}} training requires image_size=256, got {image_size}"
             )
