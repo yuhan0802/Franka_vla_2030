@@ -2,7 +2,8 @@
 # Training watchdog on mac_20 (tmux claude_overnight): every 2 min
 #  1. relaunch a crashed act-v2 continuation run from its newest checkpoint (max 3 restarts per run);
 #  2. gate every new checkpoint of every act-v2 continuation run (transformers 5.3 env, 8 threads).
-# Runs are listed in ~/offline_eval/runs.conf as: TAG|launcher env (TAG must match the env's TAG=).
+# Runs are listed in ~/offline_eval/runs.conf as: TAG|launcher env|AFTER (TAG must match the env's TAG=;
+# AFTER = space-separated tags that must reach their final save first, for runs queued on busy GPUs).
 # Log: ~/offline_eval/results/overnight.log
 set -u
 P=/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA
@@ -11,13 +12,19 @@ LOG=~/offline_eval/results/overnight.log
 export GATE_PYTHON=$P/.conda/qwenvla/bin/python OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
 declare -A RESTARTS
 log() { echo "$(date '+%m-%d %T') $*" >> "$LOG"; }
+final_step() { local m; m=$(grep "^$1|" ~/offline_eval/runs.conf | sed -n 's/.*MAX_STEPS=\([0-9]*\).*/\1/p'); echo "${m:-4000}"; }
 newest_save() { ls -d $R/franka_task0_actv2_continue_$1_20261030/*/save_*_chkpt 2>/dev/null \
   | while read -r d; do [[ -f $d/checkpoint_complete.json ]] && echo "$(basename "$d" | tr -dc 0-9) $d"; done | sort -n | tail -1 | cut -d' ' -f2; }
 log "watchdog start: $(cut -d'|' -f1 ~/offline_eval/runs.conf | tr '\n' ' ')"
 while true; do
-  while IFS='|' read -r tag envs; do
-    [[ -n "$tag" ]] || continue
-    final=$(sed -n 's/.*MAX_STEPS=\([0-9]*\).*/\1/p' <<< "$envs"); final=${final:-4000}
+  while IFS='|' read -r tag envs after; do
+    [[ -n "$tag" && "$tag" != \#* ]] || continue
+    final=$(final_step $tag)
+    waiting=0
+    for dep in $after; do
+      [[ "$(newest_save $dep)" == *save_$(final_step $dep)_chkpt ]] && ! tmux has-session -t claude_actv2_$dep 2>/dev/null || waiting=1
+    done
+    (( waiting )) && continue
     newest=$(newest_save $tag)
     if [[ "$newest" != *save_${final}_chkpt ]] && ! tmux has-session -t claude_actv2_$tag 2>/dev/null; then
       n=${RESTARTS[$tag]:-0}

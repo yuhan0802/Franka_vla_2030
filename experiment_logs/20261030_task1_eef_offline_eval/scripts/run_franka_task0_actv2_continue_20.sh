@@ -24,6 +24,10 @@ GRAD_ACCUM="${GRAD_ACCUM:-2}"
 MASTER_PORT="${MASTER_PORT:?set MASTER_PORT}"
 MAX_STEPS="${MAX_STEPS:-4000}"
 LEARNING_RATE="${LEARNING_RATE:-5e-5}"
+# JOINT_TASK_NAMES=Task0,Task1 co-trains sibling task dirs of DATA_ROOT (stats must list the tasks).
+JOINT_TASK_NAMES="${JOINT_TASK_NAMES:-}"
+DATA_ARGS=(--data_root_dir "$DATA_ROOT")
+[[ -z "$JOINT_TASK_NAMES" ]] || DATA_ARGS=(--data_root_dir "$(dirname "$DATA_ROOT")" --joint_task_names "$JOINT_TASK_NAMES")
 
 export FRANKA_CACHE_VERSION=v5
 export FRANKA_STATE_AUG="$STATE_AUG"
@@ -61,7 +65,7 @@ exec env CUDA_VISIBLE_DEVICES="$GPUS" "$PYTHON" -m torch.distributed.run \
   "$PROJECT_ROOT/train/franka_task0_qwen_actioncodec_droid_pretrained_bar_stateaug.py" \
   --base_model qwen3vl2b --vla_path "$VLA_PATH" \
   --actioncodec_path "$ACTIONCODEC_PATH" \
-  --data_root_dir "$DATA_ROOT" --data_mix franka_task0 \
+  "${DATA_ARGS[@]}" --data_mix franka_task0 \
   --tasks_path "$TASKS_PATH" --state_stats_path "$STATE_STATS_PATH" \
   --action_embodiment_id 2 --action_prediction_mode block_ar_16 \
   --action_normalization task0_maxabs --action_norm_stats_path "$ACTION_NORM_STATS_PATH" \

@@ -281,3 +281,12 @@ act-v2 = v5 maxabs save_8000，`mac_63:8095`。10-25 和 10-30 在原位置都�
 | all50noisehalf | 50 条 | 50% 样本 | 只给一半样本加噪声，能否在保留"靠图定位"的同时去掉过早闭合，从而不依赖 z 约束？ |
 
 两组都从 act-v2 save_8000 出发，训 2000 步，lr 5e-5。由 `claude_overnight`（`~/offline_eval/overnight_watch.sh` + `runs.conf`）管理并自动评估。
+
+排在后面（上面两组跑完后自动接上，`runs.conf` 第三列是依赖，预计 12:50–15:50）：
+
+| 组 | 数据 | 回答的问题 |
+|---|---|---|
+| holdout5t1 | 45 条 Task0（留出 5 条）+ 30 条 Task1（蓝色试管） | 同一动作、不同试管位置的数据，能不能帮模型学会"看图找试管"？对照 holdout5 的留出误差 |
+| all50t1 | 50 条 Task0 + 30 条 Task1 | 如果上一组有效，这就是上线候选 |
+
+Task1 的动作幅度在 act-v2 的 maxabs 范围内（99.9% 分位数不超过 0.87 倍，被截断的样本只占 0.01%），因此直接复用 act-v2 的统计，只加了 `tasks` 字段：`/data2/lyh/vla/config/claude_task01_actv2_maxabs.json`。
