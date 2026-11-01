@@ -603,3 +603,14 @@ holdout5 配方完全相同，只换随机种子（留出 044/035/046/041/048，
   换图测试只看"换图前后动作差多少"，不受动作语义影响，所以"基本不看图像"这个结论是可靠的。
 - **结论**：这个 state dropout 权重对 Task0 没有帮助，不建议上真机。真机候选不变，仍是 all50noise-1k。
 - 权重副本：mac_20 `/data2/lyh/vla/runs/claude_joint8drop/`、`claude_joint8base/`（training_config 里补了 task_instruction，原件未动）；结果 `~/offline_eval/results/joint8drop_*`、`joint8base_*`。
+
+### 11-01 17:45 mac_63 加入：训练步数曲线（h5fine42 / h5fine7）
+
+- 目的：种子复跑里第 1000 步的留出误差平均好于第 2000 步（三个种子平均 70 对 81 mm），真机候选 all50noise-1k 也是在第 1000 步停的。
+  需要知道更短的训练是否泛化更好，用来决定真机权重训多少步。
+- 设置：holdout5，act-v2 起点，种子 42 / 7，**每 250 步存一次**，训到 1500 步。mac_63 GPU 0–3 / 4–7，约 20:00 跑完；每个保存点自动跑 gate。
+- mac_63 的部署：
+  - 守护进程 `~/offline_eval/overnight_watch.sh`（tmux `claude_overnight`），配置 `~/offline_eval/runs.conf`，日志 `~/offline_eval/results/overnight.log`。脚本从 mac_20 同步过来。
+  - holdout5 划分放在 `/data2/lyh/claude_data/holdout5`（`/data2/lyh/vla` 对 xmu 用户只读）。
+  - 训练任务需要设 `HF_HOME=/data2/lyh/claude_hf_cache`：默认的 `/data2/lyh/vla/cache/huggingface` 里 ActionCodec 的模块文件属于 lyh，xmu 写不了，训练一启动就会报 PermissionError。
+- 启动脚本新增 `SAVE_STEPS`（默认 1000，与之前一致）。
