@@ -22,11 +22,11 @@ while true; do
     final=$(final_step $tag)
     waiting=0
     for dep in $after; do
-      [[ "$(newest_save $dep)" == *save_$(final_step $dep)_chkpt ]] && ! tmux has-session -t claude_actv2_$dep 2>/dev/null || waiting=1
+      [[ "$(newest_save $dep)" == *save_$(final_step $dep)_chkpt ]] && ! tmux has-session -t =claude_actv2_$dep 2>/dev/null || waiting=1
     done
     (( waiting )) && continue
     newest=$(newest_save $tag)
-    if [[ "$newest" != *save_${final}_chkpt ]] && ! tmux has-session -t claude_actv2_$tag 2>/dev/null; then
+    if [[ "$newest" != *save_${final}_chkpt ]] && ! tmux has-session -t =claude_actv2_$tag 2>/dev/null; then
       n=${RESTARTS[$tag]:-0}
       if (( n >= 3 )); then [[ $n == 3 ]] && log "$tag: down, restart budget exhausted"; RESTARTS[$tag]=4
       else RESTARTS[$tag]=$((n + 1)); log "$tag: training session gone; restart from ${newest:-init}"
