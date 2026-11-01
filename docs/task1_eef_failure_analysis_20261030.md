@@ -581,3 +581,25 @@ holdout5 配方完全相同，只换随机种子（留出 044/035/046/041/048，
 
 **GPU 安排**：12:25–16:50 GPU 空闲了约 4.5 小时（我这边的定时检查没有按时触发）。现在用 all50noise 的配方换种子 7 和 13 各训一份（all50noises7 / all50noises13，各 2000 步，约 20:00 跑完）：
 真机候选 all50noise-1k 只有一个种子，多两个同配方的权重可以做真机上的备选，也能看见过场景上的稳定性。不期望它们比 all50noise-1k 更泛化。
+
+### 11-01 17:30 mac_63 上的 joint8 state dropout 权重：没有效果
+
+被测权重（mac_63，8 任务联合训练，新 ActionCodec，franka_quantile 归一化）：
+- `franka_joint8_state_dropout_geo_from20k_10k_20261030`：从 joint8 ownstate 20k 接着训 10k 步，state dropout 30%，主相机几何增强 50%。
+- 对照 `franka_joint8_newcodec_ownstate_qwen_20k_20261028` save_20000：同一条线，没有 state dropout。
+- 两者的训练数据都包含全部 50 条 Task0（含 044/035/046/041/048），所以**离线只能比"见过的场景"拟合得好不好，测不了泛化**。
+
+| 权重 | 换图测试 image_reliance | 闭环中位数 | ≤20 mm | 10 个场景（都在训练集里） |
+|---|---|---|---|---|
+| joint8 ownstate 20k（无 dropout） | 0.10 | 86 | 2 | 130/28/156/12/122 · 93/14/79/121/48 |
+| joint8 stateDrop30 5k | 0.11 | 60 | 1 | 19/123/32/64/33 · 176/30/56/163/110 |
+| joint8 stateDrop30 10k | 0.10 | 93 | 0 | 28/134/155/86/66 · 99/85/38/147/112 |
+| 对照 all50noise-1k（act-v2 线，真机候选） | 0.94 | 20 | 6 | 251/12/20/212/11 · 31/20/20/5/14 |
+
+- **image_reliance 约 0.10**：把图像换成别的场景，预测动作只变约 2 mm（不同场景之间的正常差异约 25 mm）。joint8 这条线在 Task0 上基本不看图像，state dropout 之前就是这样，加了 dropout 也没变。
+- 闭环误差在自己的训练场景上也有 60–93 mm，明显差于 all50noise-1k。
+- 排查过的评估一致性：Task0 数据和评估数据是同一份（符号链接，文件 md5 相同）；ActionCodec、状态统计文件在 mac_20 和 mac_63 上 md5 相同；
+  prompt 模板和部署脚本一致；指令设为 "place the red test tube in the red basket"；transformers 4.57（训练环境）和 5.3 两种环境评估结果一致（image_reliance 0.10/0.15）。
+  换图测试只看"换图前后动作差多少"，不受动作语义影响，所以"基本不看图像"这个结论是可靠的。
+- **结论**：这个 state dropout 权重对 Task0 没有帮助，不建议上真机。真机候选不变，仍是 all50noise-1k。
+- 权重副本：mac_20 `/data2/lyh/vla/runs/claude_joint8drop/`、`claude_joint8base/`（training_config 里补了 task_instruction，原件未动）；结果 `~/offline_eval/results/joint8drop_*`、`joint8base_*`。
