@@ -31,6 +31,7 @@
         "act-v2",
         "all50noise-2k",
         "all50noise-1k",
+        "joint9-384-16k",
         "all50noises13-1k",
         "all50-2k",
         "act",
@@ -386,6 +387,54 @@
         "training_config_path": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt/training_config.json",
         "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
         "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0",
+        "task2": "Task2",
+        "task40": "Task40"
+      }
+    },
+    "joint9-384-16k": {
+      "scope": "multi_task",
+      "training_tasks": [
+        "Task0",
+        "Task1",
+        "Task2",
+        "Task3",
+        "Task4",
+        "Task5",
+        "Task6",
+        "Task40",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/Franka_vr_joint9_clean_20261101/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8109,
+        "gpu": 4,
+        "checkpoint": "/data2/lyh/vla/runs/franka_joint9_384_state_dropout_geo_so3linear_from30k_20k_20261101/Qwen3VL2B+Franka-Joint+lr0.0001+joint9_384_from30k_stateDrop30_primaryGeo50_rot5_so3linear_20k_b128/save_16000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_joint9_384_state_dropout_geo_so3linear_from30k_20k_20261101/Qwen3VL2B+Franka-Joint+lr0.0001+joint9_384_from30k_stateDrop30_primaryGeo50_rot5_so3linear_20k_b128/save_16000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_joint9_384_state_dropout_geo_so3linear_from30k_20k_20261101/Qwen3VL2B+Franka-Joint+lr0.0001+joint9_384_from30k_stateDrop30_primaryGeo50_rot5_so3linear_20k_b128/save_16000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/config/franka_joint9_frozen8task_action_norm_20261101.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "adapter": {
+        "model_image_size": 384,
+        "gripper_close_max_z": 0.29
       },
       "task_key_to_training_task": {
         "task1": "Task0",
