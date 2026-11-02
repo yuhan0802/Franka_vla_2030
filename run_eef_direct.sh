@@ -221,7 +221,7 @@ esac
 printf -v quoted_flags '%q ' "${adapter_flags[@]}"
 echo "EEF DIRECT $mode (no MoveIt Servo): server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
 set +e
-docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
   set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
   exec python3 src/franka_vr/franka_vr/scripts/eef_pose_direct_adapter.py '"$quoted_flags"'
 ' 2>&1 | tee "$log_dir/adapter.log"

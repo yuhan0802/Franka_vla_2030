@@ -17,7 +17,7 @@ case "$exterior_camera" in
   *) echo "VLA_EXTERIOR_CAMERA must be all, left or right" >&2; exit 2 ;;
 esac
 echo "Camera mode: $camera_mode; exterior camera: $exterior_camera"
-docker compose run --rm -e "VLA_CAMERA_MODE=$camera_mode" -e "VLA_EXTERIOR_CAMERA=$exterior_camera" franka_vr bash -lc '
+docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -e "VLA_CAMERA_MODE=$camera_mode" -e "VLA_EXTERIOR_CAMERA=$exterior_camera" franka_vr bash -lc '
   set -eo pipefail
   source /opt/ros/humble/setup.bash
   cd /ws_franka_vr

@@ -161,7 +161,7 @@ if [[ "$mode" == probe ]]; then
   printf -v quoted_flags '%q ' "${probe_flags[@]}"
   echo "EEF STATE PROBE: camera=$exterior_camera/$camera_mode logs=$log_dir (the arm is never commanded)"
   set +e
-  docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+  docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
     set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
     exec python3 src/franka_vr/franka_vr/scripts/eef_state_probe.py '"$quoted_flags"'
   ' 2>&1 | tee "$log_dir/probe.log"
@@ -229,7 +229,7 @@ esac
 printf -v quoted_flags '%q ' "${adapter_flags[@]}"
 echo "EEF POSE $mode: server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
 set +e
-docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
   set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
   exec python3 src/franka_vr/franka_vr/scripts/eef_pose_policy_adapter.py '"$quoted_flags"'
 ' 2>&1 | tee "$log_dir/adapter.log"
