@@ -218,12 +218,21 @@ case "$mode" in
     fi;;
 esac
 
+# chunk_mode rtc: asynchronous inference with blended chunk hand-over (execute only; dry-run stays serial).
+adapter_script=eef_pose_direct_adapter.py
+if [[ "${EEF_CHUNK_MODE:-serial}" == rtc ]]; then
+  adapter_script=eef_pose_rtc_adapter.py
+  adapter_flags+=(--rtc-blend-steps "${EEF_RTC_BLEND_STEPS:-4}")
+elif [[ "${EEF_CHUNK_MODE:-serial}" != serial ]]; then
+  echo "EEF_CHUNK_MODE must be serial or rtc" >&2; exit 2
+fi
+
 printf -v quoted_flags '%q ' "${adapter_flags[@]}"
-echo "EEF DIRECT $mode (no MoveIt Servo): server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
+echo "EEF DIRECT $mode (no MoveIt Servo, ${EEF_CHUNK_MODE:-serial} chunks): server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
 set +e
 docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
   set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
-  exec python3 src/franka_vr/franka_vr/scripts/eef_pose_direct_adapter.py '"$quoted_flags"'
+  exec python3 src/franka_vr/franka_vr/scripts/'"$adapter_script $quoted_flags"'
 ' 2>&1 | tee "$log_dir/adapter.log"
 status=${PIPESTATUS[0]}
 set -e

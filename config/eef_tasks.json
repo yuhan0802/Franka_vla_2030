@@ -31,6 +31,7 @@
         "act-v2",
         "all50noise-2k",
         "all50noise-1k",
+        "all50noise-1k-rtc",
         "joint9-384-16k",
         "all50noises13-1k",
         "all50-2k",
@@ -130,6 +131,31 @@
       },
       "adapter": {
         "gripper_close_max_z": 0.29
+      }
+    },
+    "all50noise-1k-rtc": {
+      "server": {
+        "ssh": "mac_20",
+        "host": "10.24.116.20",
+        "port": 8106,
+        "gpu": 2,
+        "checkpoint": "/data2/lyh/vla/runs/franka_task0_actv2_continue_all50noise_20261030/Qwen3VL2B+Franka-Task0+lr5e-05+actv2_8k_continue_all50noise_stateaug_noise/save_1000_chkpt",
+        "actioncodec": "/data2/lyh/weights/ActionCodec-Base-RVQft",
+        "state_stats": "/data2/lyh/vla/config/droid_eef_axis_angle_state_stats.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "task0_maxabs",
+        "params_path": "/data2/lyh/vla/runs/franka_task0_actv2_continue_all50noise_20261030/Qwen3VL2B+Franka-Task0+lr5e-05+actv2_8k_continue_all50noise_stateaug_noise/save_1000_chkpt/training_config.json",
+        "params_key": "action_arm_scale"
+      },
+      "adapter": {
+        "gripper_close_max_z": 0.29
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "rtc_blend_steps": 4
       }
     },
     "all50noises13-1k": {
