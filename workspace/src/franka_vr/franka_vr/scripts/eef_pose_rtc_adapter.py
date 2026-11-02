@@ -43,7 +43,8 @@ class EefRtcAdapter(direct_base.EefDirectAdapter):
         self.rtc_active = bool(args.execute) and not args.test_axis
         self.get_logger().warning(
             f"RTC chunking {'ON' if self.rtc_active else 'OFF (serial loop)'}: execute-horizon {args.execute_horizon}, "
-            f"blend {rtc.blend_steps} steps, delay margin {rtc.delay_margin} steps")
+            f"observe after {rtc.observe_after or 'adaptive'} steps, blend {rtc.blend_steps} steps, "
+            f"delay margin {rtc.delay_margin} steps")
         self.log("rtc_start", rtc=vars(rtc), active=self.rtc_active)
 
     # ----------------------------------------------------------------- loop
@@ -67,7 +68,7 @@ class EefRtcAdapter(direct_base.EefDirectAdapter):
         expected = delay_steps(self.latency_estimate, self.args.action_hz, self.rtc.delay_margin)
         if (self.future is None and not self.chunk_budget_spent()
                 and observe_due(self.plans[-1] if self.plans else None, self.executed,
-                                self.args.execute_horizon, expected)):
+                                self.args.execute_horizon, expected, self.rtc.observe_after)):
             self.request_chunk(now)
         if self.plans and now >= self.next_action_at: self.rtc_step(now)
 
@@ -214,6 +215,9 @@ def parse_rtc_args() -> argparse.Namespace:
     add = parser.add_argument
     add("--rtc-blend-steps", dest="blend_steps", type=int, default=4,
         help="steps over which a new chunk takes over from the previous one")
+    add("--rtc-observe-after", dest="observe_after", type=int, default=0,
+        help="observe for the next chunk once the active one has run this many steps; 0 times it from "
+             "the measured latency and --execute-horizon")
     add("--rtc-delay-margin", dest="delay_margin", type=int, default=1,
         help="extra steps added to the measured inference delay when timing the next observation")
     add("--rtc-initial-latency", dest="initial_latency", type=float, default=0.6,
@@ -222,6 +226,7 @@ def parse_rtc_args() -> argparse.Namespace:
     sys.argv = [sys.argv[0], *remaining]
     if not 1 <= rtc.blend_steps <= 8: parser.error("rtc-blend-steps must be in [1, 8]")
     if not 0 <= rtc.delay_margin <= 5: parser.error("rtc-delay-margin must be in [0, 5]")
+    if not 0 <= rtc.observe_after <= 14: parser.error("rtc-observe-after must be in [0, 14]")
     if not 0 < rtc.initial_latency <= 2.0: parser.error("rtc-initial-latency must be in (0, 2] s")
     return rtc
 

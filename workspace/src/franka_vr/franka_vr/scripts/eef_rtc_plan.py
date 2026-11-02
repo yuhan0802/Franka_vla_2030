@@ -21,7 +21,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from eef_pose_safety import ChunkTargetIntegrator, normalize_quaternion, physical_step
+from eef_pose_safety import ChunkTargetIntegrator, normalize_quaternion, physical_step, quaternion_multiply
 
 
 @dataclass
@@ -100,13 +100,24 @@ def target_at(plans: Sequence[RtcPlan], step: int):
     info = dict(rtc_obs_step=active.obs_step, rtc_index=i, rtc_blend_weight=1.0)
     since_arrival = step - active.arrival_step
     if 0 <= since_arrival < active.fade_steps:
-        j = plans[-2].index(step) if len(plans) > 1 and active.fade_from is None else None
-        source = (plans[-2].positions[j], plans[-2].quaternions[j]) if j is not None else active.fade_from
-        if source is not None:
-            weight = (since_arrival + 1) / (active.fade_steps + 1)
-            position = (1.0 - weight) * np.asarray(source[0]) + weight * position
-            quaternion = slerp(source[1], quaternion, weight)
-            info.update(rtc_blend_weight=weight, rtc_blend_source="previous" if j is not None else "held")
+        weight = (since_arrival + 1) / (active.fade_steps + 1)
+        if active.fade_from is None:
+            j = plans[-2].index(step) if len(plans) > 1 else None
+            if j is not None:
+                position = (1.0 - weight) * plans[-2].positions[j] + weight * position
+                quaternion = slerp(plans[-2].quaternions[j], quaternion, weight)
+                info.update(rtc_blend_weight=weight, rtc_blend_source="previous")
+        else:
+            # The arm holds a target the new plan already passed or not yet reached; fade out only
+            # that offset, so a plan that continues from the held target keeps its own speed.
+            anchor = active.arrival_step - active.obs_step - 1
+            anchor_position, anchor_quaternion = ((active.positions[anchor], active.quaternions[anchor]) if anchor >= 0
+                                                  else (active.start_position, active.start_quaternion))
+            held_position, held_quaternion = active.fade_from
+            position = position + (1.0 - weight) * (np.asarray(held_position) - anchor_position)
+            correction = quaternion_multiply(normalize_quaternion(held_quaternion), anchor_quaternion * [-1, -1, -1, 1])
+            quaternion = quaternion_multiply(slerp([0.0, 0.0, 0.0, 1.0], correction, 1.0 - weight), quaternion)
+            info.update(rtc_blend_weight=weight, rtc_blend_source="held")
     return np.asarray(position, float), normalize_quaternion(quaternion), float(active.grippers[i]), info
 
 
@@ -115,6 +126,14 @@ def delay_steps(latency_s: float, action_hz: float, margin: int) -> int:
     return int(math.ceil(max(latency_s, 0.0) * action_hz)) + margin
 
 
-def observe_due(active: Optional[RtcPlan], executed: int, execute_horizon: int, expected_delay: int) -> bool:
-    """Ask for the next chunk so it lands about execute_horizon steps after the active one's observation."""
-    return active is None or executed - active.obs_step >= execute_horizon - expected_delay
+def observe_due(active: Optional[RtcPlan], executed: int, execute_horizon: int, expected_delay: int,
+                observe_after: int = 0) -> bool:
+    """Whether to ask for the next chunk now.
+
+    observe_after > 0: once the active chunk has run that many steps since it took over (the arm keeps
+    following it while the next one is inferred). 0: so the answer lands about execute_horizon steps
+    after the active chunk's observation.
+    """
+    if active is None: return True
+    if observe_after > 0: return executed - active.arrival_step >= observe_after
+    return executed - active.obs_step >= execute_horizon - expected_delay

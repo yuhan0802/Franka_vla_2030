@@ -222,7 +222,7 @@ esac
 adapter_script=eef_pose_direct_adapter.py
 if [[ "${EEF_CHUNK_MODE:-serial}" == rtc ]]; then
   adapter_script=eef_pose_rtc_adapter.py
-  adapter_flags+=(--rtc-blend-steps "${EEF_RTC_BLEND_STEPS:-4}")
+  adapter_flags+=(--rtc-blend-steps "${EEF_RTC_BLEND_STEPS:-4}" --rtc-observe-after "${EEF_RTC_OBSERVE_AFTER:-0}")
 elif [[ "${EEF_CHUNK_MODE:-serial}" != serial ]]; then
   echo "EEF_CHUNK_MODE must be serial or rtc" >&2; exit 2
 fi

@@ -155,7 +155,8 @@
       },
       "runtime": {
         "chunk_mode": "rtc",
-        "rtc_blend_steps": 4
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6
       }
     },
     "all50noises13-1k": {

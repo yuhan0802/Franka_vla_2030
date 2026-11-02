@@ -75,12 +75,15 @@ def resolve(config, task_key, model_key, control=None):
     if not isinstance(runtime["execute_horizon"], int) or not 1 <= runtime["execute_horizon"] <= 15:
         raise ValueError("runtime.execute_horizon out of range")
     runtime.setdefault("chunk_mode", "serial"); runtime.setdefault("rtc_blend_steps", 4)
+    runtime.setdefault("rtc_observe_after", 0)
     if runtime["chunk_mode"] not in ("serial", "rtc"):
         raise ValueError("runtime.chunk_mode must be serial or rtc")
     if runtime["chunk_mode"] == "rtc" and control != "direct":
         raise ValueError("runtime.chunk_mode rtc is implemented for direct control only")
     if not isinstance(runtime["rtc_blend_steps"], int) or not 1 <= runtime["rtc_blend_steps"] <= 8:
         raise ValueError("runtime.rtc_blend_steps must be an integer in [1, 8]")
+    if not isinstance(runtime["rtc_observe_after"], int) or not 0 <= runtime["rtc_observe_after"] <= 14:
+        raise ValueError("runtime.rtc_observe_after must be an integer in [0, 14] (0: adaptive)")
     for key, upper in (("max_chunks", 200), ("max_actions", 2000)):
         if not isinstance(runtime[key], int) or runtime[key] < 0 or runtime[key] > upper:
             raise ValueError(f"runtime.{key} out of range (0 means unlimited)")
@@ -156,6 +159,7 @@ def environment(profile):
             "EEF_ACTION_GAIN": " ".join(map(str, r["action_gain"])),
             "EEF_CHUNK_START": r["chunk_start"], "EEF_EXECUTE_HORIZON": str(r["execute_horizon"]),
             "EEF_CHUNK_MODE": r["chunk_mode"], "EEF_RTC_BLEND_STEPS": str(r["rtc_blend_steps"]),
+            "EEF_RTC_OBSERVE_AFTER": str(r["rtc_observe_after"]),
             "EEF_MAX_CHUNKS": str(r["max_chunks"]), "EEF_MAX_ACTIONS": str(r["max_actions"]),
             "EEF_AUTO_HOME": str(r["auto_home"]).lower(),
             "EEF_EXPECTED_ACTION_NORMALIZATION": n.get("method", "") if n.get("method") in ("franka_maxabs", "franka_mulaw", "franka_quantile") else "",

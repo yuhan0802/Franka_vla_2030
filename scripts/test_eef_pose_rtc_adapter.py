@@ -76,7 +76,16 @@ class PlanTests(unittest.TestCase):
         hand_over(old, new, 4, held)
         position, _, _, info = target_at([old, new], 20)
         self.assertEqual(info["rtc_blend_source"], "held")
-        np.testing.assert_allclose(position, 0.8 * held[0] + 0.2 * new.positions[10])
+        # the new plan put the arm at its waypoint 9 before arriving; 80% of the gap to the held target remains
+        np.testing.assert_allclose(position, new.positions[10] + 0.8 * (held[0] - new.positions[9]))
+
+    def test_plan_continuing_from_the_held_target_keeps_its_speed(self):
+        old = plan(chunk(dx=0.04))
+        new = plan(chunk(dx=0.04), start=old.positions[11], obs_step=12, arrival_step=15)   # held after step 14
+        hand_over(old, new, 4, (old.positions[14], old.quaternions[14]))
+        path = np.array([target_at([old, new], step)[0] for step in range(15, 20)])
+        steps = np.linalg.norm(np.diff(np.vstack([old.positions[14], path]), axis=0), axis=1)
+        np.testing.assert_allclose(steps, 0.003, atol=1e-9)
 
     def test_slerp_takes_the_short_way(self):
         q = slerp(DOWN, -DOWN, 0.5)
@@ -88,6 +97,9 @@ class PlanTests(unittest.TestCase):
         self.assertFalse(observe_due(p, 21, 10, 8))
         self.assertTrue(observe_due(p, 22, 10, 8))
         self.assertTrue(observe_due(None, 0, 10, 8))
+        late = plan(chunk(), obs_step=20, arrival_step=25)
+        self.assertFalse(observe_due(late, 30, 10, 8, observe_after=6))
+        self.assertTrue(observe_due(late, 31, 10, 8, observe_after=6))
 
 
 class LatentFuture:
@@ -180,6 +192,18 @@ class RtcAdapterTests(unittest.TestCase):
         # Constant 1.5 mm/step command: no step goes backwards or jumps across a hand-over.
         self.assertLess(steps.max(), 0.0016); self.assertGreater(steps.min(), 0.0014)
         self.assertTrue(any(a["rtc_blend_weight"] < 1.0 for a in self.actions(node)))
+
+    def test_observe_after_runs_each_chunk_before_asking_again(self):
+        self.harness.FakePolicy.chunks = [chunk(dx=0.02)] * 4
+        node = self.node("--rtc-observe-after", "6")
+        self.run_node(node)
+        self.assertFalse(node.fault, node.events[-3:])
+        chunks = [fields for event, fields in node.events if event == "chunk"]
+        for previous, current in zip(chunks, chunks[1:]):
+            self.assertEqual(current["rtc_obs_step"] - previous["rtc_arrival_step"], 6)
+        targets = np.array([a["target_position"] for a in self.actions(node)])
+        steps = np.linalg.norm(np.diff(targets, axis=0), axis=1)
+        self.assertLess(steps.max(), 0.0016)
 
     def test_hand_over_to_a_stopping_chunk_is_smooth(self):
         self.harness.FakePolicy.chunks = [chunk(dx=0.04), chunk(), chunk(), chunk()]
