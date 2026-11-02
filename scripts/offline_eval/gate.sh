@@ -38,8 +38,10 @@ done
 ss -ltn | grep -q ":$port " || { echo "server did not start"; exit 1; }
 grep -o "'state_input': '[a-z_]*'" "$out/server.log" || true
 cd "$here"
-# SIM_ONLY=1 skips the swap test (reuses swap.json if present); SIM_ARGS go to closed_loop_sim.py.
-[[ "${SIM_ONLY:-0}" == 1 ]] || "$PY" swap_test.py --port "$port" --output "$out/swap.json" | tail -1
+# SIM_ONLY=1 skips the swap test (reuses swap.json if present); SWAP_ARGS / SIM_ARGS go to swap_test.py /
+# closed_loop_sim.py. Other tasks: EVAL_DATA_ROOT, EVAL_TASK, EVAL_INSTRUCTION (eef_eval_common.py) plus
+# --pairs / --episodes naming that task's episodes; the pass line below is calibrated on Task0 only.
+[[ "${SIM_ONLY:-0}" == 1 ]] || "$PY" swap_test.py --port "$port" --output "$out/swap.json" ${SWAP_ARGS:-} | tail -1
 "$PY" closed_loop_sim.py --port "$port" --output "$out/closed_loop.json" ${SIM_ARGS:-} | tail -11
 "$PY" - "$out" <<'PY'
 import json, os, sys

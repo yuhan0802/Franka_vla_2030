@@ -11,8 +11,10 @@ import msgpack
 import numpy as np
 import websockets.sync.client as wsc
 
-DATA_ROOT = Path("/data2/lyh/vla/Franka_vr_all_real_actioncodec_clean_20261028")
-INSTRUCTION = "place the red test tube in the red basket"
+# Defaults are Task0; EVAL_DATA_ROOT / EVAL_TASK / EVAL_INSTRUCTION evaluate another task (e.g. Task3).
+DATA_ROOT = Path(os.environ.get("EVAL_DATA_ROOT", "/data2/lyh/vla/Franka_vr_all_real_actioncodec_clean_20261028"))
+TASK = os.environ.get("EVAL_TASK", "Task0")
+INSTRUCTION = os.environ.get("EVAL_INSTRUCTION", "place the red test tube in the red basket")
 LINEAR_SCALE_M, ANGULAR_SCALE_RAD = 0.075, 0.15
 # Gripper commands below this value close, matching the adapter's hysteresis close threshold.
 CLOSE_THRESHOLD = 0.4
@@ -55,9 +57,9 @@ class Policy:
 
 
 class Episode:
-    """A Task0 demonstration: 30 Hz states, gripper targets and RGB frames (left exterior + wrist)."""
+    """A demonstration (TASK by default): 30 Hz states, gripper targets and RGB frames (left exterior + wrist)."""
 
-    def __init__(self, name: str, task: str = "Task0"):
+    def __init__(self, name: str, task: str = TASK):
         root = DATA_ROOT / task / name
         cache = np.load(root / "data/franka_measured_eef_base_15hz_v5.npz")
         self.name, self.states = name, cache["eef_state"].astype(np.float64)
