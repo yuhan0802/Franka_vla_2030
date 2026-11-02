@@ -15,7 +15,7 @@
       "gripper_close_max_z": 0
     },
     "runtime": {
-      "execute_horizon": 15,
+      "execute_horizon": 10,
       "max_chunks": 0,
       "max_actions": 0,
       "chunk_start": "last_target",
