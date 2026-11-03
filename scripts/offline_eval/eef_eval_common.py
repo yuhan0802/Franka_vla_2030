@@ -63,7 +63,7 @@ class Episode:
         root = DATA_ROOT / task / name
         cache = np.load(root / "data/franka_measured_eef_base_15hz_v5.npz")
         self.name, self.states = name, cache["eef_state"].astype(np.float64)
-        opened = cache["gripper_target_open"]
+        self.gripper_target_open = opened = cache["gripper_target_open"]
         self.close_index = int(np.argmax(opened < 0.5)) if (opened < 0.5).any() else -1
         self.left = self._frames(root / "videos/chunk-000/observation.images.left/episode_000000.mp4")
         self.wrist = self._frames(root / "videos/chunk-000/observation.images.front/episode_000000.mp4")
