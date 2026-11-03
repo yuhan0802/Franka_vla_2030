@@ -91,7 +91,7 @@ export HF_HOME="\$P/actioncodec_libero/.cache/huggingface" USE_TF=0 TRANSFORMERS
 "\$PY" -u $server_script --checkpoint '$checkpoint' --actioncodec '$actioncodec' --state-stats '$state_stats' --port '$port' $rotation_option $server_args 2>&1 | tee -a server_$port.log
 EOF
   ssh "$remote" "mkdir -p ~/franka_eef_server"
-  scp -q "$root_dir/$server_script" "$remote:franka_eef_server/"
+  scp -q "$root_dir/server/$server_script" "$remote:franka_eef_server/"
   scp -q "$script" "$remote:franka_eef_server/run_server_$port.sh"; rm -f "$script"
   ssh "$remote" "tmux kill-session -t '$remote_session' 2>/dev/null || true; tmux new-session -d -s '$remote_session' 'bash ~/franka_eef_server/run_server_$port.sh'"
   echo "Starting EEF server on $remote (GPU $server_gpu, port $port)..."

@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-tree = ast.parse((ROOT / "deploy_franka_task0_qwen_actioncodec_eef.py").read_text())
+tree = ast.parse((ROOT / "server" / "deploy_franka_task0_qwen_actioncodec_eef.py").read_text())
 function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "denormalize_actions")
 namespace = {"np": np}
 exec(compile(ast.Module(body=[function], type_ignores=[]), "server_action_decoder", "exec"), namespace)

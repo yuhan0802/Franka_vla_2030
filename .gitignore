@@ -21,3 +21,7 @@ workspace/src/franka_vr/vla_observation_captures/
 workspace/build/
 workspace/install/
 workspace/log/
+
+# Local run logs and recorded datasets (kept on the robot host, not in git)
+validation_logs/
+datasets/

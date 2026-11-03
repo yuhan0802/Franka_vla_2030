@@ -5,6 +5,35 @@
 > [!WARNING]
 > 本项目不是安全认证的机器人控制系统。真机运行前，必须完成 Franka 官方要求的安装、网络和实时性检查；保持急停可用，并确保工作区无人。首次测试应低速、无负载进行。
 
+## 当前主流程（EEF 位姿 VLA）
+
+日常使用的入口都在仓库根目录：
+
+| 步骤 | 命令 | 说明 |
+| --- | --- | --- |
+| FCI 初始化 / 回零 | `./fci_init.sh`、`./homing.sh` | 上电后先初始化；夹爪宽度异常（录制报“未回零”）时执行 `./homing.sh` |
+| 真机 + VR 遥操作 | `./run_robot.sh` + `./run_vr.sh` | 右扳机跟随，右握键控制夹爪 |
+| 采集示教数据 | `./run_lerobot_record.sh <数据集> <秒数> <任务描述>` | 保存时自动检查夹爪标签（指令与实测宽度是否一致、是否未回零），不通过会报 ERROR 并写入 `episodes.jsonl` |
+| 跑 VLA 任务 | `./run_eef_task.sh <任务> <模型> dry-run\|run\|stop` | 模型与服务器统一登记在 `config/eef_tasks.json`，详见 [docs/eef_task_launcher.md](docs/eef_task_launcher.md)；`task1.sh`、`task1-act-v2.sh`、`tk1.sh` 等是它的快捷方式 |
+
+策略输入的末端位姿是 `/franka/joint_states` 的 FR3 正运动学（FK），与训练数据一致；TF `world->fr3_link8` 只做交叉校验（TF 每 60 ms 才更新一次，会滞后）。
+
+数据清洗与核验脚本在 `scripts/data_fix/`，夹爪标签问题的来龙去脉见 [docs/task3_gripper_label_bug_20261103.md](docs/task3_gripper_label_bug_20261103.md)。
+
+## 目录结构
+
+| 位置 | 内容 |
+| --- | --- |
+| 根目录 `*.sh` | 启动入口（机器人、VR、相机、录制、EEF 任务、旧 pi0.5 入口） |
+| `config/` | EEF 任务与模型登记表 `eef_tasks.json` |
+| `server/` | GPU 服务器上运行的模型服务（`run_eef_pose.sh` 自动拷贝过去）与轨迹回放服务 |
+| `scripts/` | 辅助工具与离线测试 `test_*.py`；`scripts/data_fix/` 数据清洗；`scripts/offline_eval/` 离线评估 |
+| `workspace/src/franka_vr/` | ROS 2 包：遥操作、录制、EEF 适配器等节点 |
+| `docs/` | 部署手册、排障、分析报告；`docs/experiments/` 实验记录；`docs/archive/` 早期文档 |
+| `calibration/`、`docker/`、`vendor/`、`upstream-libfranka-docker/` | 相机标定、镜像构建、上游依赖 |
+
+`logs/`、`validation_logs/`、`datasets/` 是机器人主机上的本地运行产物，不纳入 git。
+
 ## 功能
 
 - Gazebo Sim：FR3、Franka Hand、重力、碰撞、摩擦与可抓取方块
@@ -52,7 +81,7 @@ Gazebo 和 RViz 打开、终端出现 `You can start planning now!` 后即可操
 | FrankaVR 三视角 VLA | `./run_vla.sh dry-run` | 一键启动新模型、真机状态栈、三路相机和只读推理桥；默认不会运动 |
 | LeRobot episode 采集 | `./run_lerobot_record.sh [数据集名称] [秒数] [任务描述]` | 三路 RGB 编码为 MP4；同一数据集自动追加 `episode_000000`、`episode_000001`… 的 LeRobot v2.1 风格 episode。只有 Quest 右手柄 `A` 键会保存本次 episode；达到时长后会停止采样并等待 `A` 键确认，`Ctrl+C` 或异常退出会丢弃本次录制（需同时运行 `./run_vr.sh`） |
 
-`run_gazebo.sh` 与 `run_gazebo_vr.sh` 不连接真机，也不需要 `ROBOT_IP`。每次运行都会创建一个临时容器；同一时刻只应保留一个 Gazebo 栈。详细排障见 [problem.md](problem.md)。
+`run_gazebo.sh` 与 `run_gazebo_vr.sh` 不连接真机，也不需要 `ROBOT_IP`。每次运行都会创建一个临时容器；同一时刻只应保留一个 Gazebo 栈。详细排障见 [docs/problem.md](docs/problem.md)。
 
 所有启动脚本都会重新构建当前挂载的 `franka_vr` 源码；修改 ROS 包通常无需重建镜像。仅 Dockerfile、系统依赖或上游源码变更后需要重新执行 `docker compose build`。
 
@@ -78,7 +107,7 @@ Gazebo 和 RViz 打开、终端出现 `You can start planning now!` 后即可操
 REALSENSE_SERIAL=<序列号> CAMERA_NAME=front_camera ./run_realsense.sh
 ```
 
-### FrankaVR 三视角 VLA（mac20）
+### FrankaVR 三视角 VLA（mac20，旧关节动作入口）
 
 仅使用端口 `8093` 的 FrankaVR 真机微调模型；旧 8092/LIBERO 入口已移除。推荐使用唯一总入口：
 
@@ -153,7 +182,7 @@ FCI_INTERFACE=<网卡名> FCI_IRQ_CPU=<CPU编号> ./run_robot.sh
 
 启动前脚本会报告 FCI 网卡协商速率、机器人可达性和 `/sys/kernel/realtime` 状态。1000 Mb/s 全双工与 PREEMPT_RT 是推荐配置；为兼容已有已验证部署，较低链路速率仅告警，实际连接仍由 libfranka 判断。
 
-MoveIt 规划栈和 Quest/Servo 栈都会创建硬件节点，不能同时启动。真机的网络与实时性检查、常见问题及安全边界在 [problem.md](problem.md) 中维护。
+MoveIt 规划栈和 Quest/Servo 栈都会创建硬件节点，不能同时启动。真机的网络与实时性检查、常见问题及安全边界在 [docs/problem.md](docs/problem.md) 中维护。
 
 启动真机前必须停止 Gazebo、fake-hardware 或旧真机栈；它们共享 host 网络和 `/controller_manager`，不能并存。
 
@@ -186,7 +215,11 @@ docker compose run --rm franka_vr bash -lc '
 
 ## 文档
 
-- [常见问题与排障](problem.md)
+- [常见问题与排障](docs/problem.md)
+- [EEF 任务入口](docs/eef_task_launcher.md)、[EEF 位姿控制适配器](docs/franka_eef_pose_control_adapter.md)
+- [真机 VLA 部署手册](docs/deploy.md)、[服务端部署](docs/server_deploy.md)、[快速流程](docs/quick_start_process.md)
+- [Task3 夹爪标签错误分析](docs/task3_gripper_label_bug_20261103.md)、[Task1 EEF 失败分析](docs/task1_eef_failure_analysis_20261030.md)
+- 早期 pi0.5 / 检测文档：[docs/archive/](docs/archive/)
 - [.env 配置示例](.env.example)
 - [MIT 许可证](LICENSE)
 

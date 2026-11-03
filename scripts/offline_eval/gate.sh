@@ -10,7 +10,7 @@ checkpoint="$1"; gpu="$2"; port="$3"; out="$4"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # In the repo the deploy script sits two levels up; on a GPU host copy it next to this script.
 deploy="$here/deploy_franka_task0_qwen_actioncodec_eef.py"
-[[ -f "$deploy" ]] || deploy="$here/../../deploy_franka_task0_qwen_actioncodec_eef.py"
+[[ -f "$deploy" ]] || deploy="$here/../../server/deploy_franka_task0_qwen_actioncodec_eef.py"
 deploy_dir="$(cd "$(dirname "$deploy")" && pwd)"
 P=/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA
 # Use the env the checkpoint was trained with: act-v2 era checkpoints need transformers 5.3
