@@ -200,8 +200,8 @@ class EefDirectAdapter(base.EefAdapter):
                 self.direct_fault("real joint feedback unavailable while tracking")
             return
         position, quaternion, _ = forward_kinematics(joints)
-        # The tracker runs on FK of /franka/joint_states; TF (what the adapter checks) must agree.
-        tf_pose = self.pose()
+        # The tracker and the policy state run on FK of /franka/joint_states; TF must still agree.
+        tf_pose = self.tf_pose()
         if tf_pose is not None:
             distance, angle = pose_discrepancy(position, quaternion, *tf_pose)
             self.fk_worst = (max(self.fk_worst[0], distance), max(self.fk_worst[1], angle))
@@ -221,6 +221,31 @@ class EefDirectAdapter(base.EefAdapter):
                      sigma_min=command.min_singular_value, speed_scaled=command.speed_scaled,
                      acceleration_scaled=command.acceleration_scaled, fk_position=position.tolist(),
                      target_position=self.track_target[0].tolist())
+
+    def pose(self) -> Optional[tuple]:
+        """End-effector pose for the policy state and all safety checks: FK of /franka/joint_states.
+
+        TF world->fr3_link8 is only republished every 60 ms, so it lags the arm; the
+        training data (since 2026-11-03) also uses FK of the recorded joint positions.
+        The pose stamp is the joint feedback stamp, which the fresh-observation barrier checks.
+        """
+        joints = joints_vector(self.real_joints)
+        if joints is None:
+            self.get_logger().info("waiting for /franka/joint_states", throttle_duration_sec=2.0); return None
+        age = time.monotonic() - self.feedback_received_at
+        if self.feedback_received_at <= 0.0 or age > self.args.max_tf_age:
+            self.get_logger().warning(f"arm joint feedback is {age:.3f}s old", throttle_duration_sec=2.0); return None
+        position, quaternion, _ = forward_kinematics(joints)
+        self.last_pose_stamp_ros_ns = self.feedback_stamp_ros_ns
+        return position, quaternion
+
+    def tf_pose(self) -> Optional[tuple]:
+        """TF world->fr3_link8, used only to cross-check FK (does not touch the pose stamp)."""
+        stamp = self.last_pose_stamp_ros_ns
+        try:
+            return base.EefAdapter.pose(self)
+        finally:
+            self.last_pose_stamp_ros_ns = stamp
 
     def direct_fault(self, reason: str) -> None:
         self.stop_tracking()
@@ -291,8 +316,8 @@ class EefDirectAdapter(base.EefAdapter):
 
     def observation(self) -> Optional[Dict[str, Any]]:
         if self.observation_barrier is None: return super().observation()
-        # Refresh TF first. Its ROS stamp is checked by base.pose() against the
-        # node ROS clock; never compare it directly with monotonic callback time.
+        # Refresh the FK pose first. Its ROS stamp (joint feedback) is checked against
+        # the node ROS clock; never compare it directly with monotonic callback time.
         pose = self.checked_pose()
         now = time.monotonic(); now_ros_ns = self.get_clock().now().nanoseconds
         if not self._stamp_matches_ros_clock(self.last_pose_stamp_ros_ns or None, self.args.max_tf_age):
@@ -304,7 +329,7 @@ class EefDirectAdapter(base.EefAdapter):
         received = {"exterior_image": self.image_times.get("exterior", 0.0),
                     "wrist_image": self.image_times.get("wrist", 0.0),
                     "arm_joint_state": self.feedback_received_at,
-                    # Map the validated TF ROS age into the local monotonic domain.
+                    # Map the validated pose (FK of joint feedback) ROS age into the local monotonic domain.
                     "eef_tf": now - max(0.0, (now_ros_ns - self.last_pose_stamp_ros_ns) * 1e-9)}
         if self.args.gripper_state_source in ("measured", "binary"):
             acquisition["gripper_state"] = self.gripper_acquisition_ros_ns

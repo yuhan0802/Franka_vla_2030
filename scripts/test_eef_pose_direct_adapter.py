@@ -41,6 +41,7 @@ class Sim:
         cls.joints, cls.velocity, cls.commands = REAL_JOINTS.copy(), np.zeros(7), []
         cls.executor_level, cls.executor_message, cls.feedback, cls.finger = 0, "armed", True, 0.04
         cls.exterior = True
+        SimBuffer.tf_offset = np.zeros(3)
         harness.World.now_ns = cls.now_ns
 
 
@@ -50,9 +51,12 @@ class FakePublisher:
 
 
 class SimBuffer:
+    tf_offset = np.zeros(3)     # simulates a lagging TF (world -> fr3_link8)
+
     def lookup_transform(self, target, source, time):
         from eef_direct_kinematics import forward_kinematics
         (x, y, z), (qx, qy, qz, qw), _ = forward_kinematics(Sim.joints)
+        x, y, z = np.array([x, y, z]) + SimBuffer.tf_offset
         n = harness._Namespace
         return n(header=n(stamp=n(nanoseconds=Sim.now_ns)),
                  transform=n(translation=n(x=x, y=y, z=z), rotation=n(x=qx, y=qy, z=qz, w=qw)))
@@ -72,8 +76,19 @@ def sim_spin(node, timeout_sec=None):
     keys = ("exterior", "wrist") if Sim.exterior else ("wrist",)
     node.images = {key: np.zeros((480, 640, 3), np.uint8) for key in keys}
     node.image_times = {key: Sim.now_ns * 1e-9 for key in keys}
+    # Camera header stamps: the post-completion barrier needs images acquired after the arm stopped.
+    node.image_acquisition_ros_ns = {key: Sim.now_ns for key in keys}
     for callback in list(node._timers):
         callback()
+
+
+def stamped_publish(node, topic, names, positions):
+    """Direct adapters read joint velocities and ROS header stamps (same as test_eef_pose_rtc_adapter)."""
+    stamp = types.SimpleNamespace(sec=Sim.now_ns // 10**9, nanosec=Sim.now_ns % 10**9)
+    velocity = list(Sim.velocity) if topic == "/franka/joint_states" else [0.0] * len(names)
+    message = harness._Namespace(name=list(names), position=list(positions), velocity=velocity,
+                                 header=harness._Namespace(stamp=stamp))
+    for callback in node._subscriptions.get(topic, []): callback(message)
 
 
 def install_direct_fakes():
@@ -87,6 +102,7 @@ def install_direct_fakes():
     sys.modules["rclpy"].spin_once = sim_spin
     sys.modules["tf2_ros"].Buffer = SimBuffer
     harness.FakeNode.create_publisher = lambda self, *args: FakePublisher()
+    harness.FakeNode.publish = stamped_publish
     harness.FakeNode.destroy_client = lambda self, client: None
 
 
@@ -124,6 +140,23 @@ class DirectAdapterTests(unittest.TestCase):
     def fk(self):
         from eef_direct_kinematics import forward_kinematics
         return forward_kinematics(Sim.joints)
+
+    def test_policy_state_is_fk_of_joint_feedback_not_tf(self):
+        node = self.node(execute=False)
+        for _ in range(5): sim_spin(node)
+        SimBuffer.tf_offset = np.array([0.02, 0.0, 0.0])    # TF 2 cm behind the joints
+        position, quaternion = node.pose()
+        fk_position, fk_quaternion, _ = self.fk()
+        np.testing.assert_allclose(position, fk_position, atol=1e-12)
+        np.testing.assert_allclose(quaternion, fk_quaternion, atol=1e-12)
+        self.assertEqual(node.last_pose_stamp_ros_ns, node.feedback_stamp_ros_ns)
+        tf_position, _ = node.tf_pose()
+        np.testing.assert_allclose(tf_position, fk_position + [0.02, 0.0, 0.0], atol=1e-12)
+        self.assertEqual(node.last_pose_stamp_ros_ns, node.feedback_stamp_ros_ns)   # cross-check leaves the stamp
+        Sim.feedback = False
+        for _ in range(40): sim_spin(node)                  # 0.4 s without joint feedback
+        self.assertIsNone(node.pose())
+        node.destroy_node()
 
     def test_policy_chunks_move_the_arm_along_the_commanded_direction(self):
         start, _, _ = self.fk()
@@ -188,7 +221,9 @@ class DirectAdapterTests(unittest.TestCase):
         for _ in range(20): sim_spin(node)
         self.assertTrue(all(np.allclose(c, 0.0) for c in Sim.commands[count:]))
 
-    def test_stale_joint_feedback_is_left_to_executor_watchdog(self):
+    def test_stale_joint_feedback_while_tracking_latches(self):
+        # Since edd0296 (2026-10-30) the adapter itself latches on stale /franka/joint_states
+        # while tracking instead of relying only on the executor watchdog.
         harness.FakePolicy.chunks = [harness.idle_chunk(1.0, dx=0.04)] * 2
         node = self.node()
         node.arm()
@@ -197,11 +232,15 @@ class DirectAdapterTests(unittest.TestCase):
         node.set_tracking_target(position, quaternion)
         Sim.velocity = np.zeros(7)
         Sim.feedback = False
+        reasons = []
+        latch = node.latch
+        node.latch = lambda reason: (reasons.append(reason), latch(reason))
         for _ in range(30):
             Sim.now_ns += 10_000_000
             harness.World.now_ns = Sim.now_ns
             node.track()
-        self.assertFalse(node.fault)
+        self.assertTrue(node.fault)
+        self.assertIn("stale", reasons[0])
 
     def test_single_delayed_tracker_callback_does_not_latch(self):
         node = self.node()

@@ -104,9 +104,10 @@ class FakeNode:
     def get_clock(self): return _Namespace(now=lambda: FakeTime(World.now_ns))
     def destroy_node(self): return None
 
-    def publish(self, topic, names, positions):
+    def publish(self, topic, names, positions, velocities=None):
+        velocity = list(velocities) if velocities is not None else [0.0] * len(names)
         for callback in self._subscriptions.get(topic, []):
-            callback(_Namespace(name=list(names), position=list(positions)))
+            callback(_Namespace(name=list(names), position=list(positions), velocity=velocity))
 
 
 class FakeFuture:
