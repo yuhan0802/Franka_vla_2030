@@ -6,7 +6,12 @@
 
 模型用这个指令作为夹爪标签，学到的是"放下盖子后保持关闭"。真机上，Task3 P1 第 7000 步模型放下盖子后，夹爪立即在原地合上，之后一直没抓到瓶子。
 
-问题出在原始录制的数据里，不是处理流程（v5）引入的。
+**更正（同日查清根因后）**：这里有两个**独立**的错误，叠加在一起：
+
+1. **原始指令记错**（录制当天的遥操作程序有 bug）：见下文"根因 1"。
+2. **v5 训练标签也错**：v5 不读原始指令，而是按实测宽度变化方向生成标签，但阈值只有 0.007 mm，夹爪张到头后约 0.2–1 mm 的回落被当成"合上"。见"根因 2"。
+
+两个都已修复，修正后的数据见"修复"一节。
 
 ## 任务流程（示范）
 
@@ -119,9 +124,61 @@ v5 只在第 574–596 帧给了约 0.7 s 的"打开"，随后又回到"关闭"�
 |---|---|
 | ![](img/task3_gripper_label/real_p1_7k_obs35_exterior.jpg) | ![](img/task3_gripper_label/real_p1_7k_obs35_wrist.jpg) |
 
-## 推测原因（未验证）
+## 根因 1：遥操作程序把"失败的抓取"当成夹爪仍是开的（已验证）
 
-遥操作录制时，松开盖子的"打开"动作发生了，但没有写入 `gripper_target_width` 和 `action[7]`。可能是走了另一条控制路径，也可能是指令被去重或丢弃了。需要查录制程序（`franka_data_collection` / `start_franka_vr.py`）才能确认。
+录制当天（2026-11-01）运行的是机器人电脑上未提交的 `start_franka_vr.py`
+（11-01 10:58 编译的 `__pycache__/start_franka_vr.cpython-312.pyc` 与当时源码逐函数字节码一致）。
+
+1. 关夹爪用 Grasp(width 0.01, epsilon inner 0.01, outer 0.07)，只有最终宽度在 (0, 0.08) 内才算成功。
+   盖子把手很细，夹爪合到约 0.002 m，libfranka 报 **Grasping failed**，但实际已经夹住。
+2. `_gripper_goal_result` 只在成功时更新 `gripper_state`，所以程序认为夹爪**还是开的**。
+3. 操作员松开握键：程序以为已经开了，**不发 OPEN**，夹爪不动。
+4. 操作员再按一次：程序发 **CLOSE（发布 0.01）**，夹爪却**张开**了（硬件层原因未确认，但日志与 30 条数据一致）。
+5. 录制程序如实记下 0.01，于是"放下盖子 → 抓瓶子"整段记成"关"。
+
+遥操作日志 `/media/mac/Elements2/franka_vr_docker/logs/ros/python3_363_1793502049353.log`，示范 001（t0 = 1793503888.7）：
+
+| 相对时间 | 日志 | 实际夹爪 |
+|---|---|---|
+| 9.7 s | Sending gripper CLOSE → CLOSE failed | 夹住把手 |
+| 18.8 s | Sending gripper CLOSE → CLOSE failed | **张开**，放下盖子 |
+| 29.5 s | Sending gripper CLOSE → completed | 夹住瓶子 |
+| 42.1 s | Sending gripper OPEN → completed | 放下瓶子 |
+| 55.9 s | Sending gripper CLOSE → CLOSE failed | 夹住把手 |
+| 69.8 s | Sending gripper CLOSE → CLOSE failed | **张开** |
+
+录制程序在 18.8 s 等时刻确实收到了消息（每帧的 `timestamps.gripper_target_width` 在第 561、883、2093 帧变化），值都是 0.01。
+11-01 两份遥操作日志共 234 次 CLOSE failed；OPEN 只在 CLOSE 成功后出现。仓库里已提交的版本（epsilon 0.1/0.2，且无论成败都更新状态）没有这个问题。
+
+## 根因 2：v5 的夹爪标签被张开后的微小回落翻转（已验证）
+
+`preprocess_franka_task_measured_eef_v5.py` 设 `GRIPPER_FROM_MEASURED = True`，标签 = 实测宽度 t→t+1 的方向，阈值 1e-4（归一化，约 0.007 mm）。
+夹爪张到头后宽度会回落 0.2–1 mm（001：第 596 帧 70.99 mm → 第 598 帧 70.76 mm），于是标签在张开后约 0.7 s 翻回"关"。
+旧 v5 Task3 数据中 **13.5% 的帧（8363/61946）夹爪标签是错的**。其他任务的 v5 数据也用同一方法，需要单独评估（见"其他任务"）。
+
+## 修复
+
+**遥操作程序**（机器人电脑 `start_franka_vr.py`，未提交，备份 `~/start_franka_vr.py.bak_20261103`）：
+Grasp epsilon 改为 inner = outer = 0.1；动作结束后无论成败都按请求更新 `gripper_state`（失败只记 warning）。
+
+**录制程序**（`lerobot_episode_recorder.py`）：每条示范保存时检查指令与实测宽度。
+"关指令但全开" > 1 s 或 "开指令但合着" > 1.5 s，记 ERROR，并在 `meta/episodes.jsonl` 写 `gripper_label_ok: false` 和 `gripper_label_check`（数据照常保存）。
+用 11-01 前后的数据验证：Task3 30/30 被标出；Task0、Task4 各 1 条被标出，都是真实的指令/动作不一致（发 OPEN 后 2–3.4 s 夹爪才开或到结束未开）。
+
+**数据**（mac_63 `/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103`；原始 NFS 与旧处理结果未改动）：
+
+1. 从 `/mnt/82_store/vla/Franka_vr/Task3` 复制，`scripts/data_fix/fix_raw_gripper_targets.py` 只改副本：
+   每条收到的夹爪消息保留原时刻，值改为之后 2 s 内夹爪实际的动作（开 0.08 / 合 0.01），同时改 30 Hz 数据和 80 Hz actions 的 `gripper_target_width` 与 `action[7]`。
+   每条示范改 240–366 帧；修正后录制检查 0/30 报错，指令开合顺序与实测 30/30 一致。
+2. `scripts/data_fix/preprocess_v5_gripfix.py`：v5 原流程，只把夹爪标签换成 `gripper_labels_deadband.py`
+   （宽度离开最近极值 > 5 mm 才算开合，翻转点取运动开始前最后一个静止帧）。protocol / action_representation 字符串不变。
+   随后 reindex 与跳变清洗照旧。窗口数 59415、手臂动作与旧数据完全一致，只有夹爪标签不同。
+3. 训练：`~/claude_scripts/task3_gripfix.conf`（数据目录 `DATA_DIR`，输出 `claude_task3_gripfix_20261103`）。
+
+## 其他任务
+
+用 deadband 标签与实测开合对照（`scripts/data_fix/label_audit3.py`，只读）：Task0/1/2/4/5/6/40/41 对得上，剩下的差异都是示范开头夹爪本来合着、或夹爪只开/合了一半没过对照阈值（Task41 的 29 条都是张开不到 6 cm）。
+旧 v5 标签在这些任务里同样会在张开后翻回"关"，影响全任务预训练数据，需要决定是否重做。
 
 ## 复现
 
@@ -130,10 +187,3 @@ v5 只在第 574–596 帧给了约 0.7 s 的"打开"，随后又回到"关闭"�
 python scripts/check_gripper_labels.py /mnt/82_store/vla/Franka_vr/Task3
 python scripts/check_gripper_labels.py /mnt/82_store/vla/Franka_vr/Task3 --frames Task_3_001_cxc:560:620:6
 ```
-
-## 建议
-
-1. 用同一脚本检查 `/mnt/82_store/vla/Franka_vr` 下的其他任务（Task0、Task1 等），确认影响范围。
-2. 修标签：在指令与实测矛盾的片段里，以实测宽度为准生成夹爪标签（实测比指令约晚 9 帧，需提前 9 帧对齐）。然后重新处理 Task3、重训 P1。
-3. 修录制程序，避免新数据再出现这个问题。
-4. 在修好数据之前，离线评估里的"第二次闭合（抓瓶子）"指标没有意义：它对准的是错误标签上的闭合时刻。
