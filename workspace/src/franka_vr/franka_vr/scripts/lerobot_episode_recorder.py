@@ -42,6 +42,9 @@ IMAGE_WIDTH = 640
 GRIPPER_CLOSED_COMMAND_M, GRIPPER_OPEN_COMMAND_M = 0.03, 0.04
 GRIPPER_OPEN_WIDTH_M, GRIPPER_SHUT_WIDTH_M = 0.06, 0.03
 GRIPPER_MAX_CONFLICT_S = {"closed_command_open_gripper": 1.0, "open_command_shut_gripper": 1.5}
+# The FR3 opens to 0.08 m (recorded open ~0.071 m). A wider reading is an unhomed gripper whose
+# widths carry an offset (2026-10: +0.071 m and +0.029 m episodes); the state input would be wrong.
+GRIPPER_MAX_PLAUSIBLE_WIDTH_M = 0.08
 
 
 def _longest_run(mask):
@@ -61,7 +64,10 @@ def gripper_label_check(frames, fps):
         "closed_command_open_gripper": valid & (command < GRIPPER_CLOSED_COMMAND_M) & (width > GRIPPER_OPEN_WIDTH_M),
         "open_command_shut_gripper": valid & (command > GRIPPER_OPEN_COMMAND_M) & (width < GRIPPER_SHUT_WIDTH_M),
     }
-    result = {"ok": True}
+    result = {"ok": True, "max_width_m": round(float(np.nanmax(width)), 4)}
+    if result["max_width_m"] > GRIPPER_MAX_PLAUSIBLE_WIDTH_M:
+        result["ok"] = False
+        result["unhomed_gripper"] = True
     for name, mask in conflicts.items():
         longest_s = _longest_run(mask) / float(fps)
         result[name + "_longest_s"] = round(longest_s, 2)
@@ -645,9 +651,11 @@ class EpisodeRecorder(Node):
         check = self.dataset.gripper_check
         if not check["ok"]:
             self.get_logger().error(
-                f"GRIPPER LABELS WRONG in episode {self.dataset.episode_index:06d}: the recorded gripper "
-                f"command disagrees with the measured width ({check}). Saved with gripper_label_ok=false; "
-                "check the teleop gripper logic before recording more.")
+                f"GRIPPER DATA WRONG in episode {self.dataset.episode_index:06d} ({check}): "
+                + ("the gripper is not homed (width > 0.08 m); home it (./homing.sh) before recording more. "
+                   if check.get("unhomed_gripper") else
+                   "the recorded gripper command disagrees with the measured width; check the teleop gripper logic. ")
+                + "Saved with gripper_label_ok=false.")
         self.get_logger().info(
             f"Episode {self.dataset.episode_index:06d} saved; shutting down"
         )

@@ -1,12 +1,13 @@
 """Read-only final verification of a corrected task copy vs the NFS original.
-Usage: verify_final.py NEW_TASK_DIR RAW_TASK_DIR"""
+Usage: verify_final.py NEW_TASK_DIR RAW_TASK_DIR [--seq COCOCO]  (--seq: required gripper label sequence)"""
 import glob, hashlib, os, sys
 import numpy as np, pyarrow.parquet as pq, cv2
 from scipy.spatial.transform import Rotation as Rot
 sys.path.insert(0, os.path.expanduser("~/claude_scripts"))
 from fk_eef_pose import fk
 NEW, RAW = sys.argv[1], sys.argv[2]
-ALLOWED = {"gripper_target_width", "eef_position", "eef_quaternion"}
+SEQ = sys.argv[sys.argv.index("--seq") + 1] if "--seq" in sys.argv else None
+ALLOWED = {"gripper_target_width", "eef_position", "eef_quaternion", "gripper_width", "gripper_position", "observation.state"}
 md5 = lambda p: hashlib.md5(open(p, "rb").read()).hexdigest()
 P = []; stats = {"windows": 0, "episodes": 0}
 def longest(m):
@@ -25,6 +26,7 @@ for ep in sorted(os.listdir(RAW)):
             if c in ALLOWED: continue
             x, y = a.column(c).to_pylist(), b.column(c).to_pylist()
             if c == "action": x = [r[:7] for r in x]; y = [r[:7] for r in y]
+            if c == "observation.state": x = [r[:7] for r in x]; y = [r[:7] for r in y]
             if x != y: P.append(f"{ep} {sub}: column {c} differs")
     t = pq.read_table(f"{n_}/data/chunk-000/episode_000000.parquet", columns=["joint_position", "eef_position", "eef_quaternion", "gripper_width"]).to_pylist()
     q = np.array([r["joint_position"] for r in t]); p = np.array([r["eef_position"] for r in t]); qu = np.array([r["eef_quaternion"] for r in t])
@@ -45,7 +47,17 @@ for ep in sorted(os.listdir(RAW)):
     okc = (ch[..., 6] == g[idx]) | (ch[..., 6] == g[idx + 1]) | (ch[..., 6] == g[idx + 2])
     if not okc.all(): P.append(f"{ep}: chunk gripper inconsistent")
     seq = "".join("O" if g[i] else "C" for i in np.flatnonzero(np.diff(g)) + 1)
-    if seq != "COCOCO": P.append(f"{ep}: label sequence {seq}")
+    if SEQ and seq != SEQ: P.append(f"{ep}: label sequence {seq}")
+    if w.max() > 0.08: P.append(f"{ep}: gripper width {w.max():.4f} m > 0.08 (unhomed offset left)")
+    raw_w = np.array(pq.read_table(f"{r_}/data/chunk-000/episode_000000.parquet", columns=["gripper_width"]).column(0).to_pylist())[:, 0]
+    import json as _json
+    offset_fixed = "gripper_width_offset_fix" in _json.load(open(f"{n_}/meta/info.json"))
+    if not offset_fixed and not np.array_equal(raw_w, w): P.append(f"{ep}: gripper width changed without an offset fix")
+    if offset_fixed:
+        d = raw_w - w; d = d[w > 0]
+        if d.size == 0 or np.ptp(d) > 1e-6: P.append(f"{ep}: offset fix is not a constant shift")
+    sw = np.array(pq.read_table(f"{n_}/data/chunk-000/episode_000000.parquet", columns=["observation.state"]).column(0).to_pylist())[:, 7]
+    if not np.allclose(sw, w): P.append(f"{ep}: observation.state[7] != gripper_width")
     if longest((g < .5) & (s[:, 6] > .85)) > 30 or longest((g > .5) & (s[:, 6] < .15)) > 45: P.append(f"{ep}: label contradicts measured gripper")
     jumps = np.flatnonzero(np.abs(np.diff(q, axis=0)).max(1) > 0.2)  # > 6 rad/s: not physical motion
     for j in jumps:

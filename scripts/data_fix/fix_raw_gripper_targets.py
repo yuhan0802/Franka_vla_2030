@@ -6,8 +6,8 @@ opened the gripper (failed Grasp kept gripper_state "open"; see
 docs/task3_gripper_label_bug_20261103.md). Each received gripper message keeps its
 receipt time; its value is set to what the gripper actually did next: the first
 deadband open/close transition of the measured width within 2 s after receipt
-(0.08 open / 0.01 close), or the current measured state if it did not move.
-Usage: fix_raw_gripper_targets.py TASK_DIR   (refuses paths under /mnt/82_store/vla)
+(0.08 open / 0.01 close); if it did not move, the recorded value is kept.
+Usage: fix_raw_gripper_targets.py TASK_DIR [--dry-run]   (refuses paths under /mnt/82_store/vla unless --dry-run)
 """
 import json, os, sys
 from pathlib import Path
@@ -17,7 +17,8 @@ from gripper_labels_deadband import deadband_labels
 
 OPEN, CLOSED, LOOKAHEAD = 0.08, 0.01, 60
 root = Path(sys.argv[1]).resolve()
-assert not str(root).startswith("/mnt/82_store/vla"), "never write the canonical raw data"
+DRY = "--dry-run" in sys.argv
+assert DRY or not str(root).startswith("/mnt/82_store/vla"), "never write the canonical raw data"
 
 
 def rewrite(path, values):
@@ -42,7 +43,9 @@ for ep in sorted(p for p in root.iterdir() if p.is_dir()):
     def value_at(receipt_time):
         i = min(int(np.searchsorted(t, receipt_time)), len(t) - 1)
         nxt = changes[(changes >= i - 5) & (changes <= i + LOOKAHEAD)]
-        return OPEN if (label[nxt[0]] if len(nxt) else label[i]) == 1.0 else CLOSED
+        if not len(nxt):
+            return None  # the gripper did not move after this message: keep the recorded value
+        return OPEN if label[nxt[0]] == 1.0 else CLOSED
 
     def fixed(rs):
         cmd, act, n = [], [], 0
@@ -50,12 +53,16 @@ for ep in sorted(p for p in root.iterdir() if p.is_dir()):
             rt = r["timestamps"]["gripper_target_width"]
             c = r["gripper_target_width"][0]
             if rt and rt > 0 and c is not None and np.isfinite(c):
-                v = value_at(rt); n += v != c; c = v
+                v = value_at(rt)
+                if v is not None:
+                    n += v != c; c = v
             a = list(r["action"]); a[7] = c
             cmd.append([c]); act.append(a)
         return cmd, act, n
 
     cmd, act, changed = fixed(rows)
+    if DRY:
+        report.append((ep.name, changed)); print(ep.name, "frames would change", changed, flush=True); continue
     rewrite(data, {"gripper_target_width": cmd, "action": act})
     apath = ep / "actions/chunk-000/episode_000000.parquet"
     arows = pq.read_table(apath, columns=["gripper_target_width", "action", "timestamps"]).to_pylist()
