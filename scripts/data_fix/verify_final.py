@@ -14,10 +14,15 @@ def longest(m):
     r = b = 0
     for x in m: r = r + 1 if x else 0; b = max(b, r)
     return b
+def same_nan(x, y):
+    """Equal up to NaN == NaN (raw joint_velocity has NaN rows)."""
+    try: return np.array_equal(np.array(x, dtype=float), np.array(y, dtype=float), equal_nan=True)
+    except (TypeError, ValueError): return False
 for ep in sorted(os.listdir(RAW)):
     n_, r_ = f"{NEW}/{ep}", f"{RAW}/{ep}"; stats["episodes"] += 1
     for f in glob.glob(f"{r_}/**/*", recursive=True):
         if os.path.isdir(f) or f.endswith(".parquet") or f.endswith("meta/info.json"): continue
+        if f.endswith("_15hz_v5.npz"): continue   # preprocessing cache (stale copies exist in raw Task0); regenerated
         if md5(f) != md5(f.replace(r_, n_)): P.append(f"{ep}: file differs {f}")
     for sub in ("data", "actions"):
         a = pq.read_table(f"{r_}/{sub}/chunk-000/episode_000000.parquet"); b = pq.read_table(f"{n_}/{sub}/chunk-000/episode_000000.parquet")
@@ -27,7 +32,7 @@ for ep in sorted(os.listdir(RAW)):
             x, y = a.column(c).to_pylist(), b.column(c).to_pylist()
             if c == "action": x = [r[:7] for r in x]; y = [r[:7] for r in y]
             if c == "observation.state": x = [r[:7] for r in x]; y = [r[:7] for r in y]
-            if x != y: P.append(f"{ep} {sub}: column {c} differs")
+            if x != y and not same_nan(x, y): P.append(f"{ep} {sub}: column {c} differs")
     t = pq.read_table(f"{n_}/data/chunk-000/episode_000000.parquet", columns=["joint_position", "eef_position", "eef_quaternion", "gripper_width"]).to_pylist()
     q = np.array([r["joint_position"] for r in t]); p = np.array([r["eef_position"] for r in t]); qu = np.array([r["eef_quaternion"] for r in t])
     T = [fk(x) for x in q]
