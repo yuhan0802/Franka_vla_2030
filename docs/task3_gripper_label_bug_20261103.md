@@ -156,6 +156,17 @@ v5 只在第 574–596 帧给了约 0.7 s 的"打开"，随后又回到"关闭"�
 夹爪张到头后宽度会回落 0.2–1 mm（001：第 596 帧 70.99 mm → 第 598 帧 70.76 mm），于是标签在张开后约 0.7 s 翻回"关"。
 旧 v5 Task3 数据中 **13.5% 的帧（8363/61946）夹爪标签是错的**。其他任务的 v5 数据也用同一方法，需要单独评估（见"其他任务"）。
 
+## 根因 3：末端位姿（state）来自只有 16.7 Hz 的 TF（已验证）
+
+录制程序的 `eef_position` / `eef_quaternion` 取自 TF `world -> fr3_link8`，而这个 TF **每 60 ms 才更新一次**；录制是 30 fps。
+- 约 40% 的帧沿用上一帧的位姿，最多旧 60 ms（001：2137 帧中 858 帧与上一帧相同）。关节角 `joint_position` 只旧约 1 ms。
+- v5 的动作 = 每 2 帧（66.7 ms）的位移。窗口内有时含 1 次、有时含 2 次 TF 更新，同样的运动算出的动作是真实值的 **0.73–1.71 倍**（中位数 0.90）。
+- 005 / 011 / 015 第 0 帧的位姿是上一姿态遗留的（z 0.729 m，实际 0.321 m）。011 的关节角本身前 14 帧也是遗留值（第 14→15 帧跳 0.77 rad）。
+- FR3 正运动学（FK）与时间对齐的 TF 一致：位置 0.04 mm、姿态 0.005°（中位数），所以 FK 就是正确的 state。
+- 外部相机实际只有约 11–12 fps（画面重复，中位滞后 52 ms，偶尔 370 ms）；腕部相机约 28 fps。这无法从数据里修，需要在录制端解决。
+
+修复：修正副本里用 `scripts/data_fix/fk_eef_pose.py` 把末端位姿换成关节角 FK。部署端（`eef_pose_policy_adapter.py`）目前也读 TF，应改成同样的 FK，保证训练和部署一致。
+
 ## 修复
 
 **遥操作程序**（机器人电脑 `start_franka_vr.py`，未提交，备份 `~/start_franka_vr.py.bak_20261103`）：
@@ -173,7 +184,11 @@ Grasp epsilon 改为 inner = outer = 0.1；动作结束后无论成败都按请�
 2. `scripts/data_fix/preprocess_v5_gripfix.py`：v5 原流程，只把夹爪标签换成 `gripper_labels_deadband.py`
    （宽度离开最近极值 > 5 mm 才算开合，翻转点取运动开始前最后一个静止帧）。protocol / action_representation 字符串不变。
    随后 reindex 与跳变清洗照旧。窗口数 59415、手臂动作与旧数据完全一致，只有夹爪标签不同。
-3. 训练：`~/claude_scripts/task3_gripfix.conf`（数据目录 `DATA_DIR`，输出 `claude_task3_gripfix_20261103`）。
+3. 末端位姿换成 FK（根因 3），再跑 v5（deadband 标签）、reindex、跳变清洗。最终 59434 个窗口。
+4. 全量验证 `scripts/data_fix/verify_final.py`：0 个问题（文件只改了夹爪两列与位姿两列；state = FK；动作 = state 位移；
+   夹爪标签 30/30 为 关开关开关开 且与实测不矛盾；011 的关节突跳不在任何训练窗口里；视频帧数一致）。
+5. 训练：mac_63 `~/claude_scripts/task3_gripfix_chain.sh`，ownstate（八任务联合微调 save_20000）起点 P1 8k 步，
+   再从 P1 8000 加 state 噪声续训 2k 步，结束后自动 teacher-forced 评估。输出 `/data2/lyh/vla/runs/claude_task3_gripfix_20261103`。
 
 ## 其他任务
 
