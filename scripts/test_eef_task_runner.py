@@ -85,7 +85,8 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
             "params_key": "action_arm_scale"})
         result = subprocess.run([str(self.root / "run_eef_task.sh"), "list"], env=self.env, capture_output=True, text=True)
         self.assertIn("task2", result.stdout)
-        self.assertIn("not configured", result.stdout)
+        self.assertIn("task2-newcodec-stage1-3k", result.stdout)
+        self.assertIn("task5-newcodec-stage1-1k", result.stdout)
         self.assertEqual(self.calls(), [])
 
     def test_all_five_wrapper_keys_resolve_existing_model_information(self):
@@ -105,6 +106,28 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
             result = self.run_task(task=task, model=model)
             self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls(), [])
+
+    def test_task2_and_task5_staged_profiles_predict_15_execute_5_at_half_gain(self):
+        cases = (
+            ("task2", "task2-newcodec-stage1-3k", 8111, 5, "save_3000_chkpt"),
+            ("task5", "task5-newcodec-stage1-1k", 8112, 6, "save_1000_chkpt"),
+        )
+        for task, serial_key, port, gpu, checkpoint in cases:
+            with self.subTest(task=task):
+                serial = resolve(self.config, task, serial_key)
+                rtc = resolve(self.config, task, serial_key + "-rtc")
+                self.assertEqual(serial["model_info"]["action_shape"], [15, 7])
+                self.assertEqual(serial["server"]["host"], "10.24.116.20")
+                self.assertEqual((serial["server"]["port"], serial["server"]["gpu"]), (port, gpu))
+                self.assertTrue(serial["server"]["checkpoint"].endswith("/" + checkpoint))
+                self.assertEqual(serial["runtime"]["chunk_mode"], "serial")
+                self.assertEqual(serial["runtime"]["execute_horizon"], 5)
+                self.assertEqual(serial["runtime"]["action_gain"], [0.5] * 6)
+                self.assertEqual(rtc["server"], serial["server"])
+                self.assertEqual(rtc["runtime"]["chunk_mode"], "rtc")
+                self.assertEqual(rtc["runtime"]["execute_horizon"], 5)
+                self.assertEqual(rtc["runtime"]["rtc_observe_after"], 5)
+                self.assertEqual(rtc["runtime"]["action_gain"], [0.5] * 6)
 
     def test_universal_mulaw9_metadata_matches_verified_checkpoint(self):
         result = self.run_task("show", model="universal-mulaw9")
