@@ -33,10 +33,11 @@
 五个快捷脚本都转发到通用入口。例如 `./task1-act-v2.sh stop` 等同于
 `./run_eef_task.sh task1 act-v2 stop`。
 
-task2 已关联 20 服务器的 `task2-newcodec-stage1-3k` 与 `task2-newcodec-stage1-3k-rtc`
-（端口 8111，GPU 5）；task5 已关联 `task5-newcodec-stage1-1k` 与
-`task5-newcodec-stage1-1k-rtc`（端口 8112，GPU 6）。四个配置均为 15×7 动作块，预测 15、
-执行 5，前六维 EEF 动作增益为 0.5；RTC 版本在执行第 5 步后接入下一次推理并做平滑融合。
+task2 当前首选是离线抓取事件评测最优的 `task2-newcodec-stage1-5k` 与
+`task2-newcodec-stage1-5k-rtc`（端口 8111，GPU 5），原 3k 配置继续保留作对照；task5
+首选是离线按钮接触评测最优的 `task5-newcodec-stage1-1k` 与
+`task5-newcodec-stage1-1k-rtc`（端口 8112，GPU 6）。四个首选配置均为 15×7 动作块，
+预测 15、执行 5，前六维 EEF 动作增益为 0.5；RTC 版本在执行第 5 步后接入下一次推理并做平滑融合。
 两项任务的训练首帧与公共 EEF 起始位姿一致，因此沿用已验证的公共起始位姿。开盖任务使用
 `task40`，其初始位姿与 task1 一致，并已关联 `universal-mulaw9` 和
 `universal-maxabs-x2`。原 `vla_instruction_weights.json` 中的 pi0.5 关节速度权重是另一种

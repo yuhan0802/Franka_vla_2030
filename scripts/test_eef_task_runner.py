@@ -85,6 +85,7 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
             "params_key": "action_arm_scale"})
         result = subprocess.run([str(self.root / "run_eef_task.sh"), "list"], env=self.env, capture_output=True, text=True)
         self.assertIn("task2", result.stdout)
+        self.assertIn("task2-newcodec-stage1-5k", result.stdout)
         self.assertIn("task2-newcodec-stage1-3k", result.stdout)
         self.assertIn("task5-newcodec-stage1-1k", result.stdout)
         self.assertEqual(self.calls(), [])
@@ -109,7 +110,7 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
 
     def test_task2_and_task5_staged_profiles_predict_15_execute_5_at_half_gain(self):
         cases = (
-            ("task2", "task2-newcodec-stage1-3k", 8111, 5, "save_3000_chkpt"),
+            ("task2", "task2-newcodec-stage1-5k", 8111, 5, "save_5000_chkpt"),
             ("task5", "task5-newcodec-stage1-1k", 8112, 6, "save_1000_chkpt"),
         )
         for task, serial_key, port, gpu, checkpoint in cases:
