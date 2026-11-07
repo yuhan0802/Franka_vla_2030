@@ -121,13 +121,13 @@ else
   mkdir -p "$(dirname "$stack_record")"; echo "$log_dir" > "$stack_record"; stack_log="$log_dir/robot.log"
   start_session "$robot_session" "PI05_DIRECT_LOG_DIR='$log_dir' PI05_DIRECT_LOAD_GRIPPER=true \
 PI05_DIRECT_MAX_VELOCITY='${EEF_DIRECT_EXECUTOR_MAX_VELOCITY:-0.6}' \
-PI05_DIRECT_MAX_ACCELERATION='${EEF_DIRECT_EXECUTOR_MAX_ACCELERATION:-2.0}' ./run_robot_pi05_direct.sh '$stack_mode'"
+PI05_DIRECT_MAX_ACCELERATION='${EEF_DIRECT_EXECUTOR_MAX_ACCELERATION:-3.75}' ./run_robot_pi05_direct.sh '$stack_mode'"
 fi
 if [[ "$mode" != axis-test ]]; then
   if [[ "$commands" == *vla_cameras.launch.py* ]]; then
     echo "Reusing running VLA cameras; make sure they publish $camera_mode images."
   else
-    start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh"
+    start_session "$camera_session" "VLA_CAMERA_MODE='$camera_mode' VLA_EXTERIOR_CAMERA='$exterior_camera' ./run_vla_cameras.sh"
   fi
 fi
 
@@ -161,13 +161,39 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --bounds-config "${EEF_BOUNDS_CONFIG:-/ws_franka_vr/src/franka_vr/franka_vr/config/eef_workspace_bounds.yaml}"
   --chunk-start "${EEF_CHUNK_START:-measured}"
   --gripper-state-source "${EEF_GRIPPER_STATE_SOURCE:-measured}"
+  --gripper-width-offset "${EEF_GRIPPER_WIDTH_OFFSET:-0}"
+  --gripper-open-width "${EEF_GRIPPER_OPEN_WIDTH:-0.08}"
+  --gripper-close-max-z "${EEF_GRIPPER_CLOSE_MAX_Z:-0}"
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
   --max-tf-age "${EEF_MAX_TF_AGE:-0.15}"
+  --max-policy-latency "${EEF_MAX_POLICY_LATENCY:-5.0}"
+  --settle-position "${EEF_DIRECT_SETTLE_POSITION:-0.003}"
+  --settle-rotation "${EEF_DIRECT_SETTLE_ROTATION:-0.02}"
+  --settle-linear-speed "${EEF_DIRECT_SETTLE_LINEAR_SPEED:-0.01}"
+  --settle-angular-speed "${EEF_DIRECT_SETTLE_ANGULAR_SPEED:-0.05}"
+  --settle-stable-duration "${EEF_DIRECT_SETTLE_STABLE_DURATION:-0.30}"
+  --feedback-max-age "${EEF_DIRECT_FEEDBACK_MAX_AGE:-0.20}"
+  --settle-timeout "${EEF_DIRECT_SETTLE_TIMEOUT:-8.0}"
+  --observation-timeout "${EEF_DIRECT_OBSERVATION_TIMEOUT:-5.0}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl
   --max-joint-velocity "${EEF_DIRECT_MAX_JOINT_VELOCITY:-0.5}"
-  --max-joint-acceleration "${EEF_DIRECT_MAX_JOINT_ACCELERATION:-1.8}")
+  --max-joint-acceleration "${EEF_DIRECT_MAX_JOINT_ACCELERATION:-3.75}")
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
+if [[ -n "${EEF_HOME_POSITION:-}" ]]; then
+  read -r -a home_position <<< "$EEF_HOME_POSITION"
+  adapter_flags+=(--home-position "${home_position[@]}")
+fi
+if [[ -n "${EEF_HOME_QUATERNION:-}" ]]; then
+  read -r -a home_quaternion <<< "$EEF_HOME_QUATERNION"
+  adapter_flags+=(--home-quaternion "${home_quaternion[@]}")
+fi
+if [[ -n "${EEF_ACTION_GAIN:-}" ]]; then
+  read -r -a action_gain <<< "$EEF_ACTION_GAIN"
+  adapter_flags+=(--action-gain "${action_gain[@]}")
+fi
 if [[ "$mode" != axis-test ]]; then
+  [[ -n "${EEF_EXPECTED_ACTION_NORMALIZATION:-}" ]] && adapter_flags+=(--expected-action-normalization "$EEF_EXPECTED_ACTION_NORMALIZATION")
+  [[ "${EEF_EXPECTED_ACTION_MULAW_MU:-0}" != 0 ]] && adapter_flags+=(--expected-action-mulaw-mu "$EEF_EXPECTED_ACTION_MULAW_MU")
   [[ -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
   [[ -n "$actioncodec" ]] && adapter_flags+=(--expected-actioncodec "$actioncodec")
   [[ -n "$state_stats" ]] && adapter_flags+=(--expected-state-stats "$state_stats")
@@ -192,12 +218,21 @@ case "$mode" in
     fi;;
 esac
 
+# chunk_mode rtc: asynchronous inference with blended chunk hand-over (execute only; dry-run stays serial).
+adapter_script=eef_pose_direct_adapter.py
+if [[ "${EEF_CHUNK_MODE:-serial}" == rtc ]]; then
+  adapter_script=eef_pose_rtc_adapter.py
+  adapter_flags+=(--rtc-blend-steps "${EEF_RTC_BLEND_STEPS:-4}" --rtc-observe-after "${EEF_RTC_OBSERVE_AFTER:-0}")
+elif [[ "${EEF_CHUNK_MODE:-serial}" != serial ]]; then
+  echo "EEF_CHUNK_MODE must be serial or rtc" >&2; exit 2
+fi
+
 printf -v quoted_flags '%q ' "${adapter_flags[@]}"
-echo "EEF DIRECT $mode (no MoveIt Servo): server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
+echo "EEF DIRECT $mode (no MoveIt Servo, ${EEF_CHUNK_MODE:-serial} chunks): server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
 set +e
-docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
   set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
-  exec python3 src/franka_vr/franka_vr/scripts/eef_pose_direct_adapter.py '"$quoted_flags"'
+  exec python3 src/franka_vr/franka_vr/scripts/'"$adapter_script $quoted_flags"'
 ' 2>&1 | tee "$log_dir/adapter.log"
 status=${PIPESTATUS[0]}
 set -e

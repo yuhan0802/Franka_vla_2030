@@ -1,0 +1,19 @@
+== probe_actv2.npz
+act8   alpha   0.1  LOO-45 median  40.7 mm | held ridge  99.6  86.3  42.2  66.7  87.7  mean  76.5 | held NN 110.9 106.2  51.9  63.0  78.2
+act14  alpha     1  LOO-45 median  41.1 mm | held ridge  97.6  85.8  46.3  73.9  91.9  mean  79.1 | held NN 110.9  97.9  51.9  52.3 121.4
+act20  alpha     1  LOO-45 median  42.9 mm | held ridge  95.0  90.4  47.1  78.3  96.0  mean  81.4 | held NN 125.4 100.5  48.7  84.1  77.3
+act28  alpha     1  LOO-45 median  40.5 mm | held ridge 106.1  91.1  45.6  66.5  88.3  mean  79.5 | held NN 142.9  92.5  30.8  47.2  67.8
+img8   alpha  0.01  LOO-45 median  30.9 mm | held ridge  47.1  66.4  60.9  46.8  75.0  mean  59.2 | held NN  89.1  96.8  87.0  74.8 115.4
+img14  alpha  0.01  LOO-45 median  34.5 mm | held ridge  65.2  68.4  68.4  68.9  84.1  mean  71.0 | held NN  89.1  96.8  81.7  74.8 115.4
+img20  alpha   0.1  LOO-45 median  37.1 mm | held ridge  91.5  80.4  57.7  61.8  76.7  mean  73.6 | held NN  89.1  92.7  85.1  81.4 115.4
+img28  alpha   0.1  LOO-45 median  37.8 mm | held ridge  98.3  86.7  63.8  69.1  75.7  mean  78.7 | held NN  97.9  87.2  85.1  96.4 126.1
+== probe_holdout5_1000.npz
+act8   alpha   0.1  LOO-45 median  40.5 mm | held ridge 105.7  89.1  41.4  64.2  83.6  mean  76.8 | held NN 116.1 106.2  64.0  49.8  68.9
+act14  alpha   0.1  LOO-45 median  44.0 mm | held ridge  96.9  73.8  49.5  78.5  98.8  mean  79.5 | held NN 114.7  97.9  51.9  58.7  62.7
+act20  alpha     1  LOO-45 median  45.1 mm | held ridge  95.0  88.4  46.6  78.6  98.5  mean  81.5 | held NN 137.8  96.1  40.9  58.2 135.6
+act28  alpha     1  LOO-45 median  43.1 mm | held ridge 103.0  87.2  44.8  61.3  96.2  mean  78.5 | held NN 114.7  77.5  44.4  46.2  94.6
+img8   alpha  0.01  LOO-45 median  31.0 mm | held ridge  44.0  66.9  59.7  34.2  77.3  mean  56.4 | held NN  89.1  96.8  81.7  74.8 115.4
+img14  alpha  0.01  LOO-45 median  32.7 mm | held ridge  66.2  67.5  65.0  67.1  85.2  mean  70.2 | held NN  89.1  96.8  81.7  74.8 115.4
+img20  alpha     1  LOO-45 median  37.8 mm | held ridge  97.8  80.3  43.6  62.3  75.2  mean  71.8 | held NN  89.1  92.7  81.7  87.7 115.4
+img28  alpha  0.01  LOO-45 median  32.7 mm | held ridge  91.2  94.5  61.7  61.3  81.6  mean  78.0 | held NN 106.3  97.9  81.7  76.3 107.7
+nearest training grasp (oracle memorization floor):  26.4  17.3  10.3  23.6  15.2  | predict-mean baseline: 111.2  99.9  59.0  84.4  89.9

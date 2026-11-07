@@ -12,7 +12,7 @@ from tf_transformations import (
     translation_matrix,
 )
 import numpy as np
-from franka_msgs.action import Move,Homing, Grasp
+from franka_msgs.action import Move, Grasp
 from franka_vr.srv import SetTargetPose
 class OculusPublisher(Node):
     def __init__(self):
@@ -73,6 +73,11 @@ class OculusPublisher(Node):
         self.declare_parameter('robot_base_frame', 'world')
         self.declare_parameter('robot_tip_frame', 'fr3_link8')
         self.declare_parameter('gripper_action_prefix', '/fr3_gripper/franka_gripper')
+        self.declare_parameter('gripper_open_width', 0.08)
+        self.declare_parameter('gripper_closed_width', 0.01)
+        self.declare_parameter('gripper_open_speed', 0.05)
+        self.declare_parameter('gripper_close_speed', 0.10)
+        self.declare_parameter('gripper_force', 20.0)
 
         self.translation_scale = self.get_parameter('translation_scale').value
         self.trigger_threshold = self.get_parameter('trigger_threshold').value
@@ -87,6 +92,11 @@ class OculusPublisher(Node):
         self.max_relative_rotation = self.get_parameter('max_relative_rotation').value
         self.robot_base_frame = self.get_parameter('robot_base_frame').value
         self.robot_tip_frame = self.get_parameter('robot_tip_frame').value
+        self.gripper_open_width = self.get_parameter('gripper_open_width').value
+        self.gripper_closed_width = self.get_parameter('gripper_closed_width').value
+        self.gripper_open_speed = self.get_parameter('gripper_open_speed').value
+        self.gripper_close_speed = self.get_parameter('gripper_close_speed').value
+        self.gripper_force = self.get_parameter('gripper_force').value
         gripper_action_prefix = self.get_parameter('gripper_action_prefix').value.rstrip('/')
 
         # Create the service client used to update MoveIt Servo's target pose.
@@ -98,11 +108,6 @@ class OculusPublisher(Node):
         self.action_client = ActionClient(self, Move, gripper_action_prefix + '/move')
         while not self.action_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().info('Waiting for gripper move action server...')
-        # 创建 Homing Action 客户端
-        self.homing_client = ActionClient(self, Homing, gripper_action_prefix + '/homing')
-        while not self.homing_client.wait_for_server(timeout_sec=1.0):
-            self.get_logger().info('Waiting for gripper homing action server...')
-
         # 创建 Grasp Action 客户端
         self.grasp_client = ActionClient(self, Grasp, gripper_action_prefix + '/grasp')
         while not self.grasp_client.wait_for_server(timeout_sec=1.0):
@@ -110,7 +115,7 @@ class OculusPublisher(Node):
 
         # 夹爪状态跟踪
         self.gripper_state = False  # None: 未初始化, True: 关闭, False: 打开
-    
+        self.gripper_goal_in_flight = False
 
         self.last_gripper_send_time = self.get_clock().now()
         self.gripper_send_interval = 0.2  # 5 Hz
@@ -326,43 +331,77 @@ class OculusPublisher(Node):
         self.tf_broadcaster.sendTransform(target_transform)
         self.send_target_pose(target_transform)
 
-    def send_homing_goal(self):
-        """发送夹爪打开命令 (Homing)"""
-        goal_msg = Homing.Goal()
-        self.gripper_target_width_publisher.publish(Float64(data=0.08))
-        self.homing_client.send_goal_async(goal_msg)
-        self.get_logger().info("Sending gripper homing (open) command")
-        self.gripper_state = False
+    def send_open_goal(self):
+        """Open the gripper without recalibrating its travel."""
+        goal_msg = Move.Goal()
+        goal_msg.width = float(self.gripper_open_width)
+        goal_msg.speed = float(self.gripper_open_speed)
+        self._send_gripper_action(
+            self.action_client, goal_msg, requested_closed=False, action_name='OPEN')
 
     def send_grasp_goal(self):
         """发送夹爪关闭命令 (Grasp)"""
         goal_msg = Grasp.Goal()
-        goal_msg.width = 0.01    # 完全闭合
-        goal_msg.speed = 0.10   # 速度 0.03 m/s
-        goal_msg.force = 20.0   # 抓取力 50 N
+        goal_msg.width = float(self.gripper_closed_width)
+        goal_msg.speed = float(self.gripper_close_speed)
+        goal_msg.force = float(self.gripper_force)
+        # libfranka reports success only if width - inner < final width < width + outer.
+        # With inner == closed_width a thin object (Task3 lid handle) closes the
+        # fingers to ~0 and the grasp is reported as failed although it is held,
+        # so accept any final width (as the committed version did).
         goal_msg.epsilon.inner = 0.1
-        goal_msg.epsilon.outer = 0.2
-        self.gripper_target_width_publisher.publish(Float64(data=float(goal_msg.width)))
-        self.grasp_client.send_goal_async(goal_msg)
-        self.get_logger().info("Sending gripper grasp (close) command")
-        self.gripper_state = True
+        goal_msg.epsilon.outer = 0.1
+        self._send_gripper_action(
+            self.grasp_client, goal_msg, requested_closed=True, action_name='CLOSE')
 
-    def send_gripper_goal(self, width, action):
-        """发送夹爪移动目标，不等待完成"""
-        if action == 'grasp':
-            self.gripper_state = True
-            width = 0.01
-        elif action == 'homing':
-            self.gripper_state = False
-            width = 0.08
-        goal_msg = Move.Goal()
-        goal_msg.width = width
-        goal_msg.speed = 0.05 # 设置一个合理的速度（m/s）
+    def _send_gripper_action(self, client, goal, requested_closed, action_name):
+        if self.gripper_goal_in_flight:
+            return
+        if not client.server_is_ready():
+            self.get_logger().error(f'Gripper {action_name} action server is unavailable')
+            return
+        self.gripper_target_width_publisher.publish(Float64(data=float(goal.width)))
+        self.gripper_goal_in_flight = True
+        future = client.send_goal_async(goal)
+        future.add_done_callback(
+            lambda done: self._gripper_goal_response(
+                done, requested_closed, action_name))
+        self.get_logger().info(
+            f'Sending gripper {action_name}: width={goal.width:.3f} m')
 
-        self.gripper_target_width_publisher.publish(Float64(data=float(goal_msg.width)))
-        self.get_logger().info(f"Sending gripper goal: width={width}, speed={goal_msg.speed}")
-        self.action_client.send_goal_async(goal_msg)  # 只发送，不处理反馈或结果
-        
+    def _gripper_goal_response(self, future, requested_closed, action_name):
+        try:
+            goal_handle = future.result()
+        except Exception as error:
+            self.gripper_goal_in_flight = False
+            self.get_logger().error(f'Gripper {action_name} request failed: {error}')
+            return
+        if not goal_handle.accepted:
+            self.gripper_goal_in_flight = False
+            self.get_logger().error(f'Gripper {action_name} goal was rejected')
+            return
+        goal_handle.get_result_async().add_done_callback(
+            lambda done: self._gripper_goal_result(
+                done, requested_closed, action_name))
+
+    def _gripper_goal_result(self, future, requested_closed, action_name):
+        self.gripper_goal_in_flight = False
+        try:
+            result = future.result().result
+        except Exception as error:
+            self.get_logger().error(f'Gripper {action_name} result unavailable: {error}')
+            return
+        # The fingers have moved even when the action reports failure, so the
+        # state must follow the request.  Keeping the old state after a failed
+        # CLOSE made a grip release send nothing and the next squeeze send
+        # CLOSE (recorded 0.01) while the gripper opened: wrong training labels.
+        self.gripper_state = requested_closed
+        if not result.success:
+            state = 'closed' if requested_closed else 'open'
+            self.get_logger().warning(
+                f'Gripper {action_name} reported failure ({result.error}); state set to {state}')
+            return
+        self.get_logger().info(f'Gripper {action_name} completed successfully')
 
     def timer_callback(self):
         transformations, buttons = self.oculus_reader.get_transformations_and_buttons()
@@ -422,14 +461,12 @@ class OculusPublisher(Node):
             grip_value = buttons['rightGrip'][0]
             # 当 grip_value > 0.6 时关闭夹爪
             if grip_value > 0.6:
-                if self.gripper_state == False:
+                if self.gripper_state is False and not self.gripper_goal_in_flight:
                     self.send_grasp_goal()
-                    # self.send_gripper_goal(0.01, 'grasp')
             # 当 grip_value < 0.4 时打开夹爪
             elif grip_value < 0.4:
-                if self.gripper_state == True:
-                    self.send_homing_goal()
-                    # self.send_gripper_goal(0.08, 'homing')
+                if self.gripper_state is True and not self.gripper_goal_in_flight:
+                    self.send_open_goal()
                
 
         self.get_logger().debug(f'Buttons: {buttons}')

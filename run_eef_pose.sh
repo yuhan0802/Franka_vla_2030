@@ -91,7 +91,7 @@ export HF_HOME="\$P/actioncodec_libero/.cache/huggingface" USE_TF=0 TRANSFORMERS
 "\$PY" -u $server_script --checkpoint '$checkpoint' --actioncodec '$actioncodec' --state-stats '$state_stats' --port '$port' $rotation_option $server_args 2>&1 | tee -a server_$port.log
 EOF
   ssh "$remote" "mkdir -p ~/franka_eef_server"
-  scp -q "$root_dir/$server_script" "$remote:franka_eef_server/"
+  scp -q "$root_dir/server/$server_script" "$remote:franka_eef_server/"
   scp -q "$script" "$remote:franka_eef_server/run_server_$port.sh"; rm -f "$script"
   ssh "$remote" "tmux kill-session -t '$remote_session' 2>/dev/null || true; tmux new-session -d -s '$remote_session' 'bash ~/franka_eef_server/run_server_$port.sh'"
   echo "Starting EEF server on $remote (GPU $server_gpu, port $port)..."
@@ -139,7 +139,7 @@ if [[ "$mode" != axis-test ]]; then
   if [[ "$commands" == *vla_cameras.launch.py* ]]; then
     echo "Reusing running VLA cameras; make sure they publish $camera_mode images."
   else
-    start_session "$camera_session" "set -o pipefail; VLA_CAMERA_MODE='$camera_mode' ./run_vla_cameras.sh 2>&1 | tee -a '$log_dir/cameras_live.log'; status=\${PIPESTATUS[0]}; echo CAMERA_RUNNER_EXIT=\$status | tee -a '$log_dir/cameras_live.log'; exit \$status"
+    start_session "$camera_session" "set -o pipefail; VLA_CAMERA_MODE='$camera_mode' VLA_EXTERIOR_CAMERA='$exterior_camera' ./run_vla_cameras.sh 2>&1 | tee -a '$log_dir/cameras_live.log'; status=\${PIPESTATUS[0]}; echo CAMERA_RUNNER_EXIT=\$status | tee -a '$log_dir/cameras_live.log'; exit \$status"
   fi
 fi
 
@@ -161,7 +161,7 @@ if [[ "$mode" == probe ]]; then
   printf -v quoted_flags '%q ' "${probe_flags[@]}"
   echo "EEF STATE PROBE: camera=$exterior_camera/$camera_mode logs=$log_dir (the arm is never commanded)"
   set +e
-  docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+  docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
     set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
     exec python3 src/franka_vr/franka_vr/scripts/eef_state_probe.py '"$quoted_flags"'
   ' 2>&1 | tee "$log_dir/probe.log"
@@ -177,11 +177,29 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --bounds-config "${EEF_BOUNDS_CONFIG:-/ws_franka_vr/src/franka_vr/franka_vr/config/eef_workspace_bounds.yaml}"
   --chunk-start "${EEF_CHUNK_START:-measured}"
   --gripper-state-source "${EEF_GRIPPER_STATE_SOURCE:-measured}"
+  --gripper-width-offset "${EEF_GRIPPER_WIDTH_OFFSET:-0}"
+  --gripper-open-width "${EEF_GRIPPER_OPEN_WIDTH:-0.08}"
+  --gripper-close-max-z "${EEF_GRIPPER_CLOSE_MAX_Z:-0}"
   --max-translation "${EEF_MAX_TRANSLATION:-0.006}" --max-rotation "${EEF_MAX_ROTATION:-0.035}"
   --max-tf-age "${EEF_MAX_TF_AGE:-0.15}"
+  --max-policy-latency "${EEF_MAX_POLICY_LATENCY:-5.0}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl)
 [[ -n "${EEF_ROTATION_FRAME:-}" ]] && adapter_flags+=(--rotation-frame "$EEF_ROTATION_FRAME")
+if [[ -n "${EEF_HOME_POSITION:-}" ]]; then
+  read -r -a home_position <<< "$EEF_HOME_POSITION"
+  adapter_flags+=(--home-position "${home_position[@]}")
+fi
+if [[ -n "${EEF_HOME_QUATERNION:-}" ]]; then
+  read -r -a home_quaternion <<< "$EEF_HOME_QUATERNION"
+  adapter_flags+=(--home-quaternion "${home_quaternion[@]}")
+fi
+if [[ -n "${EEF_ACTION_GAIN:-}" ]]; then
+  read -r -a action_gain <<< "$EEF_ACTION_GAIN"
+  adapter_flags+=(--action-gain "${action_gain[@]}")
+fi
 [[ "$mode" != axis-test && -n "$checkpoint" ]] && adapter_flags+=(--expected-checkpoint "$checkpoint")
+[[ "$mode" != axis-test && -n "${EEF_EXPECTED_ACTION_NORMALIZATION:-}" ]] && adapter_flags+=(--expected-action-normalization "$EEF_EXPECTED_ACTION_NORMALIZATION")
+[[ "$mode" != axis-test && "${EEF_EXPECTED_ACTION_MULAW_MU:-0}" != 0 ]] && adapter_flags+=(--expected-action-mulaw-mu "$EEF_EXPECTED_ACTION_MULAW_MU")
 # A reused server must also match these (refused otherwise; restart with server-stop).
 [[ "$mode" != axis-test && -n "$actioncodec" ]] && adapter_flags+=(--expected-actioncodec "$actioncodec")
 [[ "$mode" != axis-test && -n "$state_stats" ]] && adapter_flags+=(--expected-state-stats "$state_stats")
@@ -211,7 +229,7 @@ esac
 printf -v quoted_flags '%q ' "${adapter_flags[@]}"
 echo "EEF POSE $mode: server=$host:$port camera=$exterior_camera/$camera_mode logs=$log_dir"
 set +e
-docker compose run --rm -v "$log_dir:/eef_logs" franka_vr bash -lc '
+docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
   set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
   exec python3 src/franka_vr/franka_vr/scripts/eef_pose_policy_adapter.py '"$quoted_flags"'
 ' 2>&1 | tee "$log_dir/adapter.log"

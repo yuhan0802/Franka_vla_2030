@@ -34,6 +34,46 @@ STATE_LAYOUT = "fr3_joint_positions_plus_measured_gripper_width_v2"
 ACTION_LAYOUT = "sent_joint_velocity_plus_gripper_target_width_v2_missing_target_is_nan"
 LEGACY_ACTION_LAYOUT = "cartesian_target_pose_plus_measured_gripper_width_v1"
 IMAGE_WIDTH = 640
+# Gripper label check (see docs/task3_gripper_label_bug_20261103.md): the recorded
+# command must agree with the measured width.  A CLOSE command (< 3 cm) while the
+# fingers are fully open (> 6 cm) for over 1 s, or an OPEN command (> 4 cm) while
+# they stay shut (< 3 cm) for over 1.5 s, means the teleop node and the gripper
+# disagree and the episode's gripper labels are wrong.
+GRIPPER_CLOSED_COMMAND_M, GRIPPER_OPEN_COMMAND_M = 0.03, 0.04
+GRIPPER_OPEN_WIDTH_M, GRIPPER_SHUT_WIDTH_M = 0.06, 0.03
+GRIPPER_MAX_CONFLICT_S = {"closed_command_open_gripper": 1.0, "open_command_shut_gripper": 1.5}
+# The FR3 opens to 0.08 m (recorded open ~0.071 m). A wider reading is an unhomed gripper whose
+# widths carry an offset (2026-10: +0.071 m and +0.029 m episodes); the state input would be wrong.
+GRIPPER_MAX_PLAUSIBLE_WIDTH_M = 0.08
+
+
+def _longest_run(mask):
+    best = run = 0
+    for flag in mask:
+        run = run + 1 if flag else 0
+        best = max(best, run)
+    return best
+
+
+def gripper_label_check(frames, fps):
+    """Return a JSON-serialisable verdict on command/width agreement."""
+    width = np.array([row["gripper_width"][0] for row in frames], dtype=np.float64)
+    command = np.array([row["gripper_target_width"][0] for row in frames], dtype=np.float64)
+    valid = np.array([bool(row["gripper_target_width_valid"][0]) for row in frames]) & np.isfinite(command)
+    conflicts = {
+        "closed_command_open_gripper": valid & (command < GRIPPER_CLOSED_COMMAND_M) & (width > GRIPPER_OPEN_WIDTH_M),
+        "open_command_shut_gripper": valid & (command > GRIPPER_OPEN_COMMAND_M) & (width < GRIPPER_SHUT_WIDTH_M),
+    }
+    result = {"ok": True, "max_width_m": round(float(np.nanmax(width)), 4)}
+    if result["max_width_m"] > GRIPPER_MAX_PLAUSIBLE_WIDTH_M:
+        result["ok"] = False
+        result["unhomed_gripper"] = True
+    for name, mask in conflicts.items():
+        longest_s = _longest_run(mask) / float(fps)
+        result[name + "_longest_s"] = round(longest_s, 2)
+        if longest_s > GRIPPER_MAX_CONFLICT_S[name]:
+            result["ok"] = False
+    return result
 IMAGE_HEIGHT = 480
 
 
@@ -218,6 +258,7 @@ class LeRobotEpisodeWriter:
     def finalize(self):
         if not self.frames:
             raise RuntimeError("No frames were captured")
+        self.gripper_check = gripper_label_check(self.frames, self.fps)
         self.root.mkdir(parents=True, exist_ok=True)
         for writer in self.video_writers.values():
             writer.release()
@@ -245,7 +286,8 @@ class LeRobotEpisodeWriter:
         episodes = self._read_jsonl(episodes_path)
         episodes.append({"episode_index": self.episode_index, "episode_id": f"episode_{self.episode_index:06d}",
                          "tasks": [self.task], "language_instruction": self.task, "success": True,
-                         "length": len(self.frames), "action_length": len(self.action_frames)})
+                         "length": len(self.frames), "action_length": len(self.action_frames),
+                         "gripper_label_ok": self.gripper_check["ok"], "gripper_label_check": self.gripper_check})
         self._write_jsonl(episodes_path, episodes)
         info = {
             "codebase_version": "v2.4", "robot_type": "franka_fr3",
@@ -442,6 +484,20 @@ class EpisodeRecorder(Node):
             and self.actual_eef_pose() is not None
         )
 
+    def missing_inputs(self):
+        """Name unavailable prerequisites so startup failures are actionable."""
+        missing = []
+        missing.extend(f"camera:{name}" for name in CAMERAS if name not in self.images)
+        arm_joints = [name for name in JOINTS if name not in self.joints]
+        if arm_joints:
+            missing.append("arm_joint_state")
+        gripper_joints = [name for name in GRIPPER_JOINTS if name not in self.joints]
+        if gripper_joints:
+            missing.append("gripper_joint_state")
+        if self.actual_eef_pose() is None:
+            missing.append("tf:world->fr3_link8")
+        return missing
+
     def actual_eef_pose(self):
         """Look up the composed world->EEF feedback transform, not a target."""
         try:
@@ -489,7 +545,7 @@ class EpisodeRecorder(Node):
             return
         if not self.ready():
             self.get_logger().info(
-                "Waiting for three RGB streams, FR3 arm state, and measured gripper state",
+                "Waiting for required inputs; missing: " + ", ".join(self.missing_inputs()),
                 throttle_duration_sec=2.0,
             )
             return
@@ -592,6 +648,14 @@ class EpisodeRecorder(Node):
         self.timer.cancel()
         self.dataset.finalize()
         self.finished = True
+        check = self.dataset.gripper_check
+        if not check["ok"]:
+            self.get_logger().error(
+                f"GRIPPER DATA WRONG in episode {self.dataset.episode_index:06d} ({check}): "
+                + ("the gripper is not homed (width > 0.08 m); home it (./homing.sh) before recording more. "
+                   if check.get("unhomed_gripper") else
+                   "the recorded gripper command disagrees with the measured width; check the teleop gripper logic. ")
+                + "Saved with gripper_label_ok=false.")
         self.get_logger().info(
             f"Episode {self.dataset.episode_index:06d} saved; shutting down"
         )

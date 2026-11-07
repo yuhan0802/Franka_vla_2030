@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Camera and policy containers exchange 640x480 RGB images (~0.9 MB).  Fast DDS's default
+     shared-memory transport (0.5 MB segments) drops most of them (measured 1-3 Hz instead of
+     15/30 Hz on 2026-11-02); plain UDPv4 delivers full rate.  Needs large UDP receive buffers:
+     see config/sysctl/60-ros2-udp.conf. -->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>udp_only</transport_id>
+      <type>UDPv4</type>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="udp_only_participant" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>udp_only</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>

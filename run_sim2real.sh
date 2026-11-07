@@ -13,6 +13,7 @@ esac
 export ROBOT_IP=172.16.0.2
 export VLA_SSH_KEY='/home/mac/下载/id_rsa_66'
 export VLA_REMOTE_HOST=10.24.116.66 VLA_REMOTE_USER=vla VLA_SSH_PORT=1172
+export PI05_REMOTE_UV_PROJECT_ENVIRONMENT="${PI05_REMOTE_UV_PROJECT_ENVIRONMENT:-/data/vla/openpi-main/.venv}"
 export PI05_CHECKPOINT_ROOT='/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_sim_tube_pick_pink2bluebin_finetune/pink2bluebin_full_bs32_20k'
 export PI05_CHECKPOINT_STEP=20000
 export PI05_POLICY_CONFIG='pi05_sim_tube_pick_pink2bluebin_finetune'
@@ -43,6 +44,8 @@ fi
 ./run_pi05.sh server
 robot_session=franka_vr_pi05_joint_robot
 camera_session=franka_vr_pi05_joint_cameras
+camera_mode="${VLA_CAMERA_MODE:-calibrated}"
+exterior_camera="${VLA_EXTERIOR_CAMERA:-left}"
 started_robot=false
 cleanup() {
   if [[ "$started_robot" == true ]] && tmux has-session -t "$robot_session" 2>/dev/null; then
@@ -65,8 +68,10 @@ if ! tmux has-session -t "$robot_session" 2>/dev/null; then
   started_robot=true
 fi
 if ! tmux has-session -t "$camera_session" 2>/dev/null; then
-  printf -v camera_command 'cd %q && exec ./run_vla_cameras.sh' "$root_dir"
-  tmux new-session -d -s "$camera_session" "$camera_command"
+  printf -v camera_command 'cd %q && VLA_CAMERA_MODE=%q VLA_EXTERIOR_CAMERA=%q exec ./run_vla_cameras.sh' \
+    "$root_dir" "$camera_mode" "$exterior_camera"
+  tmux new-session -d -s "$camera_session" -e "VLA_CAMERA_MODE=$camera_mode" \
+    -e "VLA_EXTERIOR_CAMERA=$exterior_camera" "$camera_command"
 fi
 
 echo "Waiting for the robot controllers and Servo (up to 120 seconds)..."
