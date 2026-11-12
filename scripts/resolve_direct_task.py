@@ -33,6 +33,7 @@ def resolve_task(config, task_id):
 
     task = copy.deepcopy(tasks[task_id])
     task["runtime"] = copy.deepcopy(runtime_for(task_id, set()))
+    task.pop("instruction_selectable", None)
     validate_task(task)
     direct = task.get("direct", {})
     if not isinstance(direct.get("init_after_stop", False), bool):
