@@ -3,7 +3,7 @@
 #   P1   : from ownstate (8-task joint finetune, save_20000), 8k steps, lr 1e-4, no state aug, save every 1k
 #   N8   : from P1 save_8000, lr 5e-5, state noise, 2k steps, save every 500
 #   eval : teacher-forced (3D approach error + close timing) on every save, 8 GPUs
-# Data: /data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103 (see docs/task3_gripper_label_bug_20261103.md)
+# Data: /data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103 (see docs/reports/task3_gripper_label_bug_20261103.md)
 set -u
 P=/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA
 LAUNCH=$P/train-scripts/run_franka_task0_actv2_continue_20.sh

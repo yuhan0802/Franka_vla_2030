@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ROS-independent protocol and safety core for end-effector pose policies.
 
-Protocol (see docs/franka_eef_pose_control_adapter.md):
+Protocol (see docs/reference/eef_pose_control_adapter.md):
   state  = [x, y, z, rotvec(3), gripper_open]   world -> fr3_link8, absolute rotvec
   action = [linear_cmd(3), angular_cmd(3), gripper_open] per 15 Hz step
            delta_position = linear_cmd * 0.075 m, delta_rotvec = angular_cmd * 0.15 rad

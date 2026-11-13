@@ -3,7 +3,7 @@
 # Usage: gate.sh CHECKPOINT GPU PORT OUTPUT_DIR
 # Starts deploy_franka_task0_qwen_actioncodec_eef.py (copy next to this script), runs the image-swap
 # test and the closed-loop rollout, writes summary.json, then stops the server.
-# Pass criteria (engineering thresholds, see docs/task1_eef_failure_analysis_20261030.md):
+# Pass criteria (engineering thresholds, see docs/reports/task1_eef_failure_analysis_20261030.md):
 #   image_reliance >= 0.5 and closed-loop over_30mm == 0 and within_20mm >= 8 of 10.
 set -euo pipefail
 checkpoint="$1"; gpu="$2"; port="$3"; out="$4"

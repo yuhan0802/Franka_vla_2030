@@ -49,7 +49,7 @@
 
 | 外部相机（left） | 腕部相机（front） |
 |---|---|
-| ![](img/task3_gripper_label/demo001_f750_left.jpg) | ![](img/task3_gripper_label/demo001_f750_wrist.jpg) |
+| ![](../img/task3_gripper_label/demo001_f750_left.jpg) | ![](../img/task3_gripper_label/demo001_f750_wrist.jpg) |
 
 ## 证据 3：30 条原始示范全部受影响
 
@@ -122,7 +122,7 @@ v5 只在第 574–596 帧给了约 0.7 s 的"打开"，随后又回到"关闭"�
 
 | 外部相机 | 腕部相机 |
 |---|---|
-| ![](img/task3_gripper_label/real_p1_7k_obs35_exterior.jpg) | ![](img/task3_gripper_label/real_p1_7k_obs35_wrist.jpg) |
+| ![](../img/task3_gripper_label/real_p1_7k_obs35_exterior.jpg) | ![](../img/task3_gripper_label/real_p1_7k_obs35_wrist.jpg) |
 
 ## 根因 1：遥操作程序把"失败的抓取"当成夹爪仍是开的（已验证）
 
