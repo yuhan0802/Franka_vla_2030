@@ -1,0 +1,62 @@
+/* Shared style for the architecture diagrams. Rendered to PNG by ../render.sh (headless Chrome). */
+:root {
+  --ink: #1f2937; --muted: #6b7280; --line: #d1d5db; --bg: #f8fafc;
+  --entry: #475569;   --entry-bg: #f1f5f9;
+  --cfg: #b45309;     --cfg-bg: #fff7ed;
+  --orch: #6d28d9;    --orch-bg: #f5f3ff;
+  --model: #be123c;   --model-bg: #fff1f2;
+  --ros: #1d4ed8;     --ros-bg: #eff6ff;
+  --ctrl: #0f766e;    --ctrl-bg: #f0fdfa;
+  --hw: #374151;      --hw-bg: #f3f4f6;
+  --ok: #15803d; --warn: #b91c1c;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); }
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink); width: 1800px; padding: 44px 52px 40px; font-size: 17px; line-height: 1.45;
+}
+code, .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em; }
+h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.5px; }
+.subtitle { color: var(--muted); font-size: 18px; margin-top: 6px; }
+.header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 26px; }
+.legend { display: flex; gap: 16px; font-size: 14px; color: var(--muted); flex-wrap: wrap; justify-content: flex-end; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.footer { margin-top: 22px; color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; }
+
+/* generic card */
+.card {
+  background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+}
+.card .t { font-weight: 700; font-size: 16.5px; }
+.card .d { color: var(--muted); font-size: 14px; margin-top: 3px; }
+.card code { color: inherit; }
+.pill {
+  display: inline-block; font-size: 12.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: #e5e7eb; color: #374151; margin-right: 4px; white-space: nowrap;
+}
+.pill.ok { background: #dcfce7; color: var(--ok); }
+.pill.warn { background: #fee2e2; color: var(--warn); }
+
+/* layer colour helpers */
+.L-entry { --c: var(--entry); --cb: var(--entry-bg); }
+.L-cfg   { --c: var(--cfg);   --cb: var(--cfg-bg); }
+.L-orch  { --c: var(--orch);  --cb: var(--orch-bg); }
+.L-model { --c: var(--model); --cb: var(--model-bg); }
+.L-ros   { --c: var(--ros);   --cb: var(--ros-bg); }
+.L-ctrl  { --c: var(--ctrl);  --cb: var(--ctrl-bg); }
+.L-hw    { --c: var(--hw);    --cb: var(--hw-bg); }
+.tinted { background: var(--cb); border-color: color-mix(in srgb, var(--c) 35%, white); }
+.accent { border-left: 6px solid var(--c); }
+.c { color: var(--c); }
+
+/* arrows drawn with CSS */
+.arrow-down { display: flex; flex-direction: column; align-items: center; color: var(--muted); font-size: 13px; }
+.arrow-down::after {
+  content: ""; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent;
+  border-top: 11px solid #9ca3af;
+}
+.arrow-down .shaft { width: 2.5px; background: #9ca3af; flex: 1; min-height: 10px; }
+.arrow-right { display: flex; align-items: center; color: #9ca3af; font-size: 30px; justify-content: center; }

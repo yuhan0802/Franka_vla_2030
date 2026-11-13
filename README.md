@@ -38,6 +38,21 @@ flowchart LR
 
 完整的部署图、ROS 话题图、三条控制链路、推理时序和安全层见 **[docs/architecture.md](docs/architecture.md)**。
 
+## 架构图
+
+下面的图从整体架构、权重配置、控制链路和端到端示例四个角度介绍本项目：
+
+<p align="center">
+  <a href="docs/diagrams/01_overall_architecture.png"><img src="docs/diagrams/01_overall_architecture.png" alt="整体架构" width="49%"></a>
+  <a href="docs/diagrams/02_weight_config.png"><img src="docs/diagrams/02_weight_config.png" alt="权重配置" width="49%"></a>
+</p>
+<p align="center">
+  <a href="docs/diagrams/03_control_paths.png"><img src="docs/diagrams/03_control_paths.png" alt="控制链路" width="49%"></a>
+  <a href="docs/diagrams/04_end_to_end_example.png"><img src="docs/diagrams/04_end_to_end_example.png" alt="端到端示例" width="49%"></a>
+</p>
+
+查看高清原图、HTML 源文件和重新生成方法：**[docs/diagrams/README.md](docs/diagrams/README.md)**。
+
 ## 快速上手
 
 ### 跑一个 VLA 任务（当前主流程：EEF 位姿模型）

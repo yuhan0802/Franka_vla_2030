@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>完整示例</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.part { background: #fff; border: 1.5px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 20px; }
+.part > .ttl { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.part > .ttl .badge { background: #111827; color: #fff; font-weight: 700; border-radius: 8px; padding: 3px 10px; font-size: 15px; }
+.part > .ttl .t { font-size: 22px; font-weight: 700; }
+.part > .ttl .s { color: var(--muted); font-size: 14.5px; }
+/* part A */
+.a-grid { display: grid; grid-template-columns: 1fr 1fr 1.55fr 1fr 1fr; gap: 12px; align-items: stretch; }
+.a-step { border-radius: 12px; border: 1.5px solid; padding: 12px; background: var(--cb); border-color: color-mix(in srgb, var(--c) 35%, white); position: relative; }
+.a-step .n { position: absolute; top: -12px; left: 12px; background: var(--c); color: #fff; border-radius: 999px; font-size: 13px; font-weight: 700; padding: 1px 10px; }
+.a-step .h { font-weight: 700; font-size: 15.5px; margin-top: 4px; color: var(--c); }
+.a-step .d { font-size: 13px; color: #374151; margin-top: 5px; }
+.term { font-family: "SF Mono", Menlo, monospace; font-size: 11.6px; background: #111827; color: #e5e7eb; border-radius: 8px; padding: 8px 10px; margin-top: 7px; line-height: 1.55; white-space: pre; overflow: hidden; }
+.term .p { color: #86efac; } .term .o { color: #9ca3af; } .term .w { color: #fde68a; }
+.diff { font-family: "SF Mono", Menlo, monospace; font-size: 11.6px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; margin-top: 7px; line-height: 1.55; white-space: pre; overflow: hidden; }
+.diff .add { background: #dcfce7; color: #14532d; display: inline-block; width: calc(100% + 20px); margin: 0 -10px; padding: 0 10px; }
+.diff .ctx { color: #6b7280; }
+.diff .hd { color: #be123c; font-weight: 700; }
+/* part B timeline */
+.tl { display: grid; grid-template-columns: 54px 150px 1.25fr 1fr 0.95fr; column-gap: 0; }
+.tl .hdr { font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .5px; padding: 0 12px 8px; }
+.tl .cell { padding: 10px 12px; border-top: 1px solid #eef0f3; font-size: 13.6px; }
+.tl .no { display: flex; align-items: flex-start; justify-content: center; padding-top: 10px; border-top: 1px solid #eef0f3; }
+.tl .no span { width: 30px; height: 30px; border-radius: 50%; background: var(--c); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.tl .layer { font-weight: 700; color: var(--c); }
+.tl .layer small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.tl .what b { color: #111827; }
+.tl .what code, .tl .out code, .tl .fail code { font-size: 12px; background: #f3f4f6; border-radius: 5px; padding: 1px 5px; }
+.tl .out { color: #374151; }
+.tl .fail { color: #991b1b; }
+.tl .band { grid-column: 1 / -1; background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 12px; margin: 6px 0; padding: 12px 14px; display: grid; grid-template-columns: 190px 1fr; gap: 14px; align-items: center; }
+.loop { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.loop .b { border-radius: 9px; padding: 7px 10px; font-size: 12.8px; background: #fff; border: 1.5px solid; border-color: color-mix(in srgb, var(--c) 40%, white); }
+.loop .b b { color: var(--c); display: block; font-size: 13.5px; }
+.loop .ar { color: #9ca3af; font-size: 18px; }
+.chunkbar { display: flex; gap: 3px; margin-top: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.chunkbar i { width: 22px; height: 14px; border-radius: 3px; background: #2563eb; display: inline-block; }
+.chunkbar i.skip { background: #cbd5e1; }
+.tree { font-family: "SF Mono", Menlo, monospace; font-size: 12.3px; line-height: 1.6; white-space: pre; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 14px; }
+.tree .c1 { color: #6b7280; }
+.endgrid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top: 14px; }
+</style></head>
+<body>
+<div class="header">
+  <div>
+    <h1>完整示例：登记一个新权重，并跑一次真机任务</h1>
+    <div class="subtitle">示例一演示增量扩展（只动 JSON）；示例二用真实条目 <code>task1 × act-v2</code>，从敲命令一直走到日志落盘，标出每一步在哪一层、产出什么、失败时会怎样。</div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--entry)"></i>入口</span><span><i class="dot" style="background:var(--cfg)"></i>配置</span>
+    <span><i class="dot" style="background:var(--orch)"></i>编排</span><span><i class="dot" style="background:var(--model)"></i>模型</span>
+    <span><i class="dot" style="background:var(--ros)"></i>ROS 2</span><span><i class="dot" style="background:var(--ctrl)"></i>控制</span><span><i class="dot" style="background:var(--hw)"></i>硬件</span>
+  </div>
+</div>
+
+<!-- ============ PART A ============ -->
+<div class="part">
+  <div class="ttl"><span class="badge">示例一</span><span class="t">给 task1 增加一个新训练出的权重</span><span class="s">key、端口、GPU 均为示意值（<code>my-new-5k</code>、8113、GPU 7）。实际以 <code>ss -ltn</code> / <code>nvidia-smi</code> 为准。全程不需要改 shell。</span></div>
+  <div class="a-grid">
+    <div class="a-step L-model"><span class="n">1 核实路径</span><div class="h">在 GPU 机上确认文件存在</div>
+      <div class="term"><span class="p">$</span> ssh mac_20 'ls -d \
+   …/save_5000_chkpt \
+   …/ActionCodec-Base-RVQft \
+   …/state_stats.json'
+<span class="p">$</span> cat …/save_5000_chkpt/\
+   training_config.json
+<span class="o"># 读出归一化方法与 scale 字段</span></div>
+      <div class="d">归一化参数<b>要读出来，不要猜</b>；没核实就写 <code>unverified</code>。</div></div>
+
+    <div class="a-step L-model"><span class="n">2 选端口 / GPU</span><div class="h">避免与在跑的服务冲突</div>
+      <div class="term"><span class="p">$</span> grep '"port"' \
+   config/eef_tasks.json
+<span class="p">$</span> ssh mac_20 'ss -ltn'
+<span class="p">$</span> ssh mac_20 nvidia-smi
+<span class="w">→ 选 8113 / GPU 7</span></div>
+      <div class="d">共用端口也合法，但同一时刻只能跑一个，切换前先 <code>stop</code>。</div></div>
+
+    <div class="a-step L-cfg"><span class="n">3 改 JSON</span><div class="h">追加 model 条目 + 关联到任务</div>
+      <div class="diff"><span class="hd">config/eef_tasks.json</span>
+<span class="ctx">"tasks": { "task1": { "models": [</span>
+<span class="ctx">    "act-v2", …,</span>
+<span class="add">+   "my-new-5k"</span>
+<span class="ctx">] } },</span>
+<span class="ctx">"models": { …,</span>
+<span class="add">+ "my-new-5k": {</span>
+<span class="add">+   "server": { "ssh": "mac_20", "host": "10.24.116.20",</span>
+<span class="add">+     "port": 8113, "gpu": 7,</span>
+<span class="add">+     "checkpoint": "…/save_5000_chkpt", "actioncodec": "…",</span>
+<span class="add">+     "state_stats": "…", "project": "…/Ours_VQAQ_VLA",</span>
+<span class="add">+     "script": "deploy_franka_task0_qwen_actioncodec_eef.py" },</span>
+<span class="add">+   "action_normalization": { "method": "franka_quantile", … },</span>
+<span class="add">+   "runtime": { "execute_horizon": 5 } }</span>
+<span class="ctx">}</span></div>
+      <div class="d"><b>追加，不覆盖</b>：不改旧 key 的 checkpoint，否则历史日志无法复现。</div></div>
+
+    <div class="a-step L-cfg"><span class="n">4 离线校验</span><div class="h">不连任何设备</div>
+      <div class="term"><span class="p">$</span> python3 scripts/\
+   validate_task_registries.py
+<span class="o">EEF registry: 26 selectable
+models, 0 error(s)</span>
+<span class="p">$</span> ./run_eef_task.sh \
+   task1 my-new-5k show
+<span class="o">{ "server": {"port": 8113 …</span></div>
+      <div class="d">ERROR 必须修；WARN「共用端口」只是提醒。</div></div>
+
+    <div class="a-step L-entry"><span class="n">5 交给现场</span><div class="h">由操作者逐级上真机</div>
+      <div class="term"><span class="p">$</span> ./run_eef_task.sh task1 \
+   my-new-5k dry-run
+<span class="p">$</span> … axis-test +z
+<span class="p">$</span> … run
+<span class="p">$</span> … stop</div>
+      <div class="d">然后更新 <code>docs/weights_and_tasks.md</code> 速查表，单独提交：<br><code>config: add task1 my-new-5k</code></div></div>
+  </div>
+</div>
+
+<!-- ============ PART B ============ -->
+<div class="part">
+  <div class="ttl"><span class="badge">示例二</span><span class="t">一次真机运行的全过程</span><span class="s"><code>./run_eef_task.sh task1 act-v2 run</code> → act-v2 = mac_63 · 10.24.116.63:8095 · GPU 1 · save_8000_chkpt · task0_maxabs · direct · 预测 15 执行 10</span></div>
+  <div class="tl">
+    <div></div><div class="hdr">层</div><div class="hdr">发生了什么</div><div class="hdr">产物 / 可以去哪里看</div><div class="hdr">失败时</div>
+
+    <div class="no L-cfg"><span>1</span></div><div class="cell layer L-cfg">配置层<small>eef_task_config.py</small></div>
+    <div class="cell what">合并 <b>defaults ⊕ models.act-v2 ⊕ tasks.task1</b>，逐项校验，导出约 35 个 <code>EEF_*</code> 变量</div>
+    <div class="cell out">临时目录中的 <code>profile.json</code> 和 env 文件</div>
+    <div class="cell fail">字段越界或未关联 → 直接报错退出</div>
+
+    <div class="no L-entry"><span>2</span></div><div class="cell layer L-entry">入口层<small>run_eef_task.sh</small></div>
+    <div class="cell what">direct 后端：检查是否做过 <b>axis-test</b></div>
+    <div class="cell out"><code>$FRANKA_LOG_ROOT/.eef_direct_commissioned</code></div>
+    <div class="cell fail"><code>REFUSED</code>，exit 3，提示先运行 <code>axis-test +z</code></div>
+
+    <div class="no L-model"><span>3</span></div><div class="cell layer L-model">模型层<small>run_eef_pose.sh server</small></div>
+    <div class="cell what">ssh mac_63 检查 8095 是否在听：<b>在听 → 复用</b>；否则 scp <code>server/deploy_…_eef.py</code>，在远端 tmux 中以 <code>CUDA_VISIBLE_DEVICES=1</code> 启动</div>
+    <div class="cell out">远端 <code>~/franka_eef_server/server_8095.log</code></div>
+    <div class="cell fail">240 s 内没起来 → 报错，提示 tail 日志</div>
+
+    <div class="no L-orch"><span>4</span></div><div class="cell layer L-orch">编排层<small>run_eef_direct.sh dry-run</small></div>
+    <div class="cell what">启动 tmux <code>franka_vr_eef_direct_robot</code>（direct 栈，armed）与 <code>…_cameras</code>（三路相机）；适配器只跑 <b>1 个动作块</b>，不发运动</div>
+    <div class="cell out"><code>&lt;run&gt;/dry_run/policy.jsonl</code>（<code>robot_command_sent=false</code>）、<code>observations/</code></div>
+    <div class="cell fail">日志盘未挂载 → 拒绝；栈退出 → 提示查看 <code>robot.log</code></div>
+
+    <div class="no L-ros"><span>5</span></div><div class="cell layer L-ros">ROS 2 层<small>适配器握手</small></div>
+    <div class="cell what">服务端 metadata 与期望值逐项比对：checkpoint、ActionCodec、state_stats、图像尺寸 256、旋转协议 world/左乘</div>
+    <div class="cell out"><code>policy.jsonl</code> 中的启动记录</div>
+    <div class="cell fail">不符 → 拒绝运行："stop the stale server first"</div>
+
+    <div class="no L-cfg"><span>6</span></div><div class="cell layer L-cfg">入口层<small>check-start</small></div>
+    <div class="cell what">dry-run 测得的位姿与 <code>start_pose</code> 比对（容差 5 mm / 0.02 rad）。偏离且 <code>auto_home=true</code> → <b>home</b>（小步回到训练起点）</div>
+    <div class="cell out">终端输出 <code>Start-pose offset: … m / … rad</code>；<code>&lt;run&gt;/home/</code></div>
+    <div class="cell fail">距离过远 → home 拒绝（不会一步跳过去）</div>
+
+    <div class="band">
+      <div><div style="font-weight:700;color:var(--ros);font-size:16px">7 · 执行循环</div><div style="font-size:12.8px;color:var(--muted);margin-top:3px"><code>&lt;run&gt;/execute/</code><br>默认不限块数，直到结束判定或人工停止</div></div>
+      <div>
+        <div class="loop">
+          <div class="b L-ros"><b>观测</b>外部 C922 左 + 腕部 RealSense<br>eef_state[7] = FK(/franka/joint_states)</div><span class="ar">→</span>
+          <div class="b L-model"><b>推理 · mac_63:8095</b>指令 "place the red test tube in the red basket"<br>→ action[15, 7]（服务端反归一化）</div><span class="ar">→</span>
+          <div class="b L-ros"><b>积分 + 检查</b>Δp = a·0.075 m，ΔR 左乘<br>工作空间 / 跳变 / 夹爪 / ≤0.035 rad</div><span class="ar">→</span>
+          <div class="b L-ros"><b>跟踪 · 100 Hz</b>DirectPoseTracker IK<br>→ 执行器限幅</div><span class="ar">→</span>
+          <div class="b L-ctrl"><b>控制 · 1 kHz</b>看门狗控制器<br>→ FR3</div><span class="ar">↺</span>
+        </div>
+        <div class="chunkbar">每块：<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="skip"></i><i class="skip"></i><i class="skip"></i><i class="skip"></i><i class="skip"></i>&nbsp; 预测 15 步（15 Hz = 1 s），执行前 10 步（蓝色），丢弃后 5 步，停稳后再观测（serial）。RTC 模型会在执行中提前发出下一次观测。</div>
+      </div>
+    </div>
+
+    <div class="no L-entry"><span>8</span></div><div class="cell layer L-entry">结束<small>三种方式</small></div>
+    <div class="cell what">① 松开后空闲判定正常结束　② <code>Ctrl-C</code>　③ 另一终端 <code>./run_eef_task.sh task1 act-v2 stop</code></div>
+    <div class="cell out">正常结束或故障退出时<b>不会</b>自动移动机械臂</div>
+    <div class="cell fail">任一安全层触发 → 零速停住，记 <code>event: fault</code></div>
+
+    <div class="no L-hw"><span>9</span></div><div class="cell layer L-hw">stop<small>按顺序收尾</small></div>
+    <div class="cell what">停适配器（SIGINT）→ 停 direct 栈与相机 → 停远端 8095 服务 → 等容器退出 → <code>fci_init.sh</code>：夹爪 homing + 回到 <code>config/default_initial_pose.json</code></div>
+    <div class="cell out">用 <code>stop-only</code> 只停不回位</div>
+    <div class="cell fail">任一步停止失败 → <b>不</b>执行回位</div>
+  </div>
+
+  <div class="endgrid">
+    <div><div style="font-weight:700;margin-bottom:6px">本次运行留下的日志（排查问题先看这里）</div>
+<div class="tree">$FRANKA_LOG_ROOT/<span class="c1">            # 默认 /media/mac/Elements1/franka_vr_docker/logs</span>
+└── eef_task1_act-v2_20261113_150210_48213/
+    ├── selected_profile.json  <span class="c1"># 本次实际生效的完整配置</span>
+    ├── dry_run/   policy.jsonl  observations/  *_tmux.log
+    ├── home/      <span class="c1"># 仅在偏离起点时出现</span>
+    └── execute/   policy.jsonl <span class="c1"># 每块的观测、动作、event: armed / fault / complete</span></div></div>
+    <div class="card" style="border-color:#fecaca;background:#fef2f2"><div class="t" style="color:#991b1b">这几步不会被自动跳过</div>
+      <div class="d" style="color:#7f1d1d;font-size:13.8px;margin-top:6px">• 没有 axis-test 记录，direct 后端拒绝 run（第 2 步）<br>• 每次 run 前都会先做一次 dry-run 和握手核对（第 4、5 步）<br>• 不在训练起点时先 home，距离过远则拒绝（第 6 步）<br>• 运动模式的确认令牌由入口脚本自动设置，<b>不要手动设置</b><br>• 急停永远是最后一道保护</div></div>
+  </div>
+</div>
+
+<div class="footer"><span>源文件：docs/diagrams/src/04_end_to_end_example.html · 重新生成：docs/diagrams/render.sh · 日志目录名中的时间与 pid 为示意</span><span>2026-11-13</span></div>
+<script>addEventListener("load",()=>document.documentElement.dataset.h=document.documentElement.scrollHeight)</script>
+</body></html>

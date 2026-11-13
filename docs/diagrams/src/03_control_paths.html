@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>控制链路</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.paths { display: grid; grid-template-columns: 1.15fr 1fr 0.85fr; gap: 22px; }
+.path { border-radius: 16px; padding: 16px; border: 2px solid var(--line); background: #fff; }
+.path.main { border-color: #93c5fd; box-shadow: 0 0 0 4px #dbeafe; }
+.ph { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.ph .t { font-size: 21px; font-weight: 700; }
+.ph .s { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.step { border-radius: 10px; padding: 9px 12px; border: 1.5px solid; background: var(--cb); border-color: color-mix(in srgb, var(--c) 35%, white); }
+.step .k { font-size: 11.5px; font-weight: 700; letter-spacing: .6px; color: var(--c); text-transform: uppercase; }
+.step .v { font-weight: 700; font-size: 15px; }
+.step .d { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.step code { font-size: 12.3px; }
+.row { display: flex; gap: 8px; }
+.row > .step { flex: 1; }
+.topic { display: flex; align-items: center; gap: 8px; justify-content: center; height: 38px; font-size: 12.8px; color: var(--muted); }
+.topic code { background: #f3f4f6; border-radius: 6px; padding: 2px 7px; color: #111827; }
+.topic .ar { font-size: 18px; color: #9ca3af; }
+.cmp { margin-top: 22px; }
+.cmp table { width: 100%; table-layout: fixed; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; border: 1.5px solid var(--line); font-size: 14.5px; }
+.cmp th, .cmp td { padding: 9px 12px; text-align: left; border-top: 1px solid #eef0f3; vertical-align: top; }
+.cmp th { background: #f8fafc; font-size: 13.5px; color: var(--muted); border-top: 0; }
+.cmp td:first-child { font-weight: 700; color: #374151; width: 150px; }
+.warnbar { margin-top: 16px; background: #fef2f2; border: 1.5px solid #fecaca; color: #7f1d1d; border-radius: 12px; padding: 11px 16px; font-size: 15px; }
+</style></head>
+<body>
+<div class="header">
+  <div>
+    <h1>三条控制链路：动作是怎么到达关节的</h1>
+    <div class="subtitle">从上到下 = 从命令到电机。蓝框为当前默认链路。三条链路都会占用 FCI 和 /controller_manager，<b>同一时刻只能运行一条</b>。</div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--entry)"></i>入口</span><span><i class="dot" style="background:var(--orch)"></i>launch</span>
+    <span><i class="dot" style="background:var(--model)"></i>模型</span><span><i class="dot" style="background:var(--ros)"></i>ROS 节点</span>
+    <span><i class="dot" style="background:var(--ctrl)"></i>控制器</span><span><i class="dot" style="background:var(--hw)"></i>硬件</span>
+  </div>
+</div>
+
+<div class="paths">
+  <!-- A direct -->
+  <div class="path main">
+    <div class="ph"><div><div class="t" style="color:var(--ros)">A · Direct 关节速度</div><div class="s">EEF 位姿模型与 pi0.5 关节模型的默认执行后端 · 无 MoveIt Servo</div></div><span class="pill ok">默认</span></div>
+    <div class="row">
+      <div class="step L-entry"><div class="k">入口</div><div class="v">run_eef_task.sh</div><div class="d">→ run_eef_direct.sh</div></div>
+      <div class="step L-entry"><div class="k">入口</div><div class="v">run_task.sh / tk*.sh</div><div class="d">→ run_pi05_direct.sh</div></div>
+    </div>
+    <div class="topic"><span class="ar">↓</span>run_robot_pi05_direct.sh + run_vla_cameras.sh</div>
+    <div class="step L-orch"><div class="k">launch</div><div class="v">franka_pi05_direct_velocity.launch.py</div><div class="d">robot_state_publisher · franka_gripper · 碰撞监视 · 执行器 · ros2_control_node（CPU 4）</div></div>
+    <div class="topic"><span class="ar">↓</span>相机图像 + /franka/joint_states</div>
+    <div class="row">
+      <div class="step L-ros"><div class="k">策略节点</div><div class="v">eef_pose_direct_adapter.py</div><div class="d">或 eef_pose_rtc_adapter.py<br>动作块 → 目标位姿 → <b>DirectPoseTracker</b>（P + DLS IK，100 Hz）</div></div>
+      <div class="step L-ros"><div class="k">策略节点</div><div class="v">pi05_direct_policy_adapter.py</div><div class="d">pi0.5 直接输出关节速度</div></div>
+    </div>
+    <div class="topic"><span class="ar">⇅</span>WebSocket ↔ <span style="color:var(--model);font-weight:600">GPU 模型服务</span></div>
+    <div class="topic" style="height:30px"><span class="ar">↓</span><code>/pi05/direct_joint_velocity_cmd</code> JointJog</div>
+    <div class="row">
+      <div class="step L-ros" style="flex:1.6"><div class="k">安全执行器 · C++ · 100 Hz</div><div class="v">pi05_direct_velocity_executor</div><div class="d">速度 / 加速度限幅 · 关节限位余量 · 跟踪误差软/硬阈值 · 指令过期 · 连续超时</div></div>
+      <div class="step L-ros"><div class="k">C++</div><div class="v">pi05_collision_monitor</div><div class="d">→ <code>/pi05/collision_stop</code></div></div>
+    </div>
+    <div class="topic"><span class="ar">↓</span><code>/fr3_direct_velocity_controller/commands</code>（仅 armed 时创建）</div>
+    <div class="step L-ctrl"><div class="k">控制器 · 1 kHz</div><div class="v">Pi05WatchdogVelocityController</div><div class="d">本项目自研插件：jerk 限制平滑 · 0.1 s 收不到指令即停</div></div>
+    <div class="topic"><span class="ar">↓</span>franka_hardware · libfranka</div>
+    <div class="step L-hw"><div class="k">硬件</div><div class="v">FR3 关节速度接口 · FCI 172.16.0.2</div></div>
+  </div>
+
+  <!-- B servo -->
+  <div class="path">
+    <div class="ph"><div><div class="t" style="color:var(--ctrl)">B · MoveIt Servo 位姿</div><div class="s">VR 遥操作 · 键盘 · 数据采集 · EEF 的 servo 后端</div></div><span class="pill">采集用</span></div>
+    <div class="row">
+      <div class="step L-entry"><div class="k">入口</div><div class="v">run_robot.sh</div><div class="d">（仿真：run_gazebo*.sh）</div></div>
+    </div>
+    <div class="topic"><span class="ar">↓</span>franka_robot 容器</div>
+    <div class="step L-orch"><div class="k">launch</div><div class="v">franka_twist.launch.py</div><div class="d">仿真版本 gazebo_vr.launch.py</div></div>
+    <div class="topic"><span class="ar">↓</span>各输入源都调用同一个服务</div>
+    <div class="row">
+      <div class="step L-ros"><div class="k">输入</div><div class="v">Quest 3</div><div class="d">run_vr.sh<br>start_franka_vr.py</div></div>
+      <div class="step L-ros"><div class="k">输入</div><div class="v">键盘</div><div class="d">keyboard_manual_control.py</div></div>
+      <div class="step L-ros"><div class="k">输入</div><div class="v">策略</div><div class="d">eef_pose_policy_adapter<br>（EEF_CONTROL=servo）</div></div>
+    </div>
+    <div class="topic"><span class="ar">↓</span>服务 <code>/set_target_pose</code></div>
+    <div class="step L-ros"><div class="k">C++</div><div class="v">demo_franka_vr_vel（franka_vr_vel.cpp）</div><div class="d">内嵌 <b>MoveIt Servo</b>：奇异位形、碰撞、关节边界保护；100 Hz 目标跟踪</div></div>
+    <div class="topic"><span class="ar">↓</span><code>/fr3_arm_controller/joint_trajectory</code></div>
+    <div class="step L-ctrl"><div class="k">控制器 · 1 kHz</div><div class="v">JointTrajectoryController</div><div class="d">fr3_arm_controller（上游）</div></div>
+    <div class="topic"><span class="ar">↓</span>franka_hardware 或 Gazebo Sim</div>
+    <div class="step L-hw"><div class="k">硬件</div><div class="v">FR3 / Gazebo FR3</div></div>
+    <div class="topic"><span class="ar">↘</span>同时：<b>lerobot_episode_recorder.py</b> 录关节、EEF、夹爪、三路相机</div>
+  </div>
+
+  <!-- C legacy -->
+  <div class="path" style="background:#fafafa">
+    <div class="ph"><div><div class="t" style="color:var(--muted)">C · pi0.5 JointJog via Servo</div><div class="s">遗留链路，仅用于复现旧实验</div></div><span class="pill warn">遗留</span></div>
+    <div class="step L-entry"><div class="k">入口</div><div class="v">run_20k.sh · run_7k.sh</div><div class="d">run_sim2real.sh · run_pi05.sh</div></div>
+    <div class="topic"><span class="ar">↓</span>run_pi05_joint.sh → run_robot_pi05_joint.sh</div>
+    <div class="step L-orch"><div class="k">launch</div><div class="v">franka_pi05_joint_velocity.launch.py</div></div>
+    <div class="topic"><span class="ar">↓</span></div>
+    <div class="step L-ros"><div class="k">策略节点</div><div class="v">pi05_joint_velocity_adapter.py</div><div class="d">串行：执行完一块 → 停 → 观测 → 推理</div></div>
+    <div class="topic"><span class="ar">↓</span><code>/servo_node/delta_joint_cmds</code></div>
+    <div class="step L-ros"><div class="k">上游</div><div class="v">MoveIt Servo</div><div class="d">JointJog 模式</div></div>
+    <div class="topic"><span class="ar">↓</span><code>/fr3_arm_controller/joint_trajectory</code></div>
+    <div class="step L-ctrl"><div class="k">控制器</div><div class="v">JointTrajectoryController</div></div>
+    <div class="topic"><span class="ar">↓</span></div>
+    <div class="step L-hw"><div class="k">硬件</div><div class="v">FR3</div></div>
+    <div class="d" style="margin-top:14px;font-size:13.5px;color:var(--muted)">新工作请用链路 A。背景见 docs/archive/pi05_success.md。</div>
+  </div>
+</div>
+
+<div class="cmp"><table>
+  <tr><th></th><th>A · Direct 关节速度</th><th>B · MoveIt Servo 位姿</th><th>C · JointJog via Servo</th></tr>
+  <tr><td>谁在算关节速度</td><td>适配器内的 DirectPoseTracker（EEF 模型）或模型本身（pi0.5）</td><td>MoveIt Servo</td><td>模型输出，经 Servo 转发</td></tr>
+  <tr><td>独有安全层</td><td>C++ 执行器 + 看门狗控制器 + 碰撞监视</td><td>Servo 的奇异 / 碰撞 / 边界保护</td><td>Servo 保护 + Python 侧限幅</td></tr>
+  <tr><td>dry-run 如何保证不动</td><td>未 armed 时执行器不创建硬件指令发布者</td><td>适配器不创建 /set_target_pose 客户端</td><td>不创建 JointJog 发布者</td></tr>
+  <tr><td>上线前自检</td><td>EEF：<code>axis-test ±x/y/z/rx/ry/rz</code>（run 前强制检查）· pi0.5：<code>run_pi05_direct.sh commission</code> 脉冲</td><td>低速手动 VR / 键盘</td><td>按旧实验记录复现</td></tr>
+  <tr><td>切换方式</td><td>默认；<code>defaults.control = "direct"</code></td><td><code>EEF_CONTROL=servo</code>，或在 JSON 中设置</td><td>只能通过旧脚本进入</td></tr>
+</table></div>
+<div class="warnbar">⚠ 启动任何一条链路前，先停掉其他链路（以及 Gazebo / fake-hardware）。它们共享 host 网络和 <code>/controller_manager</code>，同时运行会争抢 FCI。</div>
+
+<div class="footer"><span>源文件：docs/diagrams/src/03_control_paths.html · 重新生成：docs/diagrams/render.sh</span><span>2026-11-13</span></div>
+<script>addEventListener("load",()=>document.documentElement.dataset.h=document.documentElement.scrollHeight)</script>
+</body></html>
