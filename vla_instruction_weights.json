@@ -22,6 +22,48 @@
       }
     },
     {
+      "id": "task0-fsp-demo20",
+      "instruction": "put the red test tube into the red basket",
+      "instruction_selectable": false,
+      "checkpoint_root": "/data/eainas/pi05_Franka_vr/runs/pi05_franka_task0_fsp_finetune/task0_fsp_demo20_t16_bs32_20k_20261110-104924",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_task0_fsp_finetune",
+      "direct": {
+        "runtime_from": "task1",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task0-fsp-demo10",
+      "instruction": "put the red test tube into the red basket",
+      "instruction_selectable": false,
+      "checkpoint_root": "/data/eainas/pi05_Franka_vr/runs/pi05_franka_task0_fsp_finetune/task0_fsp_demo10_t16_bs32_20k_20261110-223413",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_task0_fsp_finetune",
+      "direct": {
+        "runtime_from": "task1",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
       "instruction": "Place the pink tube into the blue basket.",
       "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_sim_tube_pick_pink2bluebin_finetune/pink2bluebin_full_bs32_20k",
       "checkpoint_step": 20000,

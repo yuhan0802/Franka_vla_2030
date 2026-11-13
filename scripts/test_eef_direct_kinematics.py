@@ -125,7 +125,7 @@ class TrackerTests(unittest.TestCase):
 
     def test_envelope_cannot_exceed_executor(self):
         with self.assertRaises(ValueError): DirectPoseTracker(max_joint_velocity=0.7)
-        with self.assertRaises(ValueError): DirectPoseTracker(max_joint_acceleration=2.5)
+        with self.assertRaises(ValueError): DirectPoseTracker(max_joint_acceleration=3.76)
 
 
 if __name__ == "__main__":

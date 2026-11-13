@@ -43,6 +43,13 @@ ROTVEC_FLIP_WARNING_RAD = 2.9
 ROTATION_EXECUTION = {"relative_rotvec_left_multiply": "world", "relative_rotvec_right_multiply": "tool"}
 
 
+def advance_action_deadline(previous: float, now: float, action_hz: float = ACTION_HZ) -> float:
+    """Advance one action period without bursting missed actions."""
+    if action_hz <= 0:
+        raise ValueError("action_hz must be positive")
+    return max(previous + 1.0 / action_hz, now)
+
+
 def normalize_quaternion(quaternion: object) -> np.ndarray:
     q = np.asarray(quaternion, dtype=np.float64)
     if q.shape != (4,) or not np.isfinite(q).all():

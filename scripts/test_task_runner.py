@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from resolve_direct_task import resolve_task
+from select_vla_task import load_task
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,7 +20,8 @@ class TaskRunnerTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "runner project"
         (self.root / "scripts").mkdir(parents=True)
-        for name in ("run_task.sh", "task1.sh", "task2.sh", "task6.sh"):
+        for name in ("run_task.sh", "task1.sh", "task2.sh", "task6.sh",
+                     "task0-fsp-demo20.sh", "task0-fsp-demo10.sh"):
             shutil.copy(ROOT / name, self.root / name)
         for name in ("resolve_direct_task.py", "select_vla_task.py"):
             shutil.copy(ROOT / "scripts" / name, self.root / "scripts" / name)
@@ -88,6 +90,32 @@ sys.exit(int(os.environ.get('TEST_BACKEND_EXIT','0')))
         result = self.run_task("task1", "show")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["tasks"][0]["runtime"]["max_actions"], 2000)
+        self.assertEqual(self.calls(), [])
+
+    def test_fsp_checkpoints_are_id_only_and_keep_task1_as_prompt_default(self):
+        default = load_task(self.config_path, "put the red test tube into the red basket")
+        self.assertEqual(default["id"], "task1")
+        expected = {
+            "task0-fsp-demo20": "/data/eainas/pi05_Franka_vr/runs/pi05_franka_task0_fsp_finetune/task0_fsp_demo20_t16_bs32_20k_20261110-104924",
+            "task0-fsp-demo10": "/data/eainas/pi05_Franka_vr/runs/pi05_franka_task0_fsp_finetune/task0_fsp_demo10_t16_bs32_20k_20261110-223413",
+        }
+        inherited_runtime = next(t["runtime"] for t in self.config["tasks"] if t.get("id") == "task2")
+        for task_id, checkpoint_root in expected.items():
+            with self.subTest(task_id=task_id):
+                source = next(t for t in self.config["tasks"] if t.get("id") == task_id)
+                self.assertFalse(source["instruction_selectable"])
+                self.assertEqual(source["checkpoint_root"], checkpoint_root)
+                self.assertEqual(source["checkpoint_step"], 20000)
+                self.assertEqual(source["policy_config"], "pi05_franka_task0_fsp_finetune")
+                resolved = resolve_task(self.config, task_id)
+                self.assertNotIn("instruction_selectable", resolved)
+                self.assertEqual(resolved["runtime"], inherited_runtime)
+
+                result = self.run_task(task_id, "show")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                selected = json.loads(result.stdout)["tasks"][0]
+                self.assertEqual(selected["checkpoint_root"], checkpoint_root)
+                self.assertNotIn("instruction_selectable", selected)
         self.assertEqual(self.calls(), [])
 
     def test_stop_preserves_existing_task_specific_init_policy(self):

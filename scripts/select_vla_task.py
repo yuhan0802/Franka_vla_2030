@@ -13,10 +13,11 @@ def load_task(config_path: Path, instruction: str) -> dict:
         raise ValueError("config must contain version=1 and a tasks array")
 
     tasks = config["tasks"]
-    instructions = [task.get("instruction") for task in tasks]
+    selectable_tasks = [task for task in tasks if task.get("instruction_selectable", True)]
+    instructions = [task.get("instruction") for task in selectable_tasks]
     if len(instructions) != len(set(instructions)):
-        raise ValueError("task instructions must be unique")
-    matches = [task for task in tasks if task.get("instruction") == instruction]
+        raise ValueError("instruction-selectable task instructions must be unique")
+    matches = [task for task in selectable_tasks if task.get("instruction") == instruction]
     if not matches:
         supported = "\n  - ".join(str(value) for value in instructions)
         raise ValueError(f"unknown VLA_INSTRUCTION: {instruction!r}\nSupported instructions:\n  - {supported}")

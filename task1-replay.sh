@@ -64,7 +64,7 @@ case "$mode" in
     ssh "$EEF_REMOTE_SSH" "mkdir -p ~/franka_eef_server && cd ~/franka_eef_server
       export VLA_PROJECT_ROOT=/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA
       /data2/lyh/envs/qwenvla/bin/python - --verify --checkpoint '$replay_npz'" \
-      < "$script_dir/replay_eef_trajectory_server.py"; exit $? ;;
+      < "$script_dir/server/replay_eef_trajectory_server.py"; exit $? ;;
   axis-test)
     axis="${2:-}"
     case "$axis" in +x|-x|+y|-y|+z|-z|+rx|-rx|+ry|-ry|+rz|-rz) ;; *)
