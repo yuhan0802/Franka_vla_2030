@@ -18,17 +18,18 @@
 
 ## 任务与模型 key
 
-目前 task1 对应训练指令 `place the red test tube in the red basket`，可选：
+**当前可选的任务与模型以 `./run_eef_task.sh list` 为准**。全部模型的服务器、端口、GPU、归一化方式见
+[weights_and_tasks.md §5](../weights_and_tasks.md#5-当前登记的模型速查)；如何新增见同文 §4。
 
-| 模型 key | 服务器 | 权重 | 原快捷入口 |
+有快捷脚本的 task1 模型：
+
+| 模型 key | 服务器 | 权重 | 快捷入口 |
 |---|---|---|---|
 | `act-v2` | 63:8095 | v5 maxabs / 8000 | `task1-act-v2.sh` |
 | `act` | 20:8095 | v5 x3 / 8000 | `task1-act.sh` |
 | `act-1k` | 63:8095 | v4 / 1000 | `task1-act-1k.sh` |
 | `act2` | 20:8096 | 增强版 / 4000 | `task1-act2.sh` |
 | `droid` | 20:8097 | DROID 预训练 / 20000 | `task1-droid.sh` |
-| `universal-mulaw9` | 63:8098 | 8 任务联合训练 / 10000，μ-law μ=9 | 使用通用入口 |
-| `universal-maxabs-x2` | 63:8099 | 8 任务联合训练 / 10000，线性 maxabs x2 | 使用通用入口 |
 
 五个快捷脚本都转发到通用入口。例如 `./task1-act-v2.sh stop` 等同于
 `./run_eef_task.sh task1 act-v2 stop`。

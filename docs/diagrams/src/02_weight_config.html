@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>权重配置</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.cols { display: grid; grid-template-columns: 474px 30px 352px 30px 318px 30px 462px; } .cols > * { min-width: 0; align-items: stretch; }
+.colh { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.num { width: 30px; height: 30px; border-radius: 50%; background: var(--c); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; }
+.colh .t { font-size: 20px; font-weight: 700; }
+.colh .s { font-size: 13.5px; color: var(--muted); }
+.gut { display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 28px; padding-top: 40px; }
+pre {
+  font-family: "SF Mono", Menlo, monospace; font-size: 11.9px; line-height: 1.5; white-space: pre; overflow: hidden;
+  border-radius: 10px; padding: 10px 12px; border: 1.5px solid; margin-bottom: 10px;
+}
+pre .k { color: #6b7280; } pre .v { color: #111827; font-weight: 600; } pre .hl { background: #fef08a; border-radius: 3px; padding: 0 2px; }
+.sec-def { background: #f8fafc; border-color: #cbd5e1; }
+.sec-mod { background: #fff1f2; border-color: #fda4af; }
+.sec-task { background: #fff7ed; border-color: #fdba74; }
+.tag { display: inline-block; font-family: "PingFang SC", sans-serif; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 6px; color: #fff; margin-bottom: 4px; }
+.tag.def { background: #64748b; } .tag.mod { background: #e11d48; } .tag.task { background: #d97706; } .tag.res { background: #6b7280; }
+.stack { position: relative; height: 158px; margin: 2px 0 14px; }
+.sheet { position: absolute; left: 0; right: 0; height: 52px; border-radius: 10px; border: 1.5px solid; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-weight: 700; font-size: 15px; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+.sheet small { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.s3 { top: 0; background: #fff7ed; border-color: #fdba74; color: #b45309; }
+.s2 { top: 53px; background: #fff1f2; border-color: #fda4af; color: #be123c; left: 10px; right: -10px; }
+.s1 { top: 106px; background: #f8fafc; border-color: #cbd5e1; color: #475569; left: 20px; right: -20px; }
+table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13.5px; background: #fff; border-radius: 10px; overflow: hidden; border: 1.5px solid var(--line); }
+td { padding: 5px 9px; border-top: 1px solid #eef0f3; vertical-align: top; }
+tr:first-child td { border-top: 0; }
+td:first-child { width: 118px; font-family: "SF Mono", Menlo, monospace; font-size: 12.3px; color: #374151; white-space: nowrap; }
+td:nth-child(2) { font-weight: 600; }
+td:last-child { width: 82px; text-align: right; white-space: nowrap; }
+.checks { margin-top: 12px; font-size: 13.5px; }
+.checks div::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+.env { font-family: "SF Mono", Menlo, monospace; font-size: 10.9px; line-height: 1.68; background: #1f2937; color: #e5e7eb; border-radius: 10px; padding: 12px 10px; }
+.env b { color: #93c5fd; font-weight: 600; } .env i { color: #fde68a; font-style: normal; }
+.use { margin-bottom: 12px; }
+.use .cmdline { font-family: "SF Mono", Menlo, monospace; font-size: 11.9px; white-space: nowrap; background: #f3f4f6; border-radius: 8px; padding: 7px 9px; margin-top: 7px; line-height: 1.5; color: #111827; }
+.verdict { display: flex; gap: 8px; margin-top: 8px; }
+.verdict > div { flex: 1; border-radius: 8px; padding: 7px 9px; font-size: 13px; }
+.yes { background: #dcfce7; color: #14532d; } .no { background: #fee2e2; color: #7f1d1d; }
+.bottom { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 16px; margin-top: 22px; }
+.bottom .card .t { margin-bottom: 6px; }
+.chips code { display: inline-block; background: #f3f4f6; border-radius: 6px; padding: 2px 7px; margin: 0 4px 5px 0; font-size: 12.3px; }
+.chips.bad code { background: #fee2e2; color: #991b1b; text-decoration: line-through; }
+.chain { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13.5px; flex-wrap: wrap; }
+.chain .n { border: 1.5px solid #fdba74; background: #fff7ed; border-radius: 8px; padding: 4px 9px; font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; }
+.chain .n.end { border-color: #86efac; background: #f0fdf4; }
+.chain .a { color: var(--muted); font-size: 12px; }
+.note { font-size: 13px; color: var(--muted); margin-top: 7px; }
+</style></head>
+<body>
+<div class="header">
+  <div>
+    <h1>权重是怎么配置的：从 JSON 到 GPU 服务和机械臂</h1>
+    <div class="subtitle">以真实条目 <code>task40 × universal-mulaw9</code>（开盖任务 × 8 任务联合模型）为例，所有数值取自 config/eef_tasks.json 与解析器实际输出。</div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:#64748b"></i>defaults</span>
+    <span><i class="dot" style="background:#e11d48"></i>models.&lt;key&gt;</span>
+    <span><i class="dot" style="background:#d97706"></i>tasks.&lt;key&gt;</span>
+  </div>
+</div>
+
+<div class="cols">
+  <!-- 1 JSON -->
+  <div class="L-cfg">
+    <div class="colh"><div class="num">1</div><div><div class="t">登记：config/eef_tasks.json</div><div class="s">一个文件、三个区块。换权重 = 改这里</div></div></div>
+<pre class="sec-def"><span class="tag def">defaults · 所有组合的默认值</span>
+<span class="k">"control"</span>: <span class="v">"direct"</span>,
+<span class="k">"adapter"</span>: { <span class="k">"exterior_camera"</span>: <span class="v">"left"</span>,
+             <span class="k">"model_image_size"</span>: <span class="v">256</span>,
+             <span class="k">"rotation_frame"</span>: <span class="v">"world"</span>, … },
+<span class="k">"runtime"</span>: { <span class="k">"execute_horizon"</span>: <span class="v">10</span>, <span class="k">"max_rotation"</span>: <span class="v">0.035</span>,
+             <span class="k">"auto_home"</span>: <span class="v">true</span>, … }</pre>
+<pre class="sec-mod"><span class="tag mod">models."universal-mulaw9" · 权重身份</span>
+<span class="k">"server"</span>: {
+  <span class="k">"ssh"</span>: <span class="v">"mac_63"</span>, <span class="k">"host"</span>: <span class="v">"10.24.116.63"</span>,
+  <span class="k">"port"</span>: <span class="v">8098</span>, <span class="k">"gpu"</span>: <span class="v">1</span>,
+  <span class="k">"checkpoint"</span>: <span class="v">".../save_10000_chkpt"</span>,
+  <span class="k">"actioncodec"</span>: <span class="v">".../ActionCodec-Base-RVQft"</span>,
+  <span class="k">"state_stats"</span>: <span class="v">".../droid_eef_axis_angle_…json"</span>,
+  <span class="k">"project"</span>: <span class="v">"/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA"</span>,
+  <span class="k">"script"</span>: <span class="v">"deploy_franka_task0_qwen_actioncodec_eef.py"</span> },
+<span class="k">"action_normalization"</span>: {
+  <span class="k">"method"</span>: <span class="v">"franka_mulaw"</span>, <span class="k">"mu"</span>: <span class="v">9.0</span>, … },
+<span class="k">"runtime"</span>: { <span class="k">"execute_horizon"</span>: <span class="v">10</span> },
+<span class="k">"task_key_to_training_task"</span>: {
+  <span class="k">"task40"</span>: <span class="v">"Task40"</span>, … }</pre>
+<pre class="sec-task"><span class="tag task">tasks."task40" · 任务</span>
+<span class="k">"instruction"</span>: <span class="v">"open the lid"</span>,        <span class="k">← 与训练逐字一致</span>
+<span class="k">"models"</span>: [<span class="hl">"universal-mulaw9"</span>, "universal-maxabs-x2"],
+<span class="k">"start_pose"</span>: { <span class="k">"position"</span>: <span class="v">[0.5577, -0.0015, 0.3205]</span>, … },
+<span class="k">"runtime"</span>: { <span class="k">"action_gain"</span>: <span class="v">[1.0, 0.8, 1.0, 1.0, 1.0, 1.0]</span> }</pre>
+    <div class="note">高亮处：任务通过 <code>models[]</code> 列表允许使用哪些模型 key。没列在这里的组合会被直接拒绝。</div>
+  </div>
+
+  <div class="gut">➜</div>
+
+  <!-- 2 merge -->
+  <div class="L-cfg">
+    <div class="colh"><div class="num">2</div><div><div class="t">解析：eef_task_config.py</div><div class="s">按字段覆盖，然后逐项范围校验</div></div></div>
+    <div class="stack">
+      <div class="sheet s3">tasks.task40 <small>优先级最高</small></div>
+      <div class="sheet s2">models.universal-mulaw9 <small>覆盖 defaults</small></div>
+      <div class="sheet s1">defaults <small>兜底</small></div>
+    </div>
+    <table>
+      <tr><td>instruction</td><td>"open the lid"</td><td><span class="tag task">task</span></td></tr>
+      <tr><td>start_pose</td><td>0.5577, -0.0015, 0.3205</td><td><span class="tag task">task</span></td></tr>
+      <tr><td>action_gain</td><td>[1, <span style="color:#b45309">0.8</span>, 1, 1, 1, 1]</td><td><span class="tag task">task</span></td></tr>
+      <tr><td>server</td><td>mac_63 : 8098 · GPU 1</td><td><span class="tag mod">model</span></td></tr>
+      <tr><td>checkpoint</td><td>…/save_10000_chkpt</td><td><span class="tag mod">model</span></td></tr>
+      <tr><td>normalization</td><td>franka_mulaw, μ = 9</td><td><span class="tag mod">model</span></td></tr>
+      <tr><td>execute_horizon</td><td>10 / 15</td><td><span class="tag mod">model</span></td></tr>
+      <tr><td>control</td><td>direct</td><td><span class="tag def">defaults</span></td></tr>
+      <tr><td>max_rotation</td><td>0.035 rad / 步</td><td><span class="tag def">defaults</span></td></tr>
+      <tr><td>chunk_mode</td><td>serial</td><td><span class="tag res">解析器默认</span></td></tr>
+    </table>
+    <div class="checks">
+      <div>task40 的 models[] 包含 universal-mulaw9</div>
+      <div>action_gain 每维 ∈ (0, 1]，只能缩小不能放大</div>
+      <div>execute_horizon ∈ [1, 15]，max_rotation ≤ 0.15</div>
+      <div>路径均为绝对路径，端口合法，mulaw 必须给 μ</div>
+    </div>
+  </div>
+
+  <div class="gut">➜</div>
+
+  <!-- 3 outputs -->
+  <div class="L-orch">
+    <div class="colh"><div class="num">3</div><div><div class="t">产物：profile + 环境变量</div><div class="s">show 模式到此为止，不连任何设备</div></div></div>
+    <div class="card" style="margin-bottom:12px"><div class="t c">selected_profile.json</div><div class="d">复制进本次日志目录<br><code>$FRANKA_LOG_ROOT/eef_task40_universal-mulaw9_&lt;时间&gt;_&lt;pid&gt;/</code><br>事后可以精确知道这次用了什么配置</div></div>
+    <div class="env">
+<b>EEF_CONTROL</b>=<i>direct</i><br>
+<b>VLA_INSTRUCTION</b>=<i>open the lid</i><br>
+<b>EEF_REMOTE_SSH</b>=<i>mac_63</i><br>
+<b>EEF_SERVER_HOST</b>=<i>10.24.116.63</i><br>
+<b>EEF_SERVER_PORT</b>=<i>8098</i><br>
+<b>EEF_SERVER_GPU</b>=<i>1</i><br>
+<b>EEF_SERVER_SCRIPT</b>=<i>deploy_…_eef.py</i><br>
+<b>EEF_CHECKPOINT</b>=<i>…/save_10000_chkpt</i><br>
+<b>EEF_ACTIONCODEC</b>=<i>…/ActionCodec-Base-RVQft</i><br>
+<b>EEF_STATE_STATS</b>=<i>…/droid_eef_axis_angle_…json</i><br>
+<b>EEF_EXECUTE_HORIZON</b>=<i>10</i><br>
+<b>EEF_ACTION_GAIN</b>=<i>1.0 0.8 1.0 1.0 1.0 1.0</i><br>
+<b>EEF_MAX_ROTATION</b>=<i>0.035</i><br>
+<b>EEF_EXPECTED_ACTION_NORMALIZATION</b>=<i>franka_mulaw</i><br>
+<b>EEF_EXPECTED_ACTION_MULAW_MU</b>=<i>9.0</i><br>
+<b>EEF_HOME_POSITION</b>=<i>0.5577 -0.0015 0.3205</i><br>
+<span style="color:#9ca3af">… 共约 35 个</span>
+    </div>
+  </div>
+
+  <div class="gut">➜</div>
+
+  <!-- 4 consumers -->
+  <div class="L-model">
+    <div class="colh"><div class="num">4</div><div><div class="t">使用：服务 + 适配器 + 握手</div><div class="s">dry-run / run 时才发生</div></div></div>
+    <div class="card use L-model accent"><div class="t c">① 启动模型服务（GPU 机 mac_63）</div>
+      <div class="d">ssh mac_63 → scp server/deploy_*.py → 远端 tmux。<b>8098 已在监听就直接复用</b>，不重启</div>
+      <div class="cmdline">CUDA_VISIBLE_DEVICES=1 python deploy_…_eef.py \<br>&nbsp; --checkpoint …/save_10000_chkpt \<br>&nbsp; --actioncodec … --state-stats … --port 8098</div></div>
+    <div class="card use L-ros accent"><div class="t c">② 启动适配器（机器人主机容器）</div>
+      <div class="cmdline">eef_pose_direct_adapter.py \<br>&nbsp; --expected-checkpoint …/save_10000_chkpt \<br>&nbsp; --expected-actioncodec … --expected-state-stats … \<br>&nbsp; --expected-model-image-size 256 \<br>&nbsp; --expected-action-normalization franka_mulaw \<br>&nbsp; --expected-action-mulaw-mu 9.0 \<br>&nbsp; --action-gain 1.0 0.8 1.0 1.0 1.0 1.0 \<br>&nbsp; --execute-horizon 10 --home-position …</div></div>
+    <div class="card use L-ctrl accent"><div class="t c">③ 握手核对：服务端 metadata ⇄ 期望值</div>
+      <div class="verdict"><div class="yes"><b>✅ 全部一致</b><br>开始推理 → 动作块 → 机械臂</div><div class="no"><b>⛔ 任一不符</b><br>拒绝运行："stop the stale server first"<br>（端口上跑的是旧权重）</div></div></div>
+  </div>
+</div>
+
+<div class="bottom">
+  <div class="card"><div class="t" style="color:var(--ok)">✔ 允许的临时覆盖（只对本次生效，不改 JSON）</div>
+    <div class="chips"><code>EEF_CONTROL=servo</code><code>EEF_EXECUTE_HORIZON=5</code><code>EEF_MAX_CHUNKS=3</code><code>EEF_MAX_ACTIONS=60</code><code>EEF_RUN_DIR=…</code><code>EEF_TASK_CONFIG=/path/other.json</code></div>
+    <div class="note">用于做实验（如「预测 15 执行 5」），确认有效后再写回 JSON。</div></div>
+  <div class="card"><div class="t" style="color:var(--warn)">✘ 无效覆盖（会被 JSON 解析结果覆盖）</div>
+    <div class="chips bad"><code>EEF_CHECKPOINT=…</code><code>EEF_SERVER_HOST=…</code><code>EEF_SERVER_PORT=…</code><code>EEF_INSTRUCTION=…</code></div>
+    <div class="note">模型身份只认 JSON。要换权重：新增一个 model key 并加进任务的 models[]。</div></div>
+  <div class="card"><div class="t" style="color:var(--cfg)">pi0.5 关节注册表 vla_instruction_weights.json（另一种协议，不能混用）</div>
+    <div class="d">一个 id 绑一个 checkpoint；<code>direct.runtime_from</code> 沿链继承运行参数，只取链尾条目的 <code>runtime</code>：</div>
+    <div class="chain"><span class="n">task0-fsp-demo10</span><span class="a">runtime_from →</span><span class="n">task1</span><span class="a">runtime_from →</span><span class="n end">task2.runtime</span><span class="a">= 2000 步 · 0.6 rad/s · 2.0 rad/s²</span></div>
+    <div class="note">因此 task1、demo10 条目里自己写的 runtime（240 步 / 0.15 rad/s）在 run_task.sh 中不生效。用 <code>./run_task.sh &lt;id&gt; show</code> 查看实际值。</div></div>
+</div>
+
+<div class="footer"><span>源文件：docs/diagrams/src/02_weight_config.html · 重新生成：docs/diagrams/render.sh · 字段全集见 docs/weights_and_tasks.md</span><span>2026-11-13</span></div>
+<script>addEventListener("load",()=>document.documentElement.dataset.h=document.documentElement.scrollHeight)</script>
+</body></html>

@@ -3,7 +3,7 @@
 
 The 2026-11-01 teleop node published CLOSE (0.01) for squeezes that physically
 opened the gripper (failed Grasp kept gripper_state "open"; see
-docs/task3_gripper_label_bug_20261103.md). Each received gripper message keeps its
+docs/reports/task3_gripper_label_bug_20261103.md). Each received gripper message keeps its
 receipt time; its value is set to what the gripper actually did next: the first
 deadband open/close transition of the measured width within 2 s after receipt
 (0.08 open / 0.01 close); if it did not move, the recorded value is kept.

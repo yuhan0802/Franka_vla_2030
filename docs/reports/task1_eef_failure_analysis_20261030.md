@@ -2,7 +2,7 @@
 
 范围：`run_eef_task.sh task1 <model>`（direct 控制）在 2026-10-30 14:54–15:40 的全部实机运行，
 模型 `task01-newcodec-10k` 与 `joint8-newcodec-20k`。
-证据文件：`docs/experiments/20261030_task1_eef_offline_eval/`（脚本、结果 JSON、图片）。
+证据文件：`docs/reports/experiments/20261030_task1_eef_offline_eval/`（脚本、结果 JSON、图片）。
 可复用的离线检查工具：`scripts/offline_eval/`（见"离线检查工具"一节）。
 实机日志：`/media/mac/Elements2/franka_vr_docker/logs/eef_task1_*_20261030_*`。
 
@@ -41,7 +41,7 @@
 
 ## 离线实验（mac_63，checkpoint 与实机相同）
 
-### A. 开环拟合（`docs/experiments/.../scripts/eval_ol.py`，结果在 `results/ol_task01.json`）
+### A. 开环拟合（`docs/reports/experiments/.../scripts/eval_ol.py`，结果在 `results/ol_task01.json`）
 10 条 Task0 示教，共 1083 个时间点，用示教的真实状态和图像作为输入：
 - 1 秒位移误差中位数 3.8 mm（真实位移约 48 mm），方向余弦 1.00，速度比 0.96。
 - 夹爪闭合时刻基本在 ±1 步以内。
@@ -177,7 +177,7 @@ act-v2 = v5 maxabs save_8000，`mac_63:8095`。10-25 和 10-30 在原位置都�
 
 ## 今晚训练：act-v2 续训（mac_20，8 卡，10-30 18:17 开始，预计 00:40 结束）
 
-启动脚本：`train-scripts/run_franka_task0_actv2_continue_20.sh`（仓库副本在 `docs/experiments/20261030_task1_eef_offline_eval/scripts/`）。
+启动脚本：`train-scripts/run_franka_task0_actv2_continue_20.sh`（仓库副本在 `docs/reports/experiments/20261030_task1_eef_offline_eval/scripts/`）。
 从 act-v2 save_8000 初始化，代码路径、协议、maxabs 统计（启动时会校验与 checkpoint 一致）和 5.3 环境都与 act-v2 相同。
 数据换成 clean 版 Task0。4 卡 × 16 × 梯度累积 2（全局 128），lr 5e-5 余弦衰减到 5e-6，4000 步，每 1000 步保存一次。
 
@@ -705,7 +705,7 @@ holdout5，act-v2 起点，留出 5 个场景平均误差（mm，未加 z 约束
 1. 机器人主机：`cd ~/franka_vr_docker && git pull`（注意 `teleop-debug.apk` 的本地改动，别覆盖别人未提交的东西）。
 2. `./run_eef_task.sh task1 all50noise-1k run`（会自动在 mac_20 拉起 8106 的服务）。
 3. 先测**示教原位**：按某条示教第一帧的图像把试管放回原位，至少 5 个位置，最好覆盖 x/y 的两端，例如 011、001、041、046、048
-   （各示教的抓取点见 `docs/experiments/20261030_task1_eef_offline_eval/results/demo_grasp_positions.csv`，机器人基座坐标，单位 m）。
+   （各示教的抓取点见 `docs/reports/experiments/20261030_task1_eef_offline_eval/results/demo_grasp_positions.csv`，机器人基座坐标，单位 m）。
 4. 再测**新位置**：在两个示教点之间放 3–5 次，记录偏差。
 5. 每次记录：是否抓起、抓空时夹爪中心离试管盖的大致偏差（前后/左右，cm）、失败方式（没动 / 偏 / 撞 / 提前闭合）。
 6. 如果首选在示教原位上也频繁抓空，换成 `./run_eef_task.sh task1 all50noises13-1k run` 重复第 3 步。
@@ -855,7 +855,7 @@ holdold5s7（种子 7）第 2000 步，旧视角留出 004/005/007/013/016：18 
 
 ### 11-02 07:50 真机首选权重 all50noise-1k 在全部 50 个示教场景上的误差（真机测试选位置用）
 
-z ≤ 0.29，离线闭环，单位 mm。完整表：`docs/experiments/20261030_task1_eef_offline_eval/results/all50noise1k_z029_per_demo.csv`。
+z ≤ 0.29，离线闭环，单位 mm。完整表：`docs/reports/experiments/20261030_task1_eef_offline_eval/results/all50noise1k_z029_per_demo.csv`。
 
 | 视角 | 场景数 | 中位数 | ≤ 20 mm | ≤ 30 mm | > 50 mm | 从不闭合 |
 |---|---|---|---|---|---|---|

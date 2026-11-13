@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>整体架构</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.grid { display: grid; grid-template-columns: 190px 1fr 300px; column-gap: 18px; }
+.lab {
+  background: var(--c); color: #fff; border-radius: 14px; padding: 16px 14px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.lab .n { font-size: 13px; opacity: .8; letter-spacing: 1px; }
+.lab .name { font-size: 22px; font-weight: 700; margin-top: 2px; }
+.lab .role { font-size: 13.5px; opacity: .9; margin-top: 6px; line-height: 1.35; }
+.panel { border-radius: 14px; padding: 14px; display: flex; gap: 12px; align-items: stretch; border: 1.5px solid; }
+.panel > .card { flex: 1; }
+.side { border-radius: 14px; padding: 12px 14px; font-size: 14px; background: #fff; border: 1.5px dashed var(--line); }
+.side .h { font-weight: 700; font-size: 13px; color: var(--muted); letter-spacing: .5px; margin-bottom: 4px; }
+.side .gate { color: var(--warn); }
+.side .gate::before { content: "⛔ "; }
+.side .rate::before { content: "⏱ "; }
+.side div + div { margin-top: 4px; }
+.conn { grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 12px; height: 46px; color: var(--muted); font-size: 14.5px; }
+.conn .ar { font-size: 22px; color: #9ca3af; line-height: 1; }
+.conn b { color: var(--ink); font-weight: 600; }
+.conn.ws { height: 64px; }
+.wsbox { display: flex; gap: 18px; align-items: center; background: #fff; border: 1.5px solid #fecdd3; border-radius: 999px; padding: 6px 18px; }
+.sub { display: flex; gap: 8px; margin-top: 8px; }
+.sub > div { flex: 1; border-radius: 8px; padding: 7px 9px; font-size: 13px; background: var(--cb); border: 1px solid color-mix(in srgb, var(--c) 30%, white); }
+.sub > div b { display: block; color: var(--c); font-size: 13.5px; }
+.modes { margin-top: 8px; }
+.big { flex: 1.6 !important; }
+.cmd { font-family: "SF Mono", Menlo, monospace; font-size: 14.5px; font-weight: 600; }
+.k { color: var(--c); font-weight: 700; }
+</style></head>
+<body>
+<div class="header">
+  <div>
+    <h1>Franka VLA 系统整体架构</h1>
+    <div class="subtitle">从一条命令到机械臂运动：每一层做什么、层与层之间传什么、哪里会拦截。默认主流程 = EEF 位姿模型 + direct 关节速度后端。</div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--entry)"></i>入口</span>
+    <span><i class="dot" style="background:var(--cfg)"></i>配置</span>
+    <span><i class="dot" style="background:var(--orch)"></i>编排</span>
+    <span><i class="dot" style="background:var(--model)"></i>模型</span>
+    <span><i class="dot" style="background:var(--ros)"></i>ROS 2</span>
+    <span><i class="dot" style="background:var(--ctrl)"></i>控制</span>
+    <span><i class="dot" style="background:var(--hw)"></i>硬件</span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- ① 入口 -->
+  <div class="lab L-entry"><div class="n">LAYER 1</div><div class="name">入口层</div><div class="role">人 / agent 敲的命令<br>仓库根目录 *.sh</div></div>
+  <div class="panel L-entry tinted">
+    <div class="card big"><div class="cmd">./run_eef_task.sh <span class="k">task1</span> <span class="k">act-v2</span> run</div>
+      <div class="d">EEF 位姿 VLA · <b>主流程</b>。快捷方式 task1-act-v2.sh 等只是一行转发</div>
+      <div class="modes"><span class="pill">list</span><span class="pill">show</span><span class="pill ok">dry-run</span><span class="pill warn">axis-test</span><span class="pill warn">home</span><span class="pill warn">run</span><span class="pill warn">stop</span></div></div>
+    <div class="card"><div class="cmd">./run_task.sh task2</div><div class="d">pi0.5 关节速度 VLA<br>task1.sh / task6.sh …</div></div>
+    <div class="card"><div class="cmd">run_robot.sh + run_vr.sh</div><div class="d">Quest 3 遥操作<br>MoveIt Servo 路径</div></div>
+    <div class="card"><div class="cmd">run_lerobot_record.sh</div><div class="d">采集示教数据<br>→ LeRobot 数据集 → 训练</div></div>
+  </div>
+  <div class="side"><div class="h">安全闸门</div><div class="gate">dry-run 结构上不发运动</div><div class="gate">run 前必须有 axis-test 记录</div><div>绿色 = 不动机械臂，红色 = 会动</div></div>
+
+  <div></div><div class="conn"><span class="ar">↓</span><span>传入 <b>task key + model key</b></span></div><div></div>
+
+  <!-- ② 配置 -->
+  <div class="lab L-cfg"><div class="n">LAYER 2</div><div class="name">配置层</div><div class="role">权重在这里配<br>只改 JSON，不改 shell</div></div>
+  <div class="panel L-cfg tinted">
+    <div class="card big"><div class="t c">config/eef_tasks.json <span class="pill">EEF 注册表</span></div>
+      <div class="sub">
+        <div><b>defaults</b>control: direct<br>adapter: 相机/夹爪/旋转协议<br>runtime: execute_horizon 10</div>
+        <div><b>models.act-v2</b>server: mac_63 :8095 gpu1<br>checkpoint / actioncodec<br>action_normalization</div>
+        <div><b>tasks.task1</b>instruction (逐字)<br>models: [act-v2, …]<br>start_pose 训练起点</div>
+      </div></div>
+    <div class="card"><div class="t c">eef_task_config.py resolve</div><div class="d">合并优先级<br><b>task ▶ model ▶ defaults</b><br>逐项范围校验<br>→ <code>profile.json</code> + <code>EEF_*</code> 环境变量</div></div>
+    <div class="card"><div class="t c">vla_instruction_weights.json</div><div class="d">pi0.5 注册表：id → checkpoint_root / step / policy_config / runtime（可 runtime_from 继承）</div></div>
+  </div>
+  <div class="side"><div class="h">安全闸门</div><div class="gate">action_gain ≤ 1、单步旋转 ≤ 0.15 rad</div><div class="gate">任务未关联该模型 → 拒绝</div><div>离线自检：<code>validate_task_registries.py</code></div></div>
+
+  <div></div><div class="conn"><span class="ar">↓</span><span><b>selected_profile.json</b>（存入本次日志）+ <b>EEF_CHECKPOINT / EEF_SERVER_PORT / EEF_EXECUTE_HORIZON …</b></span></div><div></div>
+
+  <!-- ③ 编排 -->
+  <div class="lab L-orch"><div class="n">LAYER 3</div><div class="name">编排层</div><div class="role">起停进程<br>本机 + 远端</div></div>
+  <div class="panel L-orch tinted">
+    <div class="card"><div class="t c">run_eef_direct.sh <span class="pill ok">默认</span></div><div class="d">direct 后端：拉起 run_robot_pi05_direct.sh（机器人栈）+ run_vla_cameras.sh（相机）</div></div>
+    <div class="card"><div class="t c">run_eef_pose.sh</div><div class="d">servo 后端；并负责 <b>模型服务</b>：ssh + scp <code>server/deploy_*.py</code> → 远端 tmux 启动</div></div>
+    <div class="card"><div class="t c">run_pi05_direct.sh</div><div class="d">pi0.5 关节链路运行器<br>远端 openpi 服务由 run_vla_pi05_droid_66.sh 管理</div></div>
+    <div class="card"><div class="t c">进程载体</div><div class="d">本机 tmux 会话 · <code>docker compose run</code><br>容器 franka_vr / franka_robot</div></div>
+  </div>
+  <div class="side"><div class="h">安全闸门</div><div class="gate">日志盘未挂载 → 拒绝启动</div><div class="gate">stop 先停策略，再停栈，最后回位</div></div>
+
+  <div></div><div class="conn"><span class="ar">↓</span><span>远端：<b>启动或复用模型服务</b>（端口已在听则复用）　　本机：<b>启动 ROS 2 容器</b></span></div><div></div>
+
+  <!-- ④ 模型 -->
+  <div class="lab L-model"><div class="n">LAYER 4</div><div class="name">模型层</div><div class="role">GPU 服务器<br>不在 FCI 网络上</div></div>
+  <div class="panel L-model tinted">
+    <div class="card big"><div class="t c">server/deploy_franka_task0_qwen_actioncodec_eef.py</div><div class="d">Qwen3-VL 2B + ActionCodec 解码 → <b>action[15, 7]</b>（每步 Δxyz/0.075 m、Δrotvec/0.15 rad、夹爪 0..1）<br><b>反归一化在服务端完成</b>：task0_maxabs / franka_mulaw / franka_quantile …</div></div>
+    <div class="card"><div class="t c">mac_20 · 10.24.116.20</div><div class="d">大部分 EEF 模型<br>端口 8095 – 8112</div></div>
+    <div class="card"><div class="t c">mac_63 · 10.24.116.63</div><div class="d">act-v2、universal-*、task3<br>端口 8095 / 8098 – 8110</div></div>
+    <div class="card"><div class="t c">66 · 10.24.116.66</div><div class="d">openpi pi0.5 关节速度<br>端口 8094 / 8101 – 8106</div></div>
+  </div>
+  <div class="side"><div class="h">节拍 / 安全闸门</div><div class="rate">每块预测 15 步（15 Hz），执行前 N 步</div><div class="gate">握手 metadata（checkpoint、codec、统计、图像尺寸、归一化）与 JSON 不符 → 拒绝</div></div>
+
+  <div></div><div class="conn ws"><div class="wsbox"><span class="ar" style="color:var(--model)">⇅</span><span><b>WebSocket + msgpack</b></span><span>↑ 外部图像 + 腕部图像 + eef_state[7] + 指令</span><span>↓ action[15, 7]</span></div></div><div></div>
+
+  <!-- ⑤ ROS -->
+  <div class="lab L-ros"><div class="n">LAYER 5</div><div class="name">ROS 2 层</div><div class="role">Docker 容器内<br>自研包 franka_vr</div></div>
+  <div class="panel L-ros tinted">
+    <div class="card"><div class="t c">感知</div><div class="d">腕部 <code>/camera/camera_front/color/image_raw</code><br>外部 <code>/camera_left/image_rect</code><br><code>/franka/joint_states</code> → FK 得 EEF 位姿<br>夹爪 <code>/fr3_gripper/…/joint_states</code></div></div>
+    <div class="card big"><div class="t c">策略适配器 eef_pose_direct_adapter.py</div><div class="d">打包观测 → 调模型 → 把动作块积分成绝对目标位姿<br>工作空间边界 · 跳变检测 · 夹爪逻辑 · 日志 policy.jsonl<br><b>DirectPoseTracker</b>：P 跟踪 + DLS 逆运动学 → 关节速度</div></div>
+    <div class="card"><div class="t c">安全执行器 (C++)</div><div class="d">pi05_direct_velocity_executor<br>速度/加速度限幅 · 关节余量 · 跟踪误差 · 超时<br>+ pi05_collision_monitor 自碰撞</div></div>
+  </div>
+  <div class="side"><div class="h">节拍 / 安全闸门</div><div class="rate">适配器 → 执行器 100 Hz</div><div class="gate">越界 / 跳变 / 跟踪误差 / 碰撞 → 停</div><div>话题 <code>/pi05/direct_joint_velocity_cmd</code></div></div>
+
+  <div></div><div class="conn"><span class="ar">↓</span><span><b>/fr3_direct_velocity_controller/commands</b>（仅 armed 时存在）　·　Servo 路径为 <b>/fr3_arm_controller/joint_trajectory</b></span></div><div></div>
+
+  <!-- ⑥ 控制 -->
+  <div class="lab L-ctrl"><div class="n">LAYER 6</div><div class="name">控制层</div><div class="role">ros2_control<br>独占 CPU 4,5</div></div>
+  <div class="panel L-ctrl tinted">
+    <div class="card"><div class="t c">controller_manager · 1 kHz</div><div class="d">ros2_control_node（taskset -c 4）</div></div>
+    <div class="card"><div class="t c">Pi05WatchdogVelocityController</div><div class="d">direct 路径：jerk 限制平滑<br>0.1 s 收不到指令即停</div></div>
+    <div class="card"><div class="t c">JointTrajectoryController</div><div class="d">Servo 路径（VR / 键盘 / 采集）<br>fr3_arm_controller</div></div>
+    <div class="card"><div class="t c">franka_hardware</div><div class="d">ros2_control 硬件插件<br>+ joint_state / robot_state broadcaster</div></div>
+  </div>
+  <div class="side"><div class="h">节拍 / 安全闸门</div><div class="rate">1 kHz 实时循环</div><div class="gate">看门狗超时 → 零速</div></div>
+
+  <div></div><div class="conn"><span class="ar">↓</span><span><b>libfranka 0.19</b>：1 kHz UDP，专用网卡（中断绑 CPU 2）</span></div><div></div>
+
+  <!-- ⑦ 硬件 -->
+  <div class="lab L-hw"><div class="n">LAYER 7</div><div class="name">硬件层</div><div class="role">机器人主机外设</div></div>
+  <div class="panel L-hw tinted">
+    <div class="card big"><div class="t">Franka FR3 + Franka Hand</div><div class="d">FCI <code>172.16.0.2</code> · 初始位 config/default_initial_pose.json</div></div>
+    <div class="card"><div class="t">RealSense D435i</div><div class="d">腕部相机 (USB)</div></div>
+    <div class="card"><div class="t">Logitech C922 ×2</div><div class="d">左 / 右 外部相机</div></div>
+    <div class="card"><div class="t">Meta Quest 3</div><div class="d">遥操作 (ADB)</div></div>
+  </div>
+  <div class="side"><div class="h">最后防线</div><div class="gate">Franka 反射 + 急停（任何上层都不能替代）</div></div>
+
+</div>
+<div class="footer"><span>源文件：docs/diagrams/src/01_overall_architecture.html · 重新生成：docs/diagrams/render.sh</span><span>分支 feat/eef-pose-control · 2026-11-13</span></div>
+<script>addEventListener("load",()=>document.documentElement.dataset.h=document.documentElement.scrollHeight)</script>
+</body></html>

@@ -34,7 +34,7 @@ STATE_LAYOUT = "fr3_joint_positions_plus_measured_gripper_width_v2"
 ACTION_LAYOUT = "sent_joint_velocity_plus_gripper_target_width_v2_missing_target_is_nan"
 LEGACY_ACTION_LAYOUT = "cartesian_target_pose_plus_measured_gripper_width_v1"
 IMAGE_WIDTH = 640
-# Gripper label check (see docs/task3_gripper_label_bug_20261103.md): the recorded
+# Gripper label check (see docs/reports/task3_gripper_label_bug_20261103.md): the recorded
 # command must agree with the measured width.  A CLOSE command (< 3 cm) while the
 # fingers are fully open (> 6 cm) for over 1 s, or an OPEN command (> 4 cm) while
 # they stay shut (< 3 cm) for over 1.5 s, means the teleop node and the gripper
