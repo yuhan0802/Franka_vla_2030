@@ -173,6 +173,7 @@ adapter_flags=(--server-host "$host" --server-port "$port" --instruction "$instr
   --settle-angular-speed "${EEF_DIRECT_SETTLE_ANGULAR_SPEED:-0.05}"
   --settle-stable-duration "${EEF_DIRECT_SETTLE_STABLE_DURATION:-0.30}"
   --feedback-max-age "${EEF_DIRECT_FEEDBACK_MAX_AGE:-0.20}"
+  --feedback-stale-action "${EEF_DIRECT_FEEDBACK_STALE_ACTION:-fault}"
   --settle-timeout "${EEF_DIRECT_SETTLE_TIMEOUT:-8.0}"
   --observation-timeout "${EEF_DIRECT_OBSERVATION_TIMEOUT:-5.0}"
   --startup-timeout "${EEF_STARTUP_TIMEOUT:-180}" --jsonl-log /eef_logs/policy.jsonl
@@ -213,7 +214,8 @@ case "$mode" in
         --test-steps "${EEF_TEST_STEPS:-5}" --max-chunks 1 --max-actions 15)
     else
       adapter_flags+=(--max-chunks "${EEF_MAX_CHUNKS:-1}" --max-actions "${EEF_MAX_ACTIONS:-15}"
-        --execute-horizon "${EEF_EXECUTE_HORIZON:-15}")
+        --execute-horizon "${EEF_EXECUTE_HORIZON:-15}"
+        --finish-idle-chunks "${EEF_FINISH_IDLE_CHUNKS:-2}")
       [[ "${EEF_ENABLE_GRIPPER:-false}" == true ]] && adapter_flags+=(--enable-gripper)
     fi;;
 esac
@@ -232,7 +234,7 @@ echo "EEF DIRECT $mode (no MoveIt Servo, ${EEF_CHUNK_MODE:-serial} chunks): serv
 set +e
 docker compose run --rm -e FASTRTPS_DEFAULT_PROFILES_FILE=/ws_franka_vr/src/franka_vr/franka_vr/config/fastdds_udp_only.xml -v "$log_dir:/eef_logs" franka_vr bash -lc '
   set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
-  exec python3 src/franka_vr/franka_vr/scripts/'"$adapter_script $quoted_flags"'
+  exec python3 -u src/franka_vr/franka_vr/scripts/'"$adapter_script $quoted_flags"'
 ' 2>&1 | tee "$log_dir/adapter.log"
 status=${PIPESTATUS[0]}
 set -e
