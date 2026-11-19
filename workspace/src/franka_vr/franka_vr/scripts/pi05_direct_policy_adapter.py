@@ -12,6 +12,7 @@ import argparse
 import concurrent.futures
 import functools
 import json
+import math
 import sys
 import threading
 import time
@@ -122,6 +123,9 @@ class DirectAdapter(Node):
         self.move_client = None; self.grasp_client = None
         self.executed = 0; self.last_publish = 0.0; self.need_fresh_after = 0.0
         self.fault = False; self.finished = False; self.gripper_busy = False
+        self.last_stop_at = 0.0
+        self.latency_estimate = 0.0
+        self.inference_obs_step = 0
         self.startup_ready = not args.execute
         self.gripper_verification = None
         self.observation_wait_started = None
@@ -271,7 +275,10 @@ class DirectAdapter(Node):
                 self.observation_blocker = "missing dedicated gripper feedback"
                 return None
             stamps.append(self.gripper_time)
-        if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age:
+        # RTC observes while a chunk is still running, so the freshness gate
+        # only applies to the serial loop that waits between chunks.
+        fresh_after = 0.0 if getattr(self.args, "chunk_mode", "serial") == "rtc" else self.need_fresh_after
+        if min(stamps) <= fresh_after or now - min(stamps) > self.args.max_observation_age:
             self.observation_blocker = (
                 f"waiting for fresh feedback/images: joint_age={now-self.joint_time:.2f}s "
                 f"gripper_age={now-self.gripper_time:.2f}s "
@@ -295,6 +302,31 @@ class DirectAdapter(Node):
                 )], np.float32),
                 "prompt": self.args.instruction}
 
+    def accept_chunk(self, chunk: Any, latency: float) -> None:
+        if getattr(self.args, "chunk_mode", "serial") != "rtc":
+            self.queue.replace(chunk)
+            return
+        rows = validate_action_chunk(chunk)
+        # rows[0] belongs to the step the observation was taken at; drop the
+        # steps that already ran while inference was in flight.
+        skipped = min(max(0, self.executed - self.inference_obs_step), max(0, len(rows) - 1))
+        rows = rows[skipped:]
+        remaining = self.args.execute_horizon
+        if self.args.max_actions > 0:
+            remaining = min(remaining, max(1, self.args.max_actions - self.executed))
+        rows = rows[:remaining]
+        queued = len(self.queue)
+        if queued:
+            blended = self.queue.blend(rows, getattr(self.args, "rtc_blend_steps", 4))
+            self.log("rtc_handover", skipped=skipped, blended=blended, latency=latency,
+                     queued_before=queued, actions_after=len(self.queue))
+            self.get_logger().info(
+                f"RTC hand-over: skipped={skipped} blended={blended} latency={latency:.3f}s "
+                f"queue={queued}->{len(self.queue)}")
+        else:
+            self.queue.replace_rows(rows)
+            self.log("rtc_starved_fill", skipped=skipped, latency=latency, actions_after=len(self.queue))
+
     def policy_tick(self) -> None:
         if not self.startup_ready or self.finished or self.fault: return
         if self.gripper_verification is not None:
@@ -309,9 +341,10 @@ class DirectAdapter(Node):
             try: chunk = future.result()
             except Exception as error: self.latch(f"policy inference failed: {error}"); return
             latency = now - self.inference_started
+            self.latency_estimate = latency if not self.latency_estimate else 0.5 * (self.latency_estimate + latency)
             if self.args.execute:
                 # Replacement, never append. Limit the last chunk to the remaining action budget.
-                self.queue.replace(chunk)
+                self.accept_chunk(chunk, latency)
             else:
                 decoded = np.vstack([decode_droid_action(row)[0] * self.args.velocity_scale
                                      for row in chunk[:self.args.execute_horizon]])
@@ -320,10 +353,17 @@ class DirectAdapter(Node):
                 self.get_logger().info(f"dry-run validated {chunk.shape}; decoded peak={np.max(np.abs(decoded)):.4f} rad/s")
                 self.finished = True
             return
-        if self.args.execute and (len(self.queue) or self.executed >= self.args.max_actions): return
+        if self.args.execute and self.executed >= self.args.max_actions: return
+        if self.args.execute and getattr(self.args, "chunk_mode", "serial") == "rtc":
+            # Submit early enough that the answer lands before the queue drains,
+            # then blend the overlap instead of stopping at the chunk boundary.
+            lead = int(math.ceil(self.latency_estimate * self.args.action_hz)) + getattr(self.args, "rtc_blend_steps", 4)
+            if len(self.queue) > max(1, lead): return
+        elif self.args.execute and len(self.queue): return
         observation = self.observation()
         if observation is not None:
             self.observation_wait_started = None
+            self.inference_obs_step = self.executed
             self.inference_started = now; self.future = self.pool.submit(self.policy.infer, observation)
         else:
             if self.observation_wait_started is None:
@@ -336,7 +376,13 @@ class DirectAdapter(Node):
                 self.latch(f"observation wait timeout: {self.observation_blocker}")
 
     def action_tick(self) -> None:
-        if not self.startup_ready or not self.args.execute or self.finished or self.fault or self.gripper_busy: return
+        if not self.startup_ready or not self.args.execute or self.finished or self.fault: return
+        if self.gripper_busy:
+            # Gripper goals block the 15 Hz action stream for seconds. Keep an
+            # explicit zero-velocity command flowing so the 1 kHz executor
+            # watchdog never supervises a silent nonzero command.
+            if time.monotonic() - self.last_stop_at >= 0.05: self.stop_command()
+            return
         if self.args.enable_gripper:
             error = self.gripper_feedback_error()
             if error:
@@ -352,9 +398,10 @@ class DirectAdapter(Node):
             # action. Send the explicit stop unconditionally: a timer callback
             # can arrive a fraction early, and waiting for another tick would
             # exceed the executor's 300 ms nonzero-command watchdog.
-            if self.last_publish:
+            if time.monotonic() - self.last_stop_at >= 0.05:
                 self.stop_command()
-                self.log("chunk_stop", actions_executed=self.executed, stop_requested=True)
+                if self.last_publish:
+                    self.log("chunk_stop", actions_executed=self.executed, stop_requested=True)
                 self.last_publish = 0.0
             return
         action = self.queue.pop(); velocity, closedness = decode_droid_action(action)
@@ -494,6 +541,7 @@ class DirectAdapter(Node):
             command = JointJog(); command.header.stamp = self.get_clock().now().to_msg()
             command.joint_names = list(JOINT_NAMES); command.velocities = [0.0] * 7; command.duration = 1 / self.args.action_hz
             self.publisher.publish(command)
+            self.last_stop_at = time.monotonic()
         except RCLError:
             # SIGINT can invalidate the context between the check and publish.
             # An error while ROS is still alive must remain visible.
@@ -558,6 +606,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gripper-transition-min-frames", type=int, default=4,
                         help="require this many consecutive policy frames before changing gripper state")
     parser.add_argument("--gripper-speed", type=float, default=.04); parser.add_argument("--gripper-force", type=float, default=10.)
+    parser.add_argument("--chunk-mode", choices=("serial", "rtc"), default="serial",
+                        help="serial stops between chunks; rtc observes early and blends the hand-over")
+    parser.add_argument("--rtc-blend-steps", type=int, default=4,
+                        help="actions cross-faded when an RTC chunk overlaps the running one")
     parser.add_argument("--jsonl-log", default=""); parser.add_argument("--execute", action="store_true")
     parser.add_argument("--confirm-real-robot", default="")
     args = parser.parse_args()
@@ -576,6 +628,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("execute-horizon must be in [1, prediction-horizon]")
     if not np.isfinite(args.velocity_scale) or not 0 < args.velocity_scale <= 1:
         parser.error("velocity-scale must be finite and in (0, 1]")
+    if not 1 <= args.rtc_blend_steps <= args.execute_horizon:
+        parser.error("rtc-blend-steps must be in [1, execute-horizon]")
     if not 1 <= args.max_actions <= 2000: parser.error("max-actions must be in [1, 2000]")
     if not np.isfinite(args.max_observation_wait) or args.max_observation_wait < 0:
         parser.error("max-observation-wait must be finite and >= 0")

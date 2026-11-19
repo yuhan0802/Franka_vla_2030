@@ -220,6 +220,8 @@ else
     --prediction-horizon "${PI05_DIRECT_PREDICTION_HORIZON:-16}"
     --execute-horizon "${PI05_DIRECT_EXECUTE_HORIZON:-16}"
     --velocity-scale "${PI05_DIRECT_VELOCITY_SCALE:-1.0}"
+    --chunk-mode "${PI05_DIRECT_CHUNK_MODE:-serial}"
+    --rtc-blend-steps "${PI05_DIRECT_RTC_BLEND_STEPS:-4}"
     --max-actions "$full_actions" --enable-gripper --gripper-speed 0.02 --gripper-force "$full_gripper_force"
     --gripper-open-width "${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.07}"
     --gripper-closed-width "${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}"

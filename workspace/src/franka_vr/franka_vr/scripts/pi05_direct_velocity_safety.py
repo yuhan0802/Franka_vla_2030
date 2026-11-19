@@ -54,6 +54,27 @@ class RecedingHorizonBuffer:
             raise IndexError("no action available")
         return self._actions.pop(0)
 
+    def pending(self) -> list[np.ndarray]:
+        return list(self._actions)
+
+    def replace_rows(self, rows: object) -> None:
+        self._actions = [np.asarray(row, dtype=np.float64).copy() for row in rows][: self.horizon]
+
+    def blend(self, rows: object, steps: int) -> int:
+        """Cross-fade the queued actions toward ``rows`` and adopt the remainder.
+
+        ``rows[0]`` is the action for the step that runs next, so index 0 pairs
+        with the queue head. The first blended action stays close to what the
+        arm was already doing and later ones follow the new plan.
+        """
+        incoming = [np.asarray(row, dtype=np.float64) for row in rows]
+        count = max(0, min(int(steps), len(self._actions), len(incoming)))
+        for index in range(count):
+            weight = (index + 1) / (count + 1)
+            incoming[index] = (1.0 - weight) * self._actions[index] + weight * incoming[index]
+        self._actions = incoming[: self.horizon]
+        return count
+
     def __len__(self) -> int:
         return len(self._actions)
 
