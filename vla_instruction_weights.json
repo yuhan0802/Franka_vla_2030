@@ -409,6 +409,27 @@
         "max_joint_acceleration": 0.5,
         "gripper_force": 10.0
       }
+    },
+    {
+      "id": "task3-fixed",
+      "instruction": "store the bottle inside the container and close the lid",
+      "instruction_selectable": false,
+      "checkpoint_root": "/data/vla/checkpoints/real/task3_store_bottle_close_lid_fixed_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
     }
   ]
 }
