@@ -130,6 +130,13 @@ run_probe() {
   fi
   printf -v command '%s %q run --no-sync python - --host 127.0.0.1 --port %q --instruction %q --timeout %q' \
     "$command" "$remote_uv_bin" "$server_port" "$instruction" "$server_load_timeout"
+  if [[ ( "$checkpoint_root/$checkpoint_step" == /data/vla/checkpoints/task7_copper_sheet_closedness_full_fsdp8_bs32_20k/20000 ||
+          "$checkpoint_root/$checkpoint_step" == /data/vla/checkpoints/real/task26_copper_sheet_black_tray_full_fsdp8_bs32_20k/20000 ||
+          "$checkpoint_root/$checkpoint_step" == /data/vla/checkpoints/real/task27_red_tube_black_tray_full_fsdp8_bs32_20k/20000 ) &&
+        "$policy_config" == pi05_franka_tube_pick_v5_finetune ]]; then
+    # Keep the zero-input warm-up diagnostic; full execution still requires live inference.
+    command+=" --synthetic-gripper-diagnostic-only"
+  fi
   ssh "${ssh_args[@]}" "$command" < "$root_dir/scripts/pi05_remote_probe.py"
 }
 
