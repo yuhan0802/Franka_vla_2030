@@ -235,7 +235,7 @@ python3 scripts/validate_task_registries.py
 | --- | --- | --- |
 | `task1` | place the red test tube in the red basket | `act-v2`、`all50noise-2k`、`all50noise-1k`、`all50noise-1k-rtc`、`joint9-384-16k`、`all50noises13-1k`、`all50-2k`、`act`、`act-1k`、`act2`、`droid`、`task01-mulaw9-5k`、`task01-maxabs1x-9k`、`joint8-newcodec-20k`、`task01-newcodec-10k`、`universal-mulaw9`、`universal-maxabs-x2` |
 | `task2` | place the test tube rack in the black tray | `task2-newcodec-stage1-5k`(-rtc)、`task2-newcodec-stage1-3k`(-rtc) |
-| `task3` | store the bottle inside the container and close the lid | `task3-task41-transition-5k`、`task3-task41-transition-5k-rtc`、`task3-task41-transition-500-rtc`、`task3-gripfix-p1-7k-rtc`、`task3-gripfix-p1-8k-rtc`、`task3-gripfix-noise8000-500-rtc`、`task3-gripfix-p1-4k-rtc`、`task3-gripfix-p1-4k`、`task3-own-p1-7k`、`task3-own-n5k-500`、`task3-actiononly-joint10k-4k` |
+| `task3` | store the bottle inside the container and close the lid | `task3-task41-transition-5k`、`task3-task41-transition-5k-rtc`、`task3-task41-transition-500-rtc`、`task3-task41-transition-1000-rtc`、`task3-task41-transition-1500-rtc`、`task3-task41-transition-2000-rtc`、`task3-task41-transition-2500-rtc`、`task3-gripfix-p1-7k-rtc`、`task3-gripfix-p1-8k-rtc`、`task3-gripfix-noise8000-500-rtc`、`task3-gripfix-p1-4k-rtc`、`task3-gripfix-p1-4k`、`task3-own-p1-7k`、`task3-own-n5k-500`、`task3-actiononly-joint10k-4k` |
 | `task5` | press the yellow button to turn on the yellow light | `task5-newcodec-stage1-1k`(-rtc) |
 | `task40` | open the lid | `universal-mulaw9`、`universal-maxabs-x2` |
 
@@ -260,6 +260,10 @@ python3 scripts/validate_task_registries.py
 | `task3-task41-transition-5k` | 63:8117 / 5 | franka_quantile | serial | Task3+Task41 过渡训练 step 5000，`save_5000_chkpt` |
 | `task3-task41-transition-5k-rtc` | 63:8117 / 5 | franka_quantile | rtc (blend 4, observe 6) | 同上，RTC 异步交接变体 |
 | `task3-task41-transition-500-rtc` | 63:8117 / 5 | franka_quantile | rtc (blend 4, observe 6) | 同一训练的 **step 500** 早期权重，RTC 变体 |
+| `task3-task41-transition-1000-rtc` | 63:8117 / 5 | franka_quantile | rtc (blend 4, observe 6) | 同一训练的 **step 1000** 权重，RTC 变体 |
+| `task3-task41-transition-1500-rtc` | 63:8117 / 5 | franka_quantile | rtc (blend 4, observe 6) | 同一训练的 **step 1500** 权重，RTC 变体 |
+| `task3-task41-transition-2000-rtc` | 63:8117 / 5 | franka_quantile | rtc (blend 4, observe 6) | 同一训练的 **step 2000** 权重，RTC 变体 |
+| `task3-task41-transition-2500-rtc` | 63:8117 / 5 | franka_quantile | rtc (blend 4, observe 6) | 同一训练的 **step 2500** 权重，RTC 变体 |
 | `task2-newcodec-stage1-5k` / `-rtc` | 20:8111 / 5 | franka_quantile | h=5, gain 0.5 | task2 首选（离线抓取事件评测最优） |
 | `task2-newcodec-stage1-3k` / `-rtc` | 20:8111 / 5 | franka_quantile | h=5, gain 0.5 | 对照 |
 | `task5-newcodec-stage1-1k` / `-rtc` | 20:8112 / 6 | franka_quantile | h=5, gain 0.5 | task5 首选 |
