@@ -227,7 +227,7 @@ python3 scripts/validate_task_registries.py
 
 ## 5. 当前登记的模型速查
 
-快照时间 2026-11-13（`ecdd8d3`）。**权威来源始终是 `./run_eef_task.sh list` 和 JSON 本身**；改动模型后请同步更新此表。
+快照时间 2026-11-19（task3-task41-transition-5k）。**权威来源始终是 `./run_eef_task.sh list` 和 JSON 本身**；改动模型后请同步更新此表。
 
 ### EEF（`config/eef_tasks.json`）
 
@@ -235,7 +235,7 @@ python3 scripts/validate_task_registries.py
 | --- | --- | --- |
 | `task1` | place the red test tube in the red basket | `act-v2`、`all50noise-2k`、`all50noise-1k`、`all50noise-1k-rtc`、`joint9-384-16k`、`all50noises13-1k`、`all50-2k`、`act`、`act-1k`、`act2`、`droid`、`task01-mulaw9-5k`、`task01-maxabs1x-9k`、`joint8-newcodec-20k`、`task01-newcodec-10k`、`universal-mulaw9`、`universal-maxabs-x2` |
 | `task2` | place the test tube rack in the black tray | `task2-newcodec-stage1-5k`(-rtc)、`task2-newcodec-stage1-3k`(-rtc) |
-| `task3` | store the bottle inside the container and close the lid | `task3-own-p1-7k`、`task3-own-n5k-500` |
+| `task3` | store the bottle inside the container and close the lid | `task3-task41-transition-5k`、`task3-gripfix-p1-7k-rtc`、`task3-gripfix-p1-8k-rtc`、`task3-gripfix-noise8000-500-rtc`、`task3-gripfix-p1-4k-rtc`、`task3-gripfix-p1-4k`、`task3-own-p1-7k`、`task3-own-n5k-500`、`task3-actiononly-joint10k-4k` |
 | `task5` | press the yellow button to turn on the yellow light | `task5-newcodec-stage1-1k`(-rtc) |
 | `task40` | open the lid | `universal-mulaw9`、`universal-maxabs-x2` |
 
@@ -257,6 +257,7 @@ python3 scripts/validate_task_registries.py
 | `joint9-384-16k` | 20:8109 / 4 | franka_quantile | serial | 多任务 |
 | `task3-own-p1-7k` | 63:8110 / 0 | franka_quantile | serial | 与 n5k-500 共用端口 |
 | `task3-own-n5k-500` | 63:8110 / 0 | franka_quantile | serial | |
+| `task3-task41-transition-5k` | 63:8117 / 5 | franka_quantile | serial | Task3+Task41 过渡训练 step 5000，`save_5000_chkpt` |
 | `task2-newcodec-stage1-5k` / `-rtc` | 20:8111 / 5 | franka_quantile | h=5, gain 0.5 | task2 首选（离线抓取事件评测最优） |
 | `task2-newcodec-stage1-3k` / `-rtc` | 20:8111 / 5 | franka_quantile | h=5, gain 0.5 | 对照 |
 | `task5-newcodec-stage1-1k` / `-rtc` | 20:8112 / 6 | franka_quantile | h=5, gain 0.5 | task5 首选 |

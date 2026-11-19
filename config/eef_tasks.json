@@ -92,6 +92,7 @@
     "task3": {
       "instruction": "store the bottle inside the container and close the lid",
       "models": [
+        "task3-task41-transition-5k",
         "task3-gripfix-p1-7k-rtc",
         "task3-gripfix-p1-8k-rtc",
         "task3-gripfix-noise8000-500-rtc",
@@ -1469,6 +1470,41 @@
       },
       "task_key_to_training_task": {
         "task5": "Task5"
+      }
+    },
+    "task3-task41-transition-5k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
       }
     }
   }
