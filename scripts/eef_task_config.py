@@ -87,7 +87,7 @@ def resolve(config, task_key, model_key, control=None):
         raise ValueError("runtime.rtc_blend_steps must be an integer in [1, 8]")
     if not isinstance(runtime["rtc_observe_after"], int) or not 0 <= runtime["rtc_observe_after"] <= 14:
         raise ValueError("runtime.rtc_observe_after must be an integer in [0, 14] (0: adaptive)")
-    for key, upper in (("max_chunks", 200), ("max_actions", 2000)):
+    for key, upper in (("max_chunks", 200), ("max_actions", 3000)):
         if not isinstance(runtime[key], int) or runtime[key] < 0 or runtime[key] > upper:
             raise ValueError(f"runtime.{key} out of range (0 means unlimited)")
     if (not isinstance(runtime["finish_idle_chunks"], int)

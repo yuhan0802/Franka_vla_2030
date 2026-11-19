@@ -879,7 +879,7 @@ def parse_args(settle_timeout_default: float = 1.5) -> argparse.Namespace:
     if not np.isfinite(args.expected_action_mulaw_mu) or args.expected_action_mulaw_mu < 0:
         parser.error("expected-action-mulaw-mu must be finite and nonnegative")
     if not 1 <= args.execute_horizon <= ACTION_SHAPE[0]: parser.error(f"execute-horizon must be in [1, {ACTION_SHAPE[0]}]")
-    if not 0 <= args.max_actions <= 2000 or not 0 <= args.max_chunks <= 200:
+    if not 0 <= args.max_actions <= 3000 or not 0 <= args.max_chunks <= 200:
         parser.error("action/chunk budget out of range (0 means unlimited)")
     if args.action_hz != 15.0: parser.error("the EEF protocol is 15 Hz; do not execute it at another rate")
     if not 0 <= args.max_translation <= 0.02 or not 0 < args.max_rotation <= 0.15:
