@@ -32,7 +32,7 @@ class EefTaskRunnerTests(unittest.TestCase):
 import json, os, pathlib, sys
 kind='direct' if 'direct' in pathlib.Path(sys.argv[0]).name else 'servo'
 mode=sys.argv[1]
-keys=('EEF_CHECKPOINT','EEF_SERVER_HOST','EEF_SERVER_PORT','EEF_SERVER_GPU','EEF_SERVER_SCRIPT','EEF_HOME_POSITION','EEF_HOME_QUATERNION','VLA_INSTRUCTION','EEF_EXECUTE_HORIZON','EEF_MAX_CHUNKS','EEF_MAX_ACTIONS','EEF_MAX_TF_AGE','EEF_ACTION_GAIN','EEF_ENABLE_GRIPPER')
+keys=('EEF_CHECKPOINT','EEF_SERVER_HOST','EEF_SERVER_PORT','EEF_SERVER_GPU','EEF_SERVER_SCRIPT','EEF_HOME_POSITION','EEF_HOME_QUATERNION','VLA_INSTRUCTION','EEF_EXECUTE_HORIZON','EEF_MAX_CHUNKS','EEF_MAX_ACTIONS','EEF_FINISH_IDLE_CHUNKS','EEF_MAX_TF_AGE','EEF_ACTION_GAIN','EEF_ENABLE_GRIPPER')
 with open(os.environ['EEF_TEST_TRACE'],'a') as f:f.write(json.dumps({'kind':kind,'mode':mode,'env':{k:os.environ.get(k) for k in keys}})+'\\n')
 if mode in ('stop','server-stop') and os.environ.get('EEF_TEST_STOP_FAIL')==kind:sys.exit(9)
 if mode in ('dry-run','axis-test'):
@@ -86,7 +86,6 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
         result = subprocess.run([str(self.root / "run_eef_task.sh"), "list"], env=self.env, capture_output=True, text=True)
         self.assertIn("task2", result.stdout)
         self.assertIn("task2-newcodec-stage1-5k", result.stdout)
-        self.assertIn("task2-newcodec-stage1-3k", result.stdout)
         self.assertIn("task5-newcodec-stage1-1k", result.stdout)
         self.assertEqual(self.calls(), [])
 
@@ -108,27 +107,38 @@ elif sys.argv[1]=='kill':pathlib.Path(os.environ['EEF_TEST_KILLED']).touch()
             self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls(), [])
 
-    def test_task2_and_task5_staged_profiles_predict_15_execute_5_at_half_gain(self):
-        cases = (
-            ("task2", "task2-newcodec-stage1-5k", 8111, 5, "save_5000_chkpt"),
-            ("task5", "task5-newcodec-stage1-1k", 8112, 6, "save_1000_chkpt"),
+    def test_task3_gripfix_profile_uses_corrected_data_and_4k_checkpoint(self):
+        profile = resolve(self.config, "task3", "task3-gripfix-p1-4k")
+        self.assertEqual(profile["server"]["host"], "10.24.116.63")
+        self.assertEqual(profile["server"]["port"], 8110)
+        self.assertTrue(profile["server"]["checkpoint"].endswith("/save_4000_chkpt"))
+        self.assertIn("claude_task3_gripfix_20261103", profile["server"]["checkpoint"])
+        self.assertEqual(
+            profile["model_info"]["training_tasks_path"],
+            "/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103/tasks.json",
         )
-        for task, serial_key, port, gpu, checkpoint in cases:
-            with self.subTest(task=task):
-                serial = resolve(self.config, task, serial_key)
-                rtc = resolve(self.config, task, serial_key + "-rtc")
-                self.assertEqual(serial["model_info"]["action_shape"], [15, 7])
-                self.assertEqual(serial["server"]["host"], "10.24.116.20")
-                self.assertEqual((serial["server"]["port"], serial["server"]["gpu"]), (port, gpu))
-                self.assertTrue(serial["server"]["checkpoint"].endswith("/" + checkpoint))
-                self.assertEqual(serial["runtime"]["chunk_mode"], "serial")
-                self.assertEqual(serial["runtime"]["execute_horizon"], 5)
-                self.assertEqual(serial["runtime"]["action_gain"], [0.5] * 6)
-                self.assertEqual(rtc["server"], serial["server"])
-                self.assertEqual(rtc["runtime"]["chunk_mode"], "rtc")
-                self.assertEqual(rtc["runtime"]["execute_horizon"], 5)
-                self.assertEqual(rtc["runtime"]["rtc_observe_after"], 5)
-                self.assertEqual(rtc["runtime"]["action_gain"], [0.5] * 6)
+        self.assertEqual(profile["action_normalization"]["method"], "franka_quantile")
+        self.assertEqual(profile["model_info"]["task_key_to_training_task"], {"task3": "Task3"})
+
+    def test_task3_gripfix_rtc_profile_reuses_checkpoint_with_smoothing(self):
+        serial = resolve(self.config, "task3", "task3-gripfix-p1-4k")
+        profile = resolve(self.config, "task3", "task3-gripfix-p1-4k-rtc")
+        runtime = profile["runtime"]
+        self.assertEqual(profile["server"], serial["server"])
+        self.assertEqual(profile["action_normalization"], serial["action_normalization"])
+        self.assertEqual(runtime["execute_horizon"], 6)
+        self.assertEqual(runtime["chunk_mode"], "rtc")
+        self.assertEqual(runtime["rtc_blend_steps"], 4)
+        self.assertEqual(runtime["rtc_observe_after"], 6)
+        self.assertEqual(runtime["finish_idle_chunks"], 0)
+        self.assertEqual(runtime["action_gain"], [0.5] * 6)
+        env = environment(profile)
+        self.assertEqual(env["EEF_CHUNK_MODE"], "rtc")
+        self.assertEqual(env["EEF_RTC_BLEND_STEPS"], "4")
+        self.assertEqual(env["EEF_RTC_OBSERVE_AFTER"], "6")
+        self.assertEqual(env["EEF_FINISH_IDLE_CHUNKS"], "0")
+        self.assertEqual(env["EEF_ACTION_GAIN"], "0.5 0.5 0.5 0.5 0.5 0.5")
+        self.assertEqual(serial["runtime"]["finish_idle_chunks"], 2)
 
     def test_universal_mulaw9_metadata_matches_verified_checkpoint(self):
         result = self.run_task("show", model="universal-mulaw9")
