@@ -219,7 +219,8 @@ class EefAdapter(Node):
         self.real_joints: Dict[str, float] = {}; self.real_joint_time = 0.0
         self.merged_joints: Dict[str, float] = {}; self.merged_joint_time = 0.0
         self.armed_pose: Optional[tuple] = None
-        self.jump_monitor = PoseJumpMonitor()
+        self.jump_monitor = PoseJumpMonitor(
+            max_consecutive_jumps=getattr(self.args, "pose_jump_streak", 3))
         self.gripper_open: Optional[bool] = None; self.pending_gripper_open: Optional[bool] = None
         self.commanded_gripper_open = True
         self.target_client = None; self.move_client = None; self.grasp_client = None; self.homing_client = None
@@ -310,6 +311,8 @@ class EefAdapter(Node):
         if reason:
             self.log("pose_jump", reason=reason, position=pose[0].tolist(), quaternion_xyzw=pose[1].tolist())
             self.latch(f"measured end-effector pose jumped {reason}; TF source unstable"); return None
+        if getattr(self.jump_monitor, "last_event", None) == "tolerated":
+            self.log("pose_jump_tolerated", position=pose[0].tolist(), quaternion_xyzw=pose[1].tolist())
         return pose
 
     def open_midpoint(self) -> float:

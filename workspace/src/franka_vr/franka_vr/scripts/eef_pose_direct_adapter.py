@@ -402,6 +402,8 @@ def parse_direct_args() -> argparse.Namespace:
     add("--settle-angular-speed", type=float, default=0.05, help="strict gate EEF angular speed (rad/s)")
     add("--settle-stable-duration", type=float, default=0.30, help="continuous qualifying feedback (s)")
     add("--feedback-max-age", type=float, default=0.20, help="strict gate real joint feedback age (s)")
+    add("--pose-jump-streak", type=int, default=3,
+        help="consecutive impossible measured-pose samples before latching (1 = strict)")
     add("--feedback-stale-action", choices=("fault", "hold"), default="fault",
         help="fault, or command zero velocity and resume when joint feedback returns")
     add("--observation-timeout", type=float, default=5.0, help="fresh post-completion observation wait limit (s)")

@@ -308,22 +308,48 @@ class PoseJumpMonitor:
     """
 
     def __init__(self, max_speed: float = 0.6, max_angular_speed: float = 2.0,
-                 slack_position: float = 0.003, slack_rotation: float = 0.03) -> None:
+                 slack_position: float = 0.003, slack_rotation: float = 0.03,
+                 max_consecutive_jumps: int = 3) -> None:
         self.max_speed, self.max_angular_speed = max_speed, max_angular_speed
         self.slack_position, self.slack_rotation = slack_position, slack_rotation
+        self.max_consecutive_jumps = max(1, int(max_consecutive_jumps))
+        # Samples whose impossible jump repeats within this window latch the fault.
+        self.repeat_window = 0.10 * self.max_consecutive_jumps
         self.reset()
 
     def reset(self) -> None:
         self.last: Optional[tuple] = None
+        self.rejects: list[float] = []
+        self.last_event: Optional[str] = None
+
+    def _violates(self, sample: tuple, t: float, p: "np.ndarray", q: "np.ndarray") -> bool:
+        dt = max(0.0, t - sample[0])
+        moved = float(np.linalg.norm(p - sample[1]))
+        turned = rotation_angle_between(q, sample[2])
+        return (moved > self.max_speed * dt + self.slack_position
+                or turned > self.max_angular_speed * dt + self.slack_rotation)
 
     def check(self, t: float, position: object, quaternion_xyzw: object) -> Optional[str]:
         p, q = np.asarray(position, dtype=np.float64), normalize_quaternion(quaternion_xyzw)
-        reason = None
-        if self.last is not None:
-            dt = max(0.0, t - self.last[0])
-            moved = float(np.linalg.norm(p - self.last[1]))
-            turned = rotation_angle_between(q, self.last[2])
-            if moved > self.max_speed * dt + self.slack_position or turned > self.max_angular_speed * dt + self.slack_rotation:
-                reason = f"{moved:.4f} m / {turned:.4f} rad in {dt:.3f} s"
-        self.last = (t, p, q)
-        return reason
+        self.last_event = None
+        if self.last is None:
+            self.last = (t, p, q); self.rejects = []
+            return None
+        if not self._violates(self.last, t, p, q):
+            self.last = (t, p, q); self.rejects = []
+            return None
+        dt = max(0.0, t - self.last[0])
+        moved = float(np.linalg.norm(p - self.last[1]))
+        turned = rotation_angle_between(q, self.last[2])
+        # A single sample that teleports is TF jitter, not motion: keep the last
+        # trusted pose so the next sample is measured against it. Latch only when
+        # impossible samples keep arriving inside the window, which means the
+        # measurement source itself is broken.
+        self.rejects = [stamp for stamp in self.rejects if t - stamp <= self.repeat_window]
+        self.rejects.append(t)
+        if len(self.rejects) < self.max_consecutive_jumps:
+            self.last_event = "tolerated"
+            return None
+        self.last_event = "latched"
+        return (f"{moved:.4f} m / {turned:.4f} rad in {dt:.3f} s "
+                f"({len(self.rejects)} impossible samples within {self.repeat_window:.2f}s)")
