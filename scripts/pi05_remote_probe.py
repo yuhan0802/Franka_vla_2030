@@ -17,6 +17,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8094)
     parser.add_argument("--instruction", required=True)
     parser.add_argument("--timeout", type=float, default=300.0)
+    parser.add_argument("--synthetic-gripper-diagnostic-only", action="store_true")
     args = parser.parse_args()
 
     # 首次 JAX/XLA 编译可能超过默认的 20 秒 WebSocket 心跳。探针使用一个
@@ -50,11 +51,26 @@ def main() -> None:
         raise SystemExit(f"Refusing: expected actions shape (16, 8), got {actions.shape}")
     if not np.isfinite(actions).all():
         raise SystemExit("Refusing: action response contains NaN or Inf")
-    if np.any(actions < -1.0001) or np.any(actions > 1.0001):
-        raise SystemExit("Refusing: normalized action is outside [-1,1]")
+    joint_actions = actions[:, :7]
+    gripper = actions[:, 7]
+    if np.any(joint_actions < -1.0001) or np.any(joint_actions > 1.0001):
+        raise SystemExit("Refusing: DROID joint action is outside [-1,1]")
+    # The live decoder clamps gripper closedness to [0, 1].
+    gripper_tolerance = 0.005
+    gripper_min = float(gripper.min())
+    gripper_max = float(gripper.max())
+    if not args.synthetic_gripper_diagnostic_only and (
+        gripper_min < -gripper_tolerance or gripper_max > 1 + gripper_tolerance
+    ):
+        raise SystemExit(
+            f"Refusing: gripper closedness range [{gripper_min:.6f}, {gripper_max:.6f}] "
+            f"exceeds [0,1] with {gripper_tolerance} tolerance"
+        )
     print(json.dumps({
         "metadata": metadata,
         "actions_shape": list(actions.shape),
+        "gripper_closedness_raw_range": [gripper_min, gripper_max],
+        "gripper_closedness_range_enforced": not args.synthetic_gripper_diagnostic_only,
         "actions_min": float(actions.min()),
         "actions_max": float(actions.max()),
         "action_semantics": "normalized joint velocity[7] + gripper closedness[1]",

@@ -29,12 +29,17 @@ class SerialTests(unittest.TestCase):
             "time": types.SimpleNamespace(monotonic=lambda: 10.0),
             "JointState": object,
             "Optional": typing.Optional,
+            "Any": typing.Any,
+            "Dict": typing.Dict,
             "np": np,
             "RCLError": RuntimeError,
             "rclpy": types.SimpleNamespace(spin_once=lambda node, timeout_sec: setattr(node, "gripper_time", 10.1)),
             "JOINT_NAMES": tuple(f"fr3_joint{i}" for i in range(1, 8)),
             "closedness_from_width": lambda width, open_width, closed_width: max(
                 0.0, min(1.0, (open_width - width) / (open_width - closed_width))),
+            "Move": types.SimpleNamespace(Goal=lambda: types.SimpleNamespace()),
+            "Grasp": types.SimpleNamespace(Goal=lambda: types.SimpleNamespace(
+                epsilon=types.SimpleNamespace(inner=0.0, outer=0.0))),
         }
         exec(compile(ast.Module(body=[method], type_ignores=[]), "adapter_method", "exec"), namespace)
         return namespace[name]
@@ -186,22 +191,30 @@ class SerialTests(unittest.TestCase):
         self.assertTrue(node.last_gripper_closed)
         node.latch.assert_not_called()
 
-    def test_direct_feedback_range_check_disabled_but_nonfinite_rejected(self):
+    def test_direct_feedback_range_check_uses_runtime_coordinate(self):
         check = self.direct_method("gripper_feedback_error")
-        node = types.SimpleNamespace(args=types.SimpleNamespace(gripper_max_plausible_width=0.085))
-        for values in ((-0.0005300146294757724,) * 2, (0.07085, 0.07085)):
-            node.fingers = dict(zip(("fr3_finger_joint1", "fr3_finger_joint2"), values))
+        node = types.SimpleNamespace(
+            args=types.SimpleNamespace(gripper_feedback_open_width=0.14,
+                                       gripper_feedback_closed_width=0.0,
+                                       gripper_open_tolerance=0.005),
+            gripper_feedback_open_width=0.07)
+        for width in (-0.001, 0.07):
+            node.fingers = {
+                name: width / 2 for name in ("fr3_finger_joint1", "fr3_finger_joint2")}
             self.assertIsNone(check(node))
+        node.fingers = {name: 0.07 for name in node.fingers}
+        self.assertIn("above calibrated range", check(node))
         for values in ((float("nan"), 0.01), (0.01, float("inf"))):
             node.fingers = dict(zip(("fr3_finger_joint1", "fr3_finger_joint2"), values))
             self.assertIsNotNone(check(node))
 
-    def test_direct_arm_accepts_negative_width_with_range_check_disabled(self):
+    def test_direct_arm_rejects_non_open_startup_width(self):
         node = types.SimpleNamespace(
             args=types.SimpleNamespace(execute=True, enable_gripper=True,
                                        gripper_max_plausible_width=0.085,
                                        gripper_open_width=0.07, gripper_closed_width=0.0,
                                        gripper_feedback_open_width=0.14, gripper_feedback_closed_width=0.0,
+                                       gripper_open_tolerance=0.005,
                                        gripper_close_threshold=0.6),
             count_subscribers=lambda topic: 1,
             move_client=Mock(), grasp_client=Mock(),
@@ -209,10 +222,11 @@ class SerialTests(unittest.TestCase):
             gripper_time=0.0, startup_ready=False, fault=False,
             get_logger=lambda: types.SimpleNamespace(info=Mock()),
         )
+        node.gripper_feedback_open_width = 0.14
         node.gripper_feedback_error = types.MethodType(self.direct_method("gripper_feedback_error"), node)
-        self.direct_method("arm")(node)
-        self.assertTrue(node.startup_ready)
-        self.assertTrue(node.last_gripper_closed)
+        with self.assertRaisesRegex(RuntimeError, "not fully open"):
+            self.direct_method("arm")(node)
+        self.assertFalse(node.startup_ready)
         node.move_client.send_goal_async.assert_not_called()
         node.grasp_client.send_goal_async.assert_not_called()
 
@@ -315,8 +329,11 @@ class SerialTests(unittest.TestCase):
     def test_direct_startup_detects_014_feedback_as_open_without_moving(self):
         node = types.SimpleNamespace(
             args=types.SimpleNamespace(execute=True, enable_gripper=True,
+                                       gripper_open_width=0.07,
                                        gripper_feedback_open_width=0.14,
                                        gripper_feedback_closed_width=0.0,
+                                       gripper_open_tolerance=0.005,
+                                       gripper_max_plausible_width=0.085,
                                        gripper_close_threshold=0.6),
             count_subscribers=lambda topic: 1, move_client=Mock(), grasp_client=Mock(),
             fingers={"fr3_finger_joint1": 0.071, "fr3_finger_joint2": 0.071},
@@ -327,8 +344,69 @@ class SerialTests(unittest.TestCase):
         self.direct_method("arm")(node)
         self.assertTrue(node.startup_ready)
         self.assertFalse(node.last_gripper_closed)
+        self.assertAlmostEqual(node.gripper_command_open_width, 0.14)
+        self.assertAlmostEqual(node.gripper_feedback_open_width, 0.14)
         node.move_client.send_goal_async.assert_not_called()
         node.grasp_client.send_goal_async.assert_not_called()
+
+    def test_direct_startup_selects_standard_coordinate(self):
+        node = types.SimpleNamespace(
+            args=types.SimpleNamespace(execute=True, enable_gripper=True,
+                                       gripper_open_width=0.0626,
+                                       gripper_feedback_open_width=0.0626,
+                                       gripper_feedback_closed_width=0.0,
+                                       gripper_open_tolerance=0.005,
+                                       gripper_max_plausible_width=0.085,
+                                       gripper_close_threshold=0.6),
+            count_subscribers=lambda topic: 1, move_client=Mock(), grasp_client=Mock(),
+            fingers={"fr3_finger_joint1": 0.0394, "fr3_finger_joint2": 0.0394},
+            gripper_time=0.0, startup_ready=False, fault=False,
+            get_logger=lambda: types.SimpleNamespace(info=Mock()),
+        )
+        node.gripper_feedback_open_width = 0.0626
+        node.gripper_feedback_error = types.MethodType(self.direct_method("gripper_feedback_error"), node)
+        self.direct_method("arm")(node)
+        self.assertTrue(node.startup_ready)
+        self.assertIsNone(node.gripper_feedback_error())
+        self.assertFalse(node.last_gripper_closed)
+        self.assertAlmostEqual(node.gripper_command_open_width, 0.0626)
+        self.assertAlmostEqual(node.gripper_feedback_open_width, 0.0626)
+
+    def test_direct_gripper_transition_requires_four_consecutive_frames(self):
+        maybe = self.direct_method("maybe_gripper")
+        future = Mock()
+        node = types.SimpleNamespace(
+            args=types.SimpleNamespace(gripper_close_threshold=0.6, gripper_open_threshold=0.4,
+                                       gripper_transition_min_frames=4,
+                                       gripper_closed_width=0.01, gripper_open_width=0.07,
+                                       gripper_speed=0.02, gripper_force=10.0,
+                                       gripper_epsilon_inner=0.01, gripper_epsilon_outer=0.07),
+            last_gripper_closed=False, pending_gripper_closed=None,
+            gripper_candidate_closed=None, gripper_candidate_count=0,
+            gripper_command_open_width=0.14, gripper_busy=False,
+            stop_command=Mock(), move_client=Mock(), grasp_client=Mock(),
+            gripper_goal=Mock(),
+            get_logger=lambda: types.SimpleNamespace(info=Mock(), warning=Mock()),
+        )
+        node.grasp_client.send_goal_async.return_value = future
+        for _ in range(3):
+            maybe(node, 0.87)
+        node.grasp_client.send_goal_async.assert_not_called()
+        maybe(node, 0.0)
+        self.assertEqual(node.gripper_candidate_count, 0)
+        for _ in range(4):
+            maybe(node, 0.87)
+        goal = node.grasp_client.send_goal_async.call_args.args[0]
+        self.assertAlmostEqual(goal.width, 0.01)
+        self.assertTrue(node.gripper_busy)
+
+        node.last_gripper_closed = True
+        node.gripper_busy = False
+        node.move_client.send_goal_async.return_value = future
+        for _ in range(4):
+            maybe(node, 0.0)
+        goal = node.move_client.send_goal_async.call_args.args[0]
+        self.assertAlmostEqual(goal.width, 0.14)
 
     def test_direct_hardware_error_still_latches(self):
         node = types.SimpleNamespace(pending_gripper_closed=True, latch=Mock())

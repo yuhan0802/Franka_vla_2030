@@ -4,7 +4,7 @@
     {
       "id": "task1",
       "instruction": "put the red test tube into the red basket",
-      "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/tube_pick_v5_full_bs32_20k",
+      "checkpoint_root": "/data/vla/checkpoints/real/tube_pick_v5_full_bs32_20k/20000/",
       "checkpoint_step": 20000,
       "policy_config": "pi05_franka_tube_pick_v5_finetune",
       "direct": {
@@ -33,7 +33,7 @@
         "init_after_stop": true,
         "gripper_feedback_open_width": 0.14,
         "gripper_feedback_closed_width": 0.0,
-        "gripper_verify_open_width": 0
+        "gripper_verify_open_width": 1
       },
       "runtime": {
         "max_actions": 240,
@@ -54,7 +54,7 @@
         "init_after_stop": true,
         "gripper_feedback_open_width": 0.14,
         "gripper_feedback_closed_width": 0.0,
-        "gripper_verify_open_width": 0
+        "gripper_verify_open_width": 1
       },
       "runtime": {
         "max_actions": 240,
@@ -101,6 +101,333 @@
         "max_actions": 2000,
         "max_joint_velocity": 0.6,
         "max_joint_acceleration": 2.0,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task9",
+      "instruction": "press the red button to turn on the red light",
+      "checkpoint_root": "/data/eainas/xmu/pi05-three-buttons/checkpoints/pi05_franka_tube_pick_v5_finetune/three_buttons_joint_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task10",
+      "instruction": "press the yellow button to turn on the yellow light",
+      "checkpoint_root": "/data/eainas/xmu/pi05-three-buttons/checkpoints/pi05_franka_tube_pick_v5_finetune/three_buttons_joint_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task11",
+      "instruction": "press the green button to turn on the green light",
+      "checkpoint_root": "/data/eainas/xmu/pi05-three-buttons/checkpoints/pi05_franka_tube_pick_v5_finetune/three_buttons_joint_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task12",
+      "instruction": "place the copper sheet on the observation platform.",
+      "checkpoint_root": "/data/vla/checkpoints/task7_copper_sheet_closedness_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task13",
+      "instruction": "Place the copper sheet on the platform.",
+      "checkpoint_root": "/data/vla/checkpoints/task7_copper_sheet_closedness_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task20",
+      "instruction": "place the blue centrifuge tube in the red basket.",
+      "checkpoint_root": "/data/vla/checkpoints/real/task20_blue_centrifuge_tube_red_basket_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task0-1",
+      "instruction": "place the red test tube in the red basket.",
+      "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/tube_pick_v5_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      },
+      "direct": {
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      }
+    },
+    {
+      "id": "task1_1",
+      "instruction": "Place the test tube rack in the black tray.",
+      "checkpoint_root": "/data/vla/checkpoints/real/task2_rack_black_tray_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task21_n",
+      "instruction": "place the blue centrifuge tube in the white beaker.",
+      "checkpoint_root": "/data/vla/checkpoints/real/task21_blue_centrifuge_to_beaker_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task2_n",
+      "instruction": "Open the lid.",
+      "checkpoint_root": "/mnt/82_store/lyh/VLA/openpi-main/checkpoints/pi05_franka_tube_pick_v5_finetune/task6_open_lid_full_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task3_n",
+      "instruction": "store the bottle inside the container and close the lid",
+      "checkpoint_root": "/data/vla/checkpoints/real/task3_closedness_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task22",
+      "instruction": "place the red centrifuge tube in the white beaker",
+      "checkpoint_root": "/data/vla/checkpoints/real/task22_red_centrifuge_white_beaker_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task26",
+      "instruction": "place the copper sheet in the black tray",
+      "checkpoint_root": "/data/vla/checkpoints/real/task26_copper_sheet_black_tray_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task27",
+      "instruction": "place the red test tube in the black tray",
+      "checkpoint_root": "/data/vla/checkpoints/real/task27_red_tube_black_tray_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task18_",
+      "instruction": "place the red basket in the blue basket",
+      "checkpoint_root": "/data/vla/checkpoints/real/task18_place_red_basket_in_blue_basket_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task4_",
+      "instruction": "close the lid",
+      "checkpoint_root": "/data/vla/checkpoints/real/task4_close_lid_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
+        "gripper_force": 10.0
+      }
+    },
+    {
+      "id": "task3-fixed",
+      "instruction": "store the bottle inside the container and close the lid",
+      "instruction_selectable": false,
+      "checkpoint_root": "/data/vla/checkpoints/real/task3_store_bottle_close_lid_fixed_full_fsdp8_bs32_20k",
+      "checkpoint_step": 20000,
+      "policy_config": "pi05_franka_tube_pick_v5_finetune",
+      "direct": {
+        "runtime_from": "task2",
+        "init_after_stop": true,
+        "gripper_feedback_open_width": 0.14,
+        "gripper_feedback_closed_width": 0.0,
+        "gripper_verify_open_width": 0
+      },
+      "runtime": {
+        "max_actions": 240,
+        "max_joint_velocity": 0.15,
+        "max_joint_acceleration": 0.5,
         "gripper_force": 10.0
       }
     }

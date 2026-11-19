@@ -21,6 +21,8 @@ camera_session=franka_vr_pi05_direct_cameras
 instruction="${VLA_INSTRUCTION:-place the test tube rack in the black tray}"
 host="${VLA_REMOTE_HOST:-10.24.116.66}"; port="${VLA_SERVER_PORT:-8094}"
 server_session="${PI05_DROID_TMUX_SESSION:-pi05-droid-66-${port}}"
+policy_host="${PI05_POLICY_CONNECT_HOST:-$host}"
+policy_port="${PI05_POLICY_CONNECT_PORT:-$port}"
 task_config="${VLA_TASK_CONFIG:-$root_dir/vla_instruction_weights.json}"
 mapfile -t selected_task < <(
   python3 "$root_dir/scripts/select_vla_task.py" --config "$task_config" --instruction "$instruction"
@@ -138,7 +140,11 @@ cleanup_full_task() {
   stop_session "$camera_session" || true
   stop_session "$robot_session" || true
   stop_direct_containers
-  if [[ "$mode" == full-execute ]]; then "$root_dir/run_vla_pi05_droid_66.sh" stop || true; fi
+  if [[ "$mode" == full-execute && "${PI05_DIRECT_KEEP_POLICY:-0}" != 1 ]]; then
+    "$root_dir/run_vla_pi05_droid_66.sh" stop || true
+  elif [[ "$mode" == full-execute ]]; then
+    echo "Keeping the verified policy service running (PI05_DIRECT_KEEP_POLICY=1)."
+  fi
 }
 
 case "$mode" in
@@ -153,7 +159,12 @@ case "$mode" in
     stop_session "$camera_session" || failed=1; stop_session "$robot_session" || failed=1
     stop_direct_containers
     wait_direct_shutdown || failed=1
-    "$root_dir/run_vla_pi05_droid_66.sh" stop || failed=1; exit "$failed";;
+    if [[ "${PI05_DIRECT_KEEP_POLICY:-0}" != 1 ]]; then
+      "$root_dir/run_vla_pi05_droid_66.sh" stop || failed=1
+    else
+      echo "Keeping the verified policy service running (PI05_DIRECT_KEEP_POLICY=1)."
+    fi
+    exit "$failed";;
 esac
 
 mkdir -p "$log_dir"; log_dir="$(cd "$log_dir" && pwd)"; export PI05_DIRECT_LOG_DIR="$log_dir"
@@ -205,7 +216,12 @@ else
   # The 20k checkpoint was trained and previously validated with complete
   # 16-action chunks.  Replanning after only the first four actions repeatedly
   # discards the late-chunk grasp transition and leaves the policy in approach.
-  adapter_flags=(--execute --confirm-real-robot DIRECT_JOINT_VELOCITY_PI05 --execute-horizon 16
+  adapter_flags=(--execute --confirm-real-robot DIRECT_JOINT_VELOCITY_PI05
+    --prediction-horizon "${PI05_DIRECT_PREDICTION_HORIZON:-16}"
+    --execute-horizon "${PI05_DIRECT_EXECUTE_HORIZON:-16}"
+    --velocity-scale "${PI05_DIRECT_VELOCITY_SCALE:-1.0}"
+    --chunk-mode "${PI05_DIRECT_CHUNK_MODE:-serial}"
+    --rtc-blend-steps "${PI05_DIRECT_RTC_BLEND_STEPS:-4}"
     --max-actions "$full_actions" --enable-gripper --gripper-speed 0.02 --gripper-force "$full_gripper_force"
     --gripper-open-width "${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.07}"
     --gripper-closed-width "${PI05_DIRECT_GRIPPER_CLOSED_WIDTH:-0.0}"
@@ -262,7 +278,7 @@ if [[ "$mode" == full-execute ]]; then
     -v "$log_dir:/pi05_logs" franka_vr bash -lc '
       set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
       exec python3 src/franka_vr/franka_vr/scripts/pi05_direct_policy_adapter.py \
-        --server-host "'"$host"'" --server-port "'"$port"'" --instruction "'"$instruction"'" \
+        --server-host "'"$policy_host"'" --server-port "'"$policy_port"'" --instruction "'"$instruction"'" \
         --left-image-topic /camera_left/'"$suffix"' --execute-horizon 16 --max-policy-latency 10 \
         --enable-gripper \
         --gripper-feedback-open-width '"${PI05_DIRECT_GRIPPER_FEEDBACK_OPEN_WIDTH:-${PI05_DIRECT_GRIPPER_OPEN_WIDTH:-0.07}}"' \
@@ -278,7 +294,7 @@ docker compose run --rm \
   -v "$log_dir:/pi05_logs" franka_vr bash -lc '
     set -eo pipefail; source /opt/ros/humble/setup.bash; cd /ws_franka_vr; source install/setup.bash
     exec python3 src/franka_vr/franka_vr/scripts/pi05_direct_policy_adapter.py \
-      --server-host "'"$host"'" --server-port "'"$port"'" --instruction "'"$instruction"'" \
+      --server-host "'"$policy_host"'" --server-port "'"$policy_port"'" --instruction "'"$instruction"'" \
       --left-image-topic /camera_left/'"$suffix"' --jsonl-log /pi05_logs/policy.jsonl '"${adapter_flags[*]}"'
   ' 2>&1 | tee "$log_dir/adapter.log"
 adapter_status=${PIPESTATUS[0]}

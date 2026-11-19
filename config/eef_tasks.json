@@ -18,6 +18,7 @@
       "execute_horizon": 10,
       "max_chunks": 0,
       "max_actions": 0,
+      "finish_idle_chunks": 2,
       "chunk_start": "last_target",
       "max_translation": 0,
       "max_rotation": 0.035,
@@ -44,7 +45,8 @@
         "joint8-newcodec-20k",
         "task01-newcodec-10k",
         "universal-mulaw9",
-        "universal-maxabs-x2"
+        "universal-maxabs-x2",
+        "task1-actiononly-joint10k-4k"
       ],
       "start_pose": {
         "position": [
@@ -67,6 +69,7 @@
       "models": [
         "task2-newcodec-stage1-5k",
         "task2-newcodec-stage1-5k-rtc",
+        "task2-actiononly-joint10k-4k",
         "task2-newcodec-stage1-3k",
         "task2-newcodec-stage1-3k-rtc"
       ],
@@ -89,8 +92,21 @@
     "task3": {
       "instruction": "store the bottle inside the container and close the lid",
       "models": [
+        "task3-task41-transition-5k",
+        "task3-task41-transition-5k-rtc",
+        "task3-task41-transition-500-rtc",
+        "task3-task41-transition-1000-rtc",
+        "task3-task41-transition-1500-rtc",
+        "task3-task41-transition-2000-rtc",
+        "task3-task41-transition-2500-rtc",
+        "task3-gripfix-p1-7k-rtc",
+        "task3-gripfix-p1-8k-rtc",
+        "task3-gripfix-noise8000-500-rtc",
+        "task3-gripfix-p1-4k-rtc",
+        "task3-gripfix-p1-4k",
         "task3-own-p1-7k",
-        "task3-own-n5k-500"
+        "task3-own-n5k-500",
+        "task3-actiononly-joint10k-4k"
       ],
       "start_pose": {
         "position": [
@@ -112,7 +128,8 @@
       "instruction": "press the yellow button to turn on the yellow light",
       "models": [
         "task5-newcodec-stage1-1k",
-        "task5-newcodec-stage1-1k-rtc"
+        "task5-newcodec-stage1-1k-rtc",
+        "task5-actiononly-joint10k-4k"
       ],
       "start_pose": {
         "position": [
@@ -133,7 +150,14 @@
     "task40": {
       "instruction": "open the lid",
       "runtime": {
-        "action_gain": [1.0, 0.8, 1.0, 1.0, 1.0, 1.0]
+        "action_gain": [
+          1.0,
+          0.8,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
       },
       "models": [
         "universal-mulaw9",
@@ -581,7 +605,14 @@
         "chunk_mode": "rtc",
         "rtc_blend_steps": 4,
         "rtc_observe_after": 6,
-        "action_gain": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
       }
     },
     "all50noises13-1k": {
@@ -1021,6 +1052,791 @@
         "task1": "Task0",
         "task2": "Task2",
         "task40": "Task40"
+      }
+    },
+    "task3-gripfix-p1-7k-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8110,
+        "gpu": 0,
+        "checkpoint": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_7000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_7000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_7000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "feedback_stale_action": "hold",
+        "execute_horizon": 6,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "finish_idle_chunks": 0,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      }
+    },
+    "task3-gripfix-p1-8k-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8110,
+        "gpu": 0,
+        "checkpoint": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_8000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_8000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_8000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 6,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "finish_idle_chunks": 0,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      }
+    },
+    "task3-gripfix-p1-4k-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8110,
+        "gpu": 0,
+        "checkpoint": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_4000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_4000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 6,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "finish_idle_chunks": 0,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      }
+    },
+    "task3-gripfix-noise8000-500-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8110,
+        "gpu": 0,
+        "checkpoint": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/noise_from8000/Qwen3VL2B+Franka-Task0+lr5e-05+actv2_8k_continue_task3gripfixn8000_stateaug_noise/save_500_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/noise_from8000/Qwen3VL2B+Franka-Task0+lr5e-05+actv2_8k_continue_task3gripfixn8000_stateaug_noise/save_500_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/noise_from8000/Qwen3VL2B+Franka-Task0+lr5e-05+actv2_8k_continue_task3gripfixn8000_stateaug_noise/save_500_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_8000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 10,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "finish_idle_chunks": 0,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      }
+    },
+    "task3-gripfix-p1-4k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_task3_v5gripfix_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8110,
+        "gpu": 0,
+        "checkpoint": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_4000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/claude_task3_gripfix_20261103/p1_8k/Qwen3VL2B+Franka-Task0+lr0.0001+actv2_8k_continue_task3gripfixp1_stateaug_none/save_4000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      }
+    },
+    "task1-actiononly-joint10k-4k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task0"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_all_fixed_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8113,
+        "gpu": 1,
+        "checkpoint": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task0/Qwen3VL2B+Franka-Task0+lr0.0001+task0_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef_action_only.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task0/Qwen3VL2B+Franka-Task0+lr0.0001+task0_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task0/Qwen3VL2B+Franka-Task0+lr0.0001+task0_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "serial",
+        "execute_horizon": 5,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task1": "Task0"
+      }
+    },
+    "task2-actiononly-joint10k-4k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task2"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_all_fixed_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8114,
+        "gpu": 2,
+        "checkpoint": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task2/Qwen3VL2B+Franka-Task0+lr0.0001+task2_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef_action_only.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task2/Qwen3VL2B+Franka-Task0+lr0.0001+task2_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task2/Qwen3VL2B+Franka-Task0+lr0.0001+task2_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "serial",
+        "execute_horizon": 5,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task2": "Task2"
+      }
+    },
+    "task3-actiononly-joint10k-4k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_all_fixed_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8115,
+        "gpu": 3,
+        "checkpoint": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task3/Qwen3VL2B+Franka-Task0+lr0.0001+task3_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef_action_only.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task3/Qwen3VL2B+Franka-Task0+lr0.0001+task3_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task3/Qwen3VL2B+Franka-Task0+lr0.0001+task3_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "serial",
+        "execute_horizon": 5,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      }
+    },
+    "task5-actiononly-joint10k-4k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task5"
+      ],
+      "training_tasks_path": "/data2/lyh/claude_data/Franka_vr_all_fixed_20261103/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8116,
+        "gpu": 4,
+        "checkpoint": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task5/Qwen3VL2B+Franka-Task0+lr0.0001+task5_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef_action_only.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task5/Qwen3VL2B+Franka-Task0+lr0.0001+task5_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/franka_actiononly_task0235_from_joint10k_20261106/Task5/Qwen3VL2B+Franka-Task0+lr0.0001+task5_actiononly_bar_from_joint10k_stop4k_b256/save_4000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale",
+        "init_checkpoint": "/data2/lyh/vla/runs/franka_joint8_newcodec_ownstate_qwen_20k_20261028/Qwen3VL2B+Franka-Joint+lr0.0001+joint8_v5_codecft20k_ownstate_qwen_first5_20k_b256/save_20000_chkpt"
+      },
+      "runtime": {
+        "chunk_mode": "serial",
+        "execute_horizon": 5,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "task_key_to_training_task": {
+        "task5": "Task5"
+      }
+    },
+    "task3-task41-transition-5k": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "feedback_stale_action": "hold",
+        "max_actions": 2000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "execute_horizon": 10,
+        "chunk_mode": "serial"
+      }
+    },
+    "task3-task41-transition-5k-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_5000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 10,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "feedback_stale_action": "hold",
+        "max_actions": 3000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "finish_idle_chunks": 0
+      }
+    },
+    "task3-task41-transition-500-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_500_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_500_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_500_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 12,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "feedback_stale_action": "hold",
+        "max_actions": 3000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "finish_idle_chunks": 0
+      }
+    },
+    "task3-task41-transition-1000-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_1000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_1000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_1000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 12,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "feedback_stale_action": "hold",
+        "max_actions": 3000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "finish_idle_chunks": 0
+      }
+    },
+    "task3-task41-transition-1500-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_1500_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_1500_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_1500_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 12,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "feedback_stale_action": "hold",
+        "max_actions": 3000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "finish_idle_chunks": 0
+      }
+    },
+    "task3-task41-transition-2000-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_2000_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_2000_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_2000_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 12,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "feedback_stale_action": "hold",
+        "max_actions": 3000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "finish_idle_chunks": 0
+      }
+    },
+    "task3-task41-transition-2500-rtc": {
+      "scope": "single_task",
+      "training_tasks": [
+        "Task3",
+        "Task41"
+      ],
+      "training_tasks_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/data/tasks.json",
+      "action_representation": "droid_base_cartesian_velocity_plus_inverted_gripper_v1",
+      "action_shape": [
+        15,
+        7
+      ],
+      "server": {
+        "ssh": "mac_63",
+        "host": "10.24.116.63",
+        "port": 8117,
+        "gpu": 5,
+        "checkpoint": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_2500_chkpt",
+        "actioncodec": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000",
+        "state_stats": "/data2/lyh/vla/config/franka_all_real_eef_state_q01q99_20261028.json",
+        "project": "/mnt/82_store/lyh/VLA/Ours_VQAQ_VLA",
+        "script": "deploy_franka_task0_qwen_actioncodec_eef.py"
+      },
+      "action_normalization": {
+        "method": "franka_quantile",
+        "params_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_2500_chkpt/action_norm_stats.json",
+        "params_key": "arm_scale",
+        "training_config_path": "/data2/lyh/vla/runs/task3_task41_transition_20261118/Qwen3VL2B+Franka-Joint+lr1e-05+task3_task41_transition_5k/save_2500_chkpt/training_config.json",
+        "source_params_path": "/data2/lyh/vla/runs/actioncodec_franka_all_real_finetune/20261028_063653/step_020000/action_norm_stats.json",
+        "decode_order": "multiply_arm_scale"
+      },
+      "task_key_to_training_task": {
+        "task3": "Task3"
+      },
+      "runtime": {
+        "chunk_mode": "rtc",
+        "execute_horizon": 12,
+        "rtc_blend_steps": 4,
+        "rtc_observe_after": 6,
+        "feedback_stale_action": "hold",
+        "max_actions": 3000,
+        "action_gain": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "finish_idle_chunks": 0
       }
     }
   }

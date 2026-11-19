@@ -12,6 +12,7 @@ import argparse
 import concurrent.futures
 import functools
 import json
+import math
 import sys
 import threading
 import time
@@ -122,12 +123,19 @@ class DirectAdapter(Node):
         self.move_client = None; self.grasp_client = None
         self.executed = 0; self.last_publish = 0.0; self.need_fresh_after = 0.0
         self.fault = False; self.finished = False; self.gripper_busy = False
+        self.last_stop_at = 0.0
+        self.latency_estimate = 0.0
+        self.inference_obs_step = 0
         self.startup_ready = not args.execute
         self.gripper_verification = None
         self.observation_wait_started = None
         self.observation_warned_at = 0.0
         self.observation_blocker = "waiting for initial observations"
         self.last_gripper_closed: Optional[bool] = None; self.pending_gripper_closed: Optional[bool] = None
+        self.gripper_command_open_width = args.gripper_open_width
+        self.gripper_feedback_open_width = args.gripper_feedback_open_width
+        self.gripper_candidate_closed: Optional[bool] = None
+        self.gripper_candidate_count = 0
         self.log_file = open(args.jsonl_log, "a", buffering=1) if args.jsonl_log else None
         for key, topic in (("left", args.left_image_topic), ("wrist", args.wrist_image_topic)):
             self.create_subscription(Image, topic, functools.partial(self.image_cb, key), qos_profile_sensor_data)
@@ -148,7 +156,8 @@ class DirectAdapter(Node):
         self.create_timer(1.0 / args.action_hz, self.action_tick)
         self.get_logger().warning(
             f"mode={'EXECUTE' if args.execute else 'DRY-RUN'} server={args.server_host}:{args.server_port} "
-            f"shape={ACTION_SHAPE} horizon={args.execute_horizon} gripper={args.enable_gripper} metadata={self.policy.metadata}")
+            f"shape={ACTION_SHAPE} prediction={args.prediction_horizon} execute={args.execute_horizon} "
+            f"velocity_scale={args.velocity_scale:.3f} gripper={args.enable_gripper} metadata={self.policy.metadata}")
         if not args.execute: self.get_logger().warning("dry-run: JointJog publisher NOT created")
 
     def arm(self) -> None:
@@ -168,16 +177,39 @@ class DirectAdapter(Node):
             if len(self.fingers) < 2 or self.gripper_time <= requested_at:
                 raise RuntimeError("fresh complete gripper joint feedback unavailable")
             width = sum(self.fingers[name] for name in ("fr3_finger_joint1", "fr3_finger_joint2"))
+            tolerance = self.args.gripper_open_tolerance
+            raw_open = self.args.gripper_feedback_open_width
+            standard_open = (
+                self.args.gripper_open_width - tolerance
+                <= width
+                <= self.args.gripper_max_plausible_width + tolerance
+            )
+            if standard_open:
+                self.gripper_feedback_upper_reference = self.args.gripper_max_plausible_width
             error = self.gripper_feedback_error()
             if error:
                 raise RuntimeError(error + "; run ./homing.sh and restart")
-            self.last_gripper_closed = closedness_from_width(
-                width, self.args.gripper_feedback_open_width, self.args.gripper_feedback_closed_width
-            ) >= self.args.gripper_close_threshold
+            if raw_open > self.args.gripper_max_plausible_width and width >= raw_open - tolerance:
+                coordinate = "raw"
+                self.gripper_command_open_width = raw_open
+                self.gripper_feedback_open_width = raw_open
+            elif standard_open:
+                coordinate = "standard"
+                self.gripper_command_open_width = self.args.gripper_open_width
+                self.gripper_feedback_open_width = self.args.gripper_open_width
+            else:
+                raise RuntimeError(
+                    f"gripper is not fully open at startup: width={width:.4f}m; "
+                    "run ./homing.sh and restart")
+            self.gripper_feedback_upper_reference = (
+                self.args.gripper_max_plausible_width if coordinate == "standard" else raw_open
+            )
+            self.last_gripper_closed = False
             self.get_logger().info(
                 f"initialized gripper state from feedback: width={width:.4f}m "
                 f"closed={self.last_gripper_closed} "
-                f"feedback_open={self.args.gripper_feedback_open_width:.4f}m "
+                f"coordinate={coordinate} command_open={self.gripper_command_open_width:.4f}m "
+                f"feedback_open={self.gripper_feedback_open_width:.4f}m "
                 f"feedback_closed={self.args.gripper_feedback_closed_width:.4f}m")
         if self.fault:
             raise RuntimeError("executor faulted during initialization")
@@ -207,8 +239,20 @@ class DirectAdapter(Node):
         values = [self.fingers[name] for name in ("fr3_finger_joint1", "fr3_finger_joint2")]
         if not all(np.isfinite(value) for value in values):
             return "non-finite gripper feedback"
-        # Feedback range checks are disabled for this hardware setup. Keep
-        # rejecting NaN/Inf so invalid observations cannot reach the policy.
+        width = sum(values)
+        configured_open = getattr(
+            self.args, "gripper_feedback_open_width",
+            getattr(self.args, "gripper_open_width", .08))
+        open_width = getattr(self, "gripper_feedback_open_width", configured_open)
+        closed_width = getattr(
+            self.args, "gripper_feedback_closed_width",
+            getattr(self.args, "gripper_closed_width", 0.0))
+        tolerance = getattr(self.args, "gripper_open_tolerance", .005)
+        if width < closed_width - tolerance:
+            return f"gripper feedback below calibrated range: {width:.4f}m"
+        upper_reference = getattr(self, "gripper_feedback_upper_reference", open_width)
+        if width > upper_reference + tolerance:
+            return f"gripper feedback above calibrated range: {width:.4f}m"
         return None
 
     def executor_status_cb(self, message: DiagnosticArray) -> None:
@@ -231,7 +275,10 @@ class DirectAdapter(Node):
                 self.observation_blocker = "missing dedicated gripper feedback"
                 return None
             stamps.append(self.gripper_time)
-        if min(stamps) <= self.need_fresh_after or now - min(stamps) > self.args.max_observation_age:
+        # RTC observes while a chunk is still running, so the freshness gate
+        # only applies to the serial loop that waits between chunks.
+        fresh_after = 0.0 if getattr(self.args, "chunk_mode", "serial") == "rtc" else self.need_fresh_after
+        if min(stamps) <= fresh_after or now - min(stamps) > self.args.max_observation_age:
             self.observation_blocker = (
                 f"waiting for fresh feedback/images: joint_age={now-self.joint_time:.2f}s "
                 f"gripper_age={now-self.gripper_time:.2f}s "
@@ -250,9 +297,35 @@ class DirectAdapter(Node):
                 "observation/wrist_image_left": self.images["wrist"].copy(),
                 "observation/joint_position": np.array([self.joints[name] for name in JOINT_NAMES], np.float32),
                 "observation/gripper_position": np.array([closedness_from_width(
-                    width, self.args.gripper_feedback_open_width, self.args.gripper_feedback_closed_width
+                    width, getattr(self, "gripper_feedback_open_width", self.args.gripper_feedback_open_width),
+                    self.args.gripper_feedback_closed_width
                 )], np.float32),
                 "prompt": self.args.instruction}
+
+    def accept_chunk(self, chunk: Any, latency: float) -> None:
+        if getattr(self.args, "chunk_mode", "serial") != "rtc":
+            self.queue.replace(chunk)
+            return
+        rows = validate_action_chunk(chunk)
+        # rows[0] belongs to the step the observation was taken at; drop the
+        # steps that already ran while inference was in flight.
+        skipped = min(max(0, self.executed - self.inference_obs_step), max(0, len(rows) - 1))
+        rows = rows[skipped:]
+        remaining = self.args.execute_horizon
+        if self.args.max_actions > 0:
+            remaining = min(remaining, max(1, self.args.max_actions - self.executed))
+        rows = rows[:remaining]
+        queued = len(self.queue)
+        if queued:
+            blended = self.queue.blend(rows, getattr(self.args, "rtc_blend_steps", 4))
+            self.log("rtc_handover", skipped=skipped, blended=blended, latency=latency,
+                     queued_before=queued, actions_after=len(self.queue))
+            self.get_logger().info(
+                f"RTC hand-over: skipped={skipped} blended={blended} latency={latency:.3f}s "
+                f"queue={queued}->{len(self.queue)}")
+        else:
+            self.queue.replace_rows(rows)
+            self.log("rtc_starved_fill", skipped=skipped, latency=latency, actions_after=len(self.queue))
 
     def policy_tick(self) -> None:
         if not self.startup_ready or self.finished or self.fault: return
@@ -268,20 +341,29 @@ class DirectAdapter(Node):
             try: chunk = future.result()
             except Exception as error: self.latch(f"policy inference failed: {error}"); return
             latency = now - self.inference_started
+            self.latency_estimate = latency if not self.latency_estimate else 0.5 * (self.latency_estimate + latency)
             if self.args.execute:
                 # Replacement, never append. Limit the last chunk to the remaining action budget.
-                self.queue.replace(chunk)
+                self.accept_chunk(chunk, latency)
             else:
-                decoded = np.vstack([decode_droid_action(row)[0] for row in chunk[:self.args.execute_horizon]])
+                decoded = np.vstack([decode_droid_action(row)[0] * self.args.velocity_scale
+                                     for row in chunk[:self.args.execute_horizon]])
                 self.log("dry_run", chunk=chunk.tolist(), decoded_qdot_rad_s=decoded.tolist(),
                          policy_latency=latency, robot_command_sent=False)
                 self.get_logger().info(f"dry-run validated {chunk.shape}; decoded peak={np.max(np.abs(decoded)):.4f} rad/s")
                 self.finished = True
             return
-        if self.args.execute and (len(self.queue) or self.executed >= self.args.max_actions): return
+        if self.args.execute and self.executed >= self.args.max_actions: return
+        if self.args.execute and getattr(self.args, "chunk_mode", "serial") == "rtc":
+            # Submit early enough that the answer lands before the queue drains,
+            # then blend the overlap instead of stopping at the chunk boundary.
+            lead = int(math.ceil(self.latency_estimate * self.args.action_hz)) + getattr(self.args, "rtc_blend_steps", 4)
+            if len(self.queue) > max(1, lead): return
+        elif self.args.execute and len(self.queue): return
         observation = self.observation()
         if observation is not None:
             self.observation_wait_started = None
+            self.inference_obs_step = self.executed
             self.inference_started = now; self.future = self.pool.submit(self.policy.infer, observation)
         else:
             if self.observation_wait_started is None:
@@ -294,7 +376,13 @@ class DirectAdapter(Node):
                 self.latch(f"observation wait timeout: {self.observation_blocker}")
 
     def action_tick(self) -> None:
-        if not self.startup_ready or not self.args.execute or self.finished or self.fault or self.gripper_busy: return
+        if not self.startup_ready or not self.args.execute or self.finished or self.fault: return
+        if self.gripper_busy:
+            # Gripper goals block the 15 Hz action stream for seconds. Keep an
+            # explicit zero-velocity command flowing so the 1 kHz executor
+            # watchdog never supervises a silent nonzero command.
+            if time.monotonic() - self.last_stop_at >= 0.05: self.stop_command()
+            return
         if self.args.enable_gripper:
             error = self.gripper_feedback_error()
             if error:
@@ -310,12 +398,14 @@ class DirectAdapter(Node):
             # action. Send the explicit stop unconditionally: a timer callback
             # can arrive a fraction early, and waiting for another tick would
             # exceed the executor's 300 ms nonzero-command watchdog.
-            if self.last_publish:
+            if time.monotonic() - self.last_stop_at >= 0.05:
                 self.stop_command()
-                self.log("chunk_stop", actions_executed=self.executed, stop_requested=True)
+                if self.last_publish:
+                    self.log("chunk_stop", actions_executed=self.executed, stop_requested=True)
                 self.last_publish = 0.0
             return
         action = self.queue.pop(); velocity, closedness = decode_droid_action(action)
+        velocity *= self.args.velocity_scale
         command = JointJog(); command.header.stamp = self.get_clock().now().to_msg()
         command.joint_names = list(JOINT_NAMES); command.velocities = velocity.tolist(); command.duration = 1 / self.args.action_hz
         self.publisher.publish(command); self.executed += 1; self.last_publish = time.monotonic()
@@ -330,7 +420,19 @@ class DirectAdapter(Node):
 
     def maybe_gripper(self, closedness: float) -> None:
         close = closedness >= self.args.gripper_close_threshold if self.last_gripper_closed is not True else closedness > self.args.gripper_open_threshold
-        if close == self.last_gripper_closed: return
+        if close == self.last_gripper_closed:
+            self.gripper_candidate_closed = None
+            self.gripper_candidate_count = 0
+            return
+        if close != self.gripper_candidate_closed:
+            self.gripper_candidate_closed = close
+            self.gripper_candidate_count = 1
+        else:
+            self.gripper_candidate_count += 1
+        if self.gripper_candidate_count < self.args.gripper_transition_min_frames:
+            return
+        self.gripper_candidate_closed = None
+        self.gripper_candidate_count = 0
         # 暂停手臂并等待夹爪动作完成，但保留模型已经输出的当前 16 步动作块。
         # 之前这里清空队列并立即重新推理，实测会让 close 后的新首步马上输出
         # open，形成约 0.5 秒一次的反复开合，夹爪无法持续夹持。
@@ -340,7 +442,8 @@ class DirectAdapter(Node):
         # 换算成物理宽度。现场的 0.649 曾被错误换算成 94.6 mm，导致
         # Franka 未在该宽度检测到物体并中止抓取。
         target_width = (
-            self.args.gripper_closed_width if close else self.args.gripper_open_width)
+            self.args.gripper_closed_width if close
+            else getattr(self, "gripper_command_open_width", self.args.gripper_open_width))
         if close:
             goal = Grasp.Goal(); goal.width = target_width; goal.speed = self.args.gripper_speed
             goal.force = self.args.gripper_force
@@ -411,7 +514,9 @@ class DirectAdapter(Node):
             self.latch(f"gripper action reported failure: {error_text or 'unspecified hardware failure'}")
             return
         if self.pending_gripper_closed is False and self.args.gripper_verify_open_width:
-            minimum_open_width = self.args.gripper_feedback_open_width - self.args.gripper_open_tolerance
+            minimum_open_width = (
+                getattr(self, "gripper_feedback_open_width", self.args.gripper_feedback_open_width)
+                - self.args.gripper_open_tolerance)
             if width < minimum_open_width:
                 return
         self.last_gripper_closed = self.pending_gripper_closed; self.gripper_busy = False
@@ -436,6 +541,7 @@ class DirectAdapter(Node):
             command = JointJog(); command.header.stamp = self.get_clock().now().to_msg()
             command.joint_names = list(JOINT_NAMES); command.velocities = [0.0] * 7; command.duration = 1 / self.args.action_hz
             self.publisher.publish(command)
+            self.last_stop_at = time.monotonic()
         except RCLError:
             # SIGINT can invalidate the context between the check and publish.
             # An error while ROS is still alive must remain visible.
@@ -472,7 +578,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--instruction", default="put the red test tube into the red basket")
     parser.add_argument("--left-image-topic", default="/camera_left/image_rect")
     parser.add_argument("--wrist-image-topic", default="/camera/camera_front/color/image_raw")
-    parser.add_argument("--action-hz", type=float, default=15.0); parser.add_argument("--execute-horizon", type=int, default=4)
+    parser.add_argument("--action-hz", type=float, default=15.0)
+    parser.add_argument("--prediction-horizon", type=int, default=16)
+    parser.add_argument("--execute-horizon", type=int, default=4)
+    parser.add_argument("--velocity-scale", type=float, default=1.0)
     parser.add_argument("--max-actions", type=int, default=60); parser.add_argument("--max-policy-latency", type=float, default=10.0)
     parser.add_argument("--max-observation-age", type=float, default=.5); parser.add_argument("--max-camera-skew", type=float, default=.15)
     parser.add_argument("--max-state-image-skew", type=float, default=.15); parser.add_argument("--enable-gripper", action="store_true")
@@ -494,7 +603,13 @@ def parse_args() -> argparse.Namespace:
                         help="0: continue the current chunk after an unsuccessful Grasp with no hardware error")
     parser.add_argument("--gripper-verify-timeout", type=float, default=2.0)
     parser.add_argument("--gripper-open-threshold", type=float, default=.4); parser.add_argument("--gripper-close-threshold", type=float, default=.6)
+    parser.add_argument("--gripper-transition-min-frames", type=int, default=4,
+                        help="require this many consecutive policy frames before changing gripper state")
     parser.add_argument("--gripper-speed", type=float, default=.04); parser.add_argument("--gripper-force", type=float, default=10.)
+    parser.add_argument("--chunk-mode", choices=("serial", "rtc"), default="serial",
+                        help="serial stops between chunks; rtc observes early and blends the hand-over")
+    parser.add_argument("--rtc-blend-steps", type=int, default=4,
+                        help="actions cross-faded when an RTC chunk overlaps the running one")
     parser.add_argument("--jsonl-log", default=""); parser.add_argument("--execute", action="store_true")
     parser.add_argument("--confirm-real-robot", default="")
     args = parser.parse_args()
@@ -507,8 +622,14 @@ def parse_args() -> argparse.Namespace:
             or not np.isfinite(args.gripper_feedback_closed_width)
             or args.gripper_feedback_open_width <= args.gripper_feedback_closed_width):
         parser.error("gripper feedback widths must be finite with closed < open")
-    if not 1 <= args.execute_horizon <= ACTION_SHAPE[0]:
-        parser.error(f"execute-horizon must be in [1, {ACTION_SHAPE[0]}]")
+    if not 1 <= args.prediction_horizon <= ACTION_SHAPE[0]:
+        parser.error(f"prediction-horizon must be in [1, {ACTION_SHAPE[0]}]")
+    if not 1 <= args.execute_horizon <= args.prediction_horizon:
+        parser.error("execute-horizon must be in [1, prediction-horizon]")
+    if not np.isfinite(args.velocity_scale) or not 0 < args.velocity_scale <= 1:
+        parser.error("velocity-scale must be finite and in (0, 1]")
+    if not 1 <= args.rtc_blend_steps <= args.execute_horizon:
+        parser.error("rtc-blend-steps must be in [1, execute-horizon]")
     if not 1 <= args.max_actions <= 2000: parser.error("max-actions must be in [1, 2000]")
     if not np.isfinite(args.max_observation_wait) or args.max_observation_wait < 0:
         parser.error("max-observation-wait must be finite and >= 0")
@@ -524,6 +645,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("gripper max plausible width must cover open width and be <= 0.1 m")
     if not 0.2 < args.gripper_verify_timeout <= 10:
         parser.error("gripper verify timeout must be in (0.2, 10] seconds")
+    if not 1 <= args.gripper_transition_min_frames <= ACTION_SHAPE[0]:
+        parser.error(f"gripper-transition-min-frames must be in [1, {ACTION_SHAPE[0]}]")
     if args.execute and args.confirm_real_robot != "DIRECT_JOINT_VELOCITY_PI05": parser.error("execute requires exact direct-flow confirmation token")
     return args
 

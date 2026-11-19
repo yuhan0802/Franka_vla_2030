@@ -25,3 +25,6 @@ workspace/log/
 # Local run logs and recorded datasets (kept on the robot host, not in git)
 validation_logs/
 datasets/
+
+# Local pre-change snapshots kept while debugging
+*.before-*

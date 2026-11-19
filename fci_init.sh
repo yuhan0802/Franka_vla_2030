@@ -92,7 +92,7 @@ for (( attempt = 1; attempt <= attempts; attempt++ )); do
   if (( check_only )); then exec "$root_dir/scripts/fci_arm_reset.sh" check; fi
 
   set +e
-  python3 - "$log_file" "$gripper_width_offset" "$gripper_open_width" <<'PY'
+  python3 - "$log_file" "$gripper_width_offset" "$gripper_open_width" "$log_dir/gripper_profile" <<'PY'
 import json
 import math
 import sys
@@ -123,6 +123,11 @@ for name, shift in (("standard", 0.0), (f"raw +{offset:.3f} m", offset)):
     if 0.05 <= effective_max <= 0.085 and effective_width >= min(expected_open, effective_max) - 0.005:
         print(f"FCI gripper calibration and open feedback confirmed ({name} coordinate, "
               f"open width {effective_width:.4f} m).")
+        from pathlib import Path
+        # Keep the requested target inside the calibrated travel and close
+        # to the settled feedback that the next run will validate.
+        target = min(expected_open, effective_max, effective_width)
+        Path(sys.argv[4]).write_text(f"{target:.9f} {target + shift:.9f}\n")
         raise SystemExit(0)
 raise SystemExit("FCI homing/open feedback is inconsistent; calibration is not confirmed.")
 PY
@@ -136,5 +141,8 @@ PY
   echo "Re-homing the gripper (attempt $((attempt + 1)) of $attempts)." >&2
 done
 if (( reset_arm )); then
-  exec "$root_dir/scripts/fci_arm_reset.sh" reset
+  "$root_dir/scripts/fci_arm_reset.sh" reset
+fi
+if [[ -n "${FCI_GRIPPER_PROFILE_OUT:-}" ]]; then
+  cat "$log_dir/gripper_profile" > "$FCI_GRIPPER_PROFILE_OUT"
 fi

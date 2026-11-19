@@ -79,6 +79,7 @@ class EefDirectAdapter(base.EefAdapter):
         self.direct = direct
         self.executor_ready = False; self.executor_fault = False; self.executor_message = "no status yet"
         self.track_target: Optional[tuple] = None; self.stopped = True; self.last_track_at: Optional[float] = None
+        self.feedback_stale_holding = False
         self.track_count = 0; self.fk_worst = (0.0, 0.0)
         self.real_joint_velocities: Dict[str, float] = {}
         self.feedback_sequence = 0; self.feedback_stamp_ros_ns = 0; self.feedback_received_at = 0.0
@@ -174,7 +175,7 @@ class EefDirectAdapter(base.EefAdapter):
         return sent
 
     def stop_tracking(self) -> None:
-        self.stopped = True; self.track_target = None; self.tracker.reset()
+        self.stopped = True; self.track_target = None; self.tracker.reset(); self.feedback_stale_holding = False
         self.publish_jog(np.zeros(7), stamped=False)
 
     def publish_jog(self, velocity: np.ndarray, stamped: bool = True) -> None:
@@ -191,9 +192,21 @@ class EefDirectAdapter(base.EefAdapter):
                 and feedback_age > self.direct.feedback_max_age):
             if self.settling and self.final_target is not None:
                 self.settled(time.monotonic())
+            elif self.direct.feedback_stale_action == "hold":
+                if not self.feedback_stale_holding:
+                    self.publish_jog(np.zeros(7), stamped=False)
+                    self.feedback_stale_holding = True
+                    self.log("feedback_stale_hold", feedback_age_s=feedback_age)
+                    self.get_logger().warning(
+                        f"real joint feedback stale ({feedback_age:.3f}s); holding zero velocity until it resumes")
             else:
                 self.direct_fault(f"real joint feedback stale while tracking ({feedback_age:.3f}s)")
             return
+        if self.feedback_stale_holding:
+            self.feedback_stale_holding = False
+            self.last_track_at = None
+            self.log("feedback_resumed", feedback_age_s=feedback_age)
+            self.get_logger().warning(f"real joint feedback resumed ({feedback_age:.3f}s); continuing")
         joints = joints_vector(self.real_joints)
         if joints is None:
             if self.track_target is not None and not self.stopped:
@@ -389,6 +402,10 @@ def parse_direct_args() -> argparse.Namespace:
     add("--settle-angular-speed", type=float, default=0.05, help="strict gate EEF angular speed (rad/s)")
     add("--settle-stable-duration", type=float, default=0.30, help="continuous qualifying feedback (s)")
     add("--feedback-max-age", type=float, default=0.20, help="strict gate real joint feedback age (s)")
+    add("--pose-jump-streak", type=int, default=3,
+        help="consecutive impossible measured-pose samples before latching (1 = strict)")
+    add("--feedback-stale-action", choices=("fault", "hold"), default="fault",
+        help="fault, or command zero velocity and resume when joint feedback returns")
     add("--observation-timeout", type=float, default=5.0, help="fresh post-completion observation wait limit (s)")
     add("--max-stamp-future-skew", type=float, default=0.05, help="allowed ROS stamp future skew (s)")
     add("--confirm-direct", default="")
